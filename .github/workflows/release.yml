@@ -9,7 +9,28 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.release.outputs.build }}
+    steps:
+      - name: Skip an already published release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ "$RELEASE_REF" == refs/tags/v* ]] && gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json isDraft --jq '.isDraft == false' | grep -qx true; then
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+            echo 'This release is already published. Existing assets are preserved.'
+          else
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+          fi
   build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
     runs-on: macos-26
     timeout-minutes: 45
     steps:
