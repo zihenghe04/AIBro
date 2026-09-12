@@ -1,0 +1,27 @@
+/* Transcript activity is quieter than the answer, with a readable live tail. */
+.agent-progress{margin:10px 0 18px;min-width:0;color:var(--muted);font-size:12px;line-height:1.6}
+.agent-progress>summary{display:flex;align-items:center;gap:9px;cursor:pointer;list-style:none;min-height:32px;padding:3px 0;user-select:none}
+.agent-progress summary::-webkit-details-marker{display:none}
+.progress-heading-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:62ch}
+.progress-elapsed{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--faint)}
+.progress-count{font-size:11px;white-space:nowrap;opacity:.75;margin-left:auto}
+.progress-chevron{font-size:16px;width:16px;height:16px;line-height:1;flex:none;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;transition:transform 140ms ease}
+.agent-progress[open]>.progress-chevron,.agent-progress[open]>summary>.progress-chevron{transform:rotate(90deg)}
+.progress-heading-mark,.progress-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 16px;min-height:20px}
+.progress-spinner{width:12px;height:12px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:progress-turn 900ms linear infinite}
+.progress-timeline{list-style:none;margin:8px 0 0;padding:0 0 0 1px;max-height:300px;overflow:auto;scrollbar-width:thin;overscroll-behavior:contain}
+.progress-item{display:flex;align-items:flex-start;gap:10px;position:relative;padding:6px 0;min-width:0}
+.progress-item:before{content:"";position:absolute;width:1px;background:var(--line);left:7px;top:27px;bottom:-1px}
+.progress-item:last-child:before{display:none}
+.progress-item-content{min-width:0;flex:1;overflow-wrap:anywhere}
+.progress-item-content summary{cursor:pointer;list-style:none;display:flex;gap:6px;align-items:baseline}
+.progress-item-content summary:after{content:"›";opacity:.6;width:16px;height:16px;line-height:1;flex:none;overflow:hidden;display:inline-flex;align-items:center;justify-content:center}
+.progress-item-content details[open] summary:after{transform:rotate(90deg)}
+.progress-item-body{padding:8px 12px;margin:6px 0 4px;border-left:2px solid var(--line);white-space:pre-wrap;line-height:1.75;font-size:12px;color:var(--muted);background:var(--surface-wash,transparent);border-radius:0 6px 6px 0;max-height:180px;overflow:auto}
+.progress-item.is-running{color:var(--text)}
+.progress-item.is-failed .progress-mark{color:var(--danger,#d87878)}
+.agent-progress summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:4px}
+@keyframes progress-turn{to{transform:rotate(360deg)}}
+@media(max-width:700px){.progress-elapsed{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--faint)}
+.progress-count{display:none}.progress-heading-text{max-width:100%}.progress-timeline{max-height:240px}}
+@media(prefers-reduced-motion:reduce){.progress-spinner{animation:none;border-style:dotted}.progress-chevron{transition:none}}

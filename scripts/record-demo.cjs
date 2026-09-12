@@ -1,0 +1,116 @@
+/*
+ * Privacy-safe, disclosed product demonstration. Run with Electron, not Node:
+ *   electron scripts/record-demo.cjs --lang zh-CN --output /tmp/ai-bro-demo-zh
+ * A fresh copied production app, data directory and profile are used per run.
+ * capturePage captures only this renderer, never the screen or another app.
+ */
+'use strict';
+const {app,BrowserWindow,session}=require('electron');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),http=require('node:http'),net=require('node:net'),assert=require('node:assert/strict');
+const {spawnSync}=require('node:child_process');
+const {createDemo}=require('../demo/fixtures/workspace.cjs');
+const ROOT=path.resolve(__dirname,'..'),argv=process.argv.slice(2),option=(name,fallback)=>{const i=argv.indexOf(name);return i>=0?argv[i+1]:fallback;};
+app.commandLine.appendSwitch('force-device-scale-factor','1');
+for(const flag of ['disable-renderer-backgrounding','disable-backgrounding-occluded-windows','disable-background-timer-throttling'])app.commandLine.appendSwitch(flag);
+const lang=option('--lang','zh-CN');assert.ok(['zh-CN','en'].includes(lang));
+app.commandLine.appendSwitch('lang',lang==='en'?'en-US':'zh-CN');
+const output=path.resolve(option('--output',path.join(os.tmpdir(),'ai-bro-demo-'+lang+'-'+Date.now())));
+assert.ok(!fs.existsSync(path.join(output,'manifest.json')),'Refusing to overwrite an existing recording');
+const quick=argv.includes('--quick'),probe=argv.includes('--capture-probe'),FPS=24,WIDTH=1440,HEIGHT=900;
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'ai-bro-demo-private-')),assets=path.join(temp,'app'),appData=path.join(temp,'app-data'),store=path.join(temp,'store');
+require('../app-assets').copyAssets(assets);for(const dir of [appData,store,output,path.join(output,'frames')])fs.mkdirSync(dir,{recursive:true});
+app.setPath('appData',appData);app.setPath('userData',path.join(appData,'profile'));
+process.env.AI_WORKSTATION_DATA_DIR=store;process.env.AI_WORKSTATION_ASSET_DIR=assets;
+const fixture=createDemo(lang),manifest={schemaVersion:1,lang,width:WIDTH,height:HEIGHT,fps:FPS,scriptedResponses:true,syntheticOnly:true,disclosure:fixture.disclosure,capture:'Electron webContents frame subscription and capturePage; isolated synthetic workspace; no desktop capture',frames:[],chapters:[]};
+let win,mock,finished=false,recording=false,captureJob=null,captureTimer=null,subscribed=false,lastFrameAt=0,nextFrameAt=0,started=0,queuedPlan=null,requestCount=0;
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,quick?Math.min(ms,150):ms));
+const realWait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const watchdog=setTimeout(()=>finish(1,Error('Demo recording exceeded 7 minutes')),420000);
+const evaluate=code=>win.webContents.executeJavaScript(code,true);
+async function until(check,label,timeout=20000){const start=Date.now();while(Date.now()-start<timeout){if(await check())return;await realWait(60);}throw Error('Timed out: '+label);}
+const freePort=()=>new Promise((resolve,reject)=>{const s=net.createServer();s.on('error',reject);s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>resolve(p));});});
+function writeManifest(){fs.writeFileSync(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2));}
+async function capture(providedImage){
+  if(!recording||captureJob)return;captureJob=(async()=>{
+    const at=Date.now()-started;let image=providedImage||await win.webContents.capturePage();if(!manifest.nativeFrameSize)manifest.nativeFrameSize=image.getSize();lastFrameAt=Date.now();if(image.getSize().width!==WIDTH||image.getSize().height!==HEIGHT)image=image.resize({width:WIDTH,height:HEIGHT,quality:'best'});
+    const bitmap=image.toBitmap();for(let i=3;i<bitmap.length;i+=4*137)assert.equal(bitmap[i],255,'Every captured frame must be opaque');
+    const file='frames/'+String(manifest.frames.length).padStart(6,'0')+'.jpg';await fs.promises.writeFile(path.join(output,file),image.toJPEG(92));manifest.frames.push({file,at});
+  })();try{await captureJob;}finally{captureJob=null;}
+}
+async function stopRecording(){recording=false;clearInterval(captureTimer);if(subscribed){win?.webContents.endFrameSubscription();subscribed=false;}if(captureJob)await captureJob;manifest.duration=Date.now()-started;writeManifest();
+  const lines=['ffconcat version 1.0'];manifest.frames.forEach((frame,i)=>{lines.push("file '"+frame.file+"'");const next=manifest.frames[i+1]?.at??manifest.duration;lines.push('duration '+Math.max(1/FPS,(next-frame.at)/1000).toFixed(5));});if(manifest.frames.length)lines.push("file '"+manifest.frames.at(-1).file+"'");fs.writeFileSync(path.join(output,'frames.ffconcat'),lines.join('\n')+'\n');
+}
+async function finish(code,error){if(finished)return;finished=true;clearTimeout(watchdog);if(error){console.error(error.stack||String(error));manifest.error=String(error.message||error);}try{await stopRecording();}catch(e){console.error(e.message);}try{win?.destroy();}catch{}mock?.close();app.emit('will-quit');await realWait(220);try{fs.rmSync(temp,{recursive:true,force:true});}catch{}console.log(JSON.stringify({ok:!code,lang,output,frames:manifest.frames.length,chapters:manifest.chapters.length,requestCount}));app.exit(code);}
+async function rect(selector){return evaluate('(()=>{const e=document.querySelector('+JSON.stringify(selector)+');if(!e)throw Error("Missing UI "+'+JSON.stringify(selector)+');e.scrollIntoView({block:"nearest",behavior:"instant"});const r=e.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height}})()');}
+async function pointer(x,y,click=false){await evaluate('window.__demoPointer('+Math.round(x)+','+Math.round(y)+','+click+');true');win.webContents.sendInputEvent({type:'mouseMove',x:Math.round(x),y:Math.round(y)});}
+async function click(selector){const r=await rect(selector),x=Math.round(r.x+r.width/2),y=Math.round(r.y+r.height/2);assert.ok(r.width&&r.height,selector+' must be visible');assert.ok(await evaluate('(()=>{const e=document.querySelector('+JSON.stringify(selector)+'),h=document.elementFromPoint('+x+','+y+');return !e.disabled&&(e===h||e.contains(h));})()'),selector+' must be clickable');await pointer(x,y);await wait(180);await pointer(x,y,true);win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,x,y});win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,x,y});await wait(450);return r;}
+async function type(selector,value,{append=false}={}){await click(selector);if(!append){await evaluate('(()=>{const e=document.querySelector('+JSON.stringify(selector)+');e.select();})()');}await win.webContents.insertText(value);await wait(650);}
+async function key(keyCode,modifiers=[]){win.webContents.sendInputEvent({type:'keyDown',keyCode,modifiers});win.webContents.sendInputEvent({type:'keyUp',keyCode,modifiers});await wait(300);}
+async function chapter(id,title,fn,focusSelector){const item={id,title,start:Date.now()-started,end:null,focus:null,actions:[]};manifest.chapters.push(item);console.log('SCENE',id);if(focusSelector)item.focus=await rect(focusSelector);await wait(800);await fn(item);await wait(2000);item.end=Date.now()-started;if(!item.focus)item.focus={x:245,y:50,width:1175,height:800};writeManifest();}
+async function setupMock(){mock=http.createServer(async(req,res)=>{
+  if(req.url==='/v1/models'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({data:[{id:'Project Assistant'},{id:'Quick Reply'}]}));return;}
+  if(req.method!=='POST'||req.url!=='/v1/responses'){res.writeHead(404);res.end();return;}
+  let body='';for await(const data of req){body+=data;if(body.length>8*1024*1024){res.writeHead(413);res.end();return;}}
+  const request=JSON.parse(body);assert.ok(['Project Assistant','Quick Reply'].includes(request.model));assert.ok(queuedPlan,'Only an explicitly staged synthetic request may be served');
+  const job=queuedPlan;queuedPlan=null;requestCount++;const payload=JSON.stringify(job.plan);assert.ok(JSON.stringify(request.input).includes(job.goal),'The UI must submit the actual scene prompt');
+  res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-store','Connection':'close'});
+  const event=data=>res.write('data: '+JSON.stringify(data)+'\n\n');
+  event({type:'response.created',response:{id:'demo-response-'+requestCount,status:'in_progress'}});
+  event({type:'response.output_item.added',item:{id:'demo-progress',type:'message',role:'assistant',phase:'commentary'}});
+  event({type:'response.output_text.delta',item_id:'demo-progress',phase:'commentary',delta:fixture.en?'Reading the supplied context and preparing workspace actions.':'正在读取材料，并准备工作区操作。'});
+  await realWait(quick?20:700);event({type:'response.output_item.done',item:{id:'demo-progress',type:'message',role:'assistant',phase:'commentary'}});
+  event({type:'response.output_item.added',item:{id:'demo-final',type:'message',role:'assistant'}});
+  const chunkSize=quick?payload.length:Math.max(32,Math.ceil(payload.length/42));for(let offset=0;offset<payload.length;offset+=chunkSize){if(res.destroyed)return;event({type:'response.output_text.delta',item_id:'demo-final',delta:payload.slice(offset,offset+chunkSize)});await realWait(quick?1:65);}
+  event({type:'response.completed',response:{status:'completed',output:[{id:'demo-final',type:'message',role:'assistant',content:[{type:'output_text',text:payload}]}]}});res.end();
+ });await new Promise(resolve=>mock.listen(0,'127.0.0.1',resolve));return 'http://127.0.0.1:'+mock.address().port;}
+async function send(goal,plan){queuedPlan={goal,plan};const before=requestCount;await type('#agentInput',goal);await click('#agentSend');await until(()=>requestCount>before,'local scripted Responses request');await until(()=>evaluate('!sendMessage.busy'),'workspace execution');const status=await evaluate('state.agentRuns.at(-1)?.status');if(status!=='completed')throw Error('Scripted plan did not commit: '+JSON.stringify(await evaluate('state.agentRuns.at(-1)')));assert.equal(await evaluate('$("#agentInput").value'),'');await wait(2200);}
+async function run(){
+  const port=await freePort(),mockOrigin=await setupMock(),origin='http://127.0.0.1:'+port;process.env.AI_WORKSTATION_PORT=String(port);
+  const config=path.join(temp,'course.json'),pdf=path.join(temp,fixture.courseTitle+'.pdf');fs.writeFileSync(config,JSON.stringify(fixture.pdf));const generated=spawnSync(process.env.PYTHON||'python3',[path.join(ROOT,'demo/fixtures/make-course-pdf.py'),config,pdf],{encoding:'utf8'});assert.equal(generated.status,0,generated.stderr);
+  await app.whenReady();app.dock?.hide();const blocked=[];
+  session.defaultSession.webRequest.onBeforeRequest({urls:['<all_urls>']},(details,callback)=>{const url=new URL(details.url);let deny=false;
+    if(['http:','https:'].includes(url.protocol)){deny=url.origin!==origin;if(/^\/__(?:auth|codex|cloud|fetch|local)(?:\/|$)/.test(url.pathname))deny=true;if(url.pathname==='/__proxy'){try{const target=new URL(url.searchParams.get('url'));deny=target.origin!==mockOrigin||!['/v1/responses','/v1/models'].includes(target.pathname);}catch{deny=true;}}}
+    if(url.protocol==='file:')deny=true;if(deny)blocked.push(url.pathname);callback({cancel:deny});
+  });
+  app.on('browser-window-created',(_event,window)=>{if(win)return;win=window;window.hide();window.webContents.setBackgroundThrottling(false);});
+  const log=console.log,error=console.error;console.log=(...args)=>{if(!String(args[0]).startsWith('[workstation]'))log(...args);};console.error=(...args)=>{if(!String(args[0]).startsWith('[workstation]'))error(...args);};
+  require(path.join(assets,'electron-main.js'));await until(()=>win&&!win.webContents.isLoading()&&win.webContents.getURL()===origin+'/','copied production App');
+  win.setContentSize(WIDTH,HEIGHT);win.setBackgroundColor('#f7f7f5');await until(()=>evaluate('typeof storageHydrated!=="undefined"&&storageHydrated'),'isolated hydration');
+  assert.ok(app.getPath('userData').startsWith(appData+path.sep));await evaluate('window.Onboarding?.close?.();document.querySelector("#onboardingSkip")?.click();NativeGlassUI?.destroy();document.documentElement.classList.remove("native-glass-host","native-liquid-glass");true');
+  await evaluate('Object.assign(state,'+JSON.stringify(fixture.state)+');normalizeStateShape(state);repairRelationships();state.settings.permissions={日常:"auto",课程:"auto",科研:"auto"};state.ui.inspectorOpen=false;state.ui.theme="light";state.ui.onboarding={version:1,completed:true};applyUiPreferences();renderAll();showView("agent");WorkstationI18n.setLanguage('+JSON.stringify(lang)+');localStorage.setItem("workstation-provider","api");localStorage.setItem("workstation-api-base",'+JSON.stringify(mockOrigin+'/v1')+');localStorage.setItem("workstation-api-model","Project Assistant");$("#provider").value="api";$("#apiBase").value='+JSON.stringify(mockOrigin+'/v1')+';$("#apiKey").value="DEMO_NOT_A_SECRET";$("#model").value="Project Assistant";save();true');
+  // Every visible original is generated from fixture text, never a disk import.
+  for(const item of fixture.state.imports)await evaluate('fileStorePut('+JSON.stringify(item.id)+',new Blob(['+JSON.stringify(item.content)+'],{type:"text/markdown"}),'+JSON.stringify(item.name)+');true');
+  await evaluate('(()=>{const style=document.createElement("style");style.textContent=`html,body{background:#f7f7f5!important;background-image:none!important}body:not(.light-mode){background:#171719!important}#demoPointer{position:fixed;width:18px;height:18px;box-sizing:border-box;border:2px solid currentColor;border-radius:50%;color:var(--text);box-shadow:0 0 0 5px color-mix(in srgb,var(--text) 10%,transparent);z-index:2147483001;pointer-events:none;opacity:.75;transform:translate(-50%,-50%);transition:left .12s ease,top .12s ease}#demoPointer.pulse{animation:demo-click .42s ease-out}@keyframes demo-click{0%{box-shadow:0 0 0 2px color-mix(in srgb,var(--text) 28%,transparent)}100%{box-shadow:0 0 0 14px transparent}}`;document.head.append(style);/* Disclosure is retained in metadata and final credits. */const pointer=document.createElement("div");pointer.id="demoPointer";pointer.style.left="1300px";pointer.style.top="870px";document.body.append(pointer);window.__demoPointer=(x,y,click)=>{pointer.style.left=x+"px";pointer.style.top=y+"px";if(click){pointer.classList.remove("pulse");void pointer.offsetWidth;pointer.classList.add("pulse")}};})()');
+  await evaluate('flushWorkspace()');await until(()=>evaluate('!serverSaveInFlight&&!serverConflict'),'synthetic seed saved');await realWait(350);manifest.devicePixelRatio=await evaluate('window.devicePixelRatio');started=Date.now();recording=true;await capture();nextFrameAt=Date.now();win.webContents.beginFrameSubscription(false,image=>{const now=Date.now();if(!recording||captureJob||now<nextFrameAt)return;nextFrameAt=Math.max(nextFrameAt+1000/FPS,now);capture(image).catch(e=>finish(1,e));});subscribed=true;captureTimer=setInterval(()=>{if(Date.now()-lastFrameAt>=1000/FPS)capture().catch(e=>finish(1,e));},Math.round(1000/FPS));
+  if(probe){await evaluate('(()=>{const p=document.getElementById("demoPointer");p.animate([{left:"260px",top:"250px"},{left:"1300px",top:"740px"},{left:"260px",top:"250px"}],{duration:1800,iterations:4});})()');await realWait(5000);await finish(0);return;}
+  let sourceId,noteId,courseProjectId;
+  await chapter('course-intake',fixture.en?'One handout. A clear next step.':'一份课件，清晰的下一步。',async scene=>{
+    await win.webContents.debugger.attach('1.3');const r=await rect('#agent'),point={x:Math.round(r.x+r.width*.55),y:Math.round(r.y+r.height*.40)},data={items:[],files:[pdf],dragOperationsMask:1};await pointer(point.x,point.y);for(const type of ['dragEnter','dragOver'])await win.webContents.debugger.sendCommand('Input.dispatchDragEvent',{type,...point,data});await wait(850);await win.webContents.debugger.sendCommand('Input.dispatchDragEvent',{type:'drop',...point,data});
+    await until(()=>evaluate('currentConversation().draftAttachmentIds?.length===1&&!importMaterials.busy'),'PDF staged, not auto-sent');sourceId=await evaluate('currentConversation().draftAttachmentIds[0]');assert.equal(requestCount,0);await wait(1500);await send(fixture.prompts.course,fixture.coursePlan(sourceId));
+    const output=await evaluate('({notes:state.notes.filter(n=>n.sourceAttachmentIds?.includes('+JSON.stringify(sourceId)+')),project:state.projects.find(p=>p.name==='+JSON.stringify(fixture.names.course)+'),tasks:state.tasks.filter(t=>t.sourceAttachmentIds?.includes('+JSON.stringify(sourceId)+'))})');assert.equal(output.notes.length,1);assert.equal(output.tasks.length,1);assert.equal(await evaluate('importAnalysis(state.imports.find(x=>x.id==='+JSON.stringify(sourceId)+')).status'),'analyzed');noteId=output.notes[0].id;courseProjectId=output.project.id;scene.focus=await rect('#messageList');
+    await click('#messageList [data-open-project="'+courseProjectId+'"]');await wait(1800);scene.actions.push({at:Date.now()-started,kind:'result-navigation',focus:await rect('#projectTree')});
+  },'#composer');
+  await chapter('read-edit',fixture.en?'Read beside your work. Keep your own words.':'边读边写，保留自己的理解。',async scene=>{
+    await click('#projectTree [data-open-import="'+sourceId+'"]');await until(()=>evaluate('!!document.querySelector(".pdf-sheet img")'),'original PDF preview');await wait(1700);await click('[data-pdf-next]');await wait(1200);
+    await click('#projectTree [data-open-note="'+noteId+'"]');await until(()=>evaluate('!!document.querySelector(".note-document-preview")'),'editable source-linked note');if(fixture.en)await until(()=>evaluate('document.querySelector("[data-note-action=preview]")?.textContent.trim()==="Preview"'),'English Preview label in mounted reader');await wait(1800);scene.focus=await rect('#readingPane');await click('[data-note-action="edit"]');await click('.note-document-source textarea');await key('End',['meta']);await win.webContents.insertText(fixture.editAppend);await wait(1300);await click('[data-note-action="save"]');await until(()=>evaluate('state.notes.find(n=>n.id==='+JSON.stringify(noteId)+').userEdited===true'),'durable human edit');await click('[data-note-action="preview"]');await wait(1600);await click('#readingCollapse');
+  });
+  await chapter('knowledge-reuse',fixture.en?'A new conversation. The same knowledge.' :'换个对话，知识仍然在。',async scene=>{
+    await click('#newTask');await evaluate('currentConversation().workspace="课程";currentConversation().projectId='+JSON.stringify(courseProjectId)+';currentConversation().permissionMode="full";currentConversation().modelConfig={provider:"api",model:"Project Assistant",effort:"medium"};save();renderConversation();true');
+    const before=await evaluate('state.notes.length');await send(fixture.prompts.question,fixture.answerPlan());assert.equal(await evaluate('state.notes.length'),before);const run=await evaluate('currentConversation().messages.at(-1)');assert.ok(run.retrievedSources?.some(item=>item.id===noteId||item.id===sourceId),'cross-conversation answer retrieves saved course evidence');scene.focus=await rect('#messageList');await wait(1300);await click('#messageList .message-steps:has(.context-source-links) > summary');const sourceButton=await evaluate('document.querySelector(".context-source-links [data-open-note='+noteId+']")?".context-source-links [data-open-note='+noteId+']":".context-source-links [data-open-import='+sourceId+']"');await click(sourceButton);await wait(1800);scene.actions.push({at:Date.now()-started,kind:'open-retrieved-source',focus:await rect('#readingPane')});await click('#readingCollapse');
+  },'#messageList');
+  await chapter('research-library',fixture.en?'Papers become a connected research library.':'让文献成为相互连接的研究库。',async scene=>{
+    await click('.nav-item[data-view="research"]');await click('#researchProjects [data-open-project="'+fixture.ids.research+'"]');await wait(2000);scene.actions.push({at:Date.now()-started,kind:'research-tree',focus:await rect('#projectTree')});await click('#projectTree [data-open-note="demo-paper-note-1"]');await wait(2300);await click('#readingCollapse');await click('.nav-item[data-view="research"]');await click('#research [data-space-tab="papers"]');await wait(2400);scene.focus=await rect('#researchGraph');
+  });
+  await chapter('daily-update',fixture.en?'Refine the existing task. Then check it off.':'补充原任务，然后逐项完成。',async scene=>{
+    await click('.nav-item[data-view="daily"]');await click('#dailyProjects [data-open-project="'+fixture.ids.daily+'"]');await click('#projectChat');await send(fixture.prompts.daily,fixture.dailyPlan());await click('#messageList [data-open-task="'+fixture.ids.dailyTask+'"]');scene.focus=await rect('#taskDialog');assert.ok(await evaluate('$("#taskDueInput").value'));await wait(1300);await click('#taskChecklist input');await wait(600);await click('#saveTask');await wait(1400);
+  });
+  await chapter('overview',fixture.en?'See progress across your whole workspace.':'看见整个工作区的进展。',async scene=>{
+    await click('.nav-item[data-view="dashboard"]');await wait(1600);await evaluate('$("#dashboardAnalytics").scrollIntoView({block:"start",behavior:"instant"});true');await wait(1000);await click('#dashboardAnalytics [data-activity-days="30"]');scene.focus=await rect('#dashboardAnalytics');await wait(1900);const daySelector='#dashboardAnalytics [data-activity-index="23"]',r=await rect(daySelector);await pointer(r.x+r.width/2,r.y+r.height*.5);await wait(2000);await click(daySelector);await until(()=>evaluate('!!document.querySelector("#dashboardAnalytics [data-activity-entry]")'),'actual completed tasks and saved materials on selected day');await wait(1700);
+  });
+  await chapter('personal-workspace',fixture.en?'Your models. Your workspace.':'你的模型，你的工作方式。',async scene=>{
+    await click('.nav-item[data-view="agent"]');await click('#composerSkill');await wait(1800);scene.actions.push({at:Date.now()-started,kind:'skills',focus:await rect('#skillsDialog')});await key('Escape');await click('#composerModel');await type('#conversationApiModel','Quick Reply');await evaluate('$("#conversationEffort").value="low";$("#conversationEffort").dispatchEvent(new Event("change",{bubbles:true}));true');await wait(1200);scene.focus=await rect('#modelPicker');await click('#applyModelSelection');await wait(1400);await click('#sidebarThemeBtn');await wait(2400);scene.actions.push({at:Date.now()-started,kind:'dark-theme',focus:{x:0,y:0,width:WIDTH,height:HEIGHT}});await click('#sidebarThemeBtn');await wait(1700);
+  });
+  await evaluate('flushWorkspace()');await until(()=>evaluate('!serverSaveInFlight&&!serverConflict'),'final local persistence');
+  const verification=await evaluate('({tasks:state.tasks.length,notes:state.notes.length,projects:state.projects.length,runs:state.agentRuns.map(r=>({status:r.status,mode:r.mode})),saved:!state._pendingLocalSave,savedCredentialPresent:!!apiCredentialState?.hasKey})');assert.equal(verification.savedCredentialPresent,false);assert.equal(requestCount,3);assert.ok(verification.runs.every(r=>r.status==='completed'));fs.writeFileSync(path.join(output,'verification.json'),JSON.stringify({...verification,blockedRoutes:[...new Set(blocked)],requests:requestCount,syntheticOnly:true},null,2));await finish(0);
+}
+run().catch(error=>finish(1,error));

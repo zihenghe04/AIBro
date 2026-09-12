@@ -1,0 +1,80 @@
+name: macOS release preview
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          python3 -m pip install -r requirements.txt
+      - name: Verify version and build source archive
+        shell: bash
+        run: |
+          VERSION=$(node -p 'require("./package.json").version')
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
+            echo 'Tag must match package.json version' >&2
+            exit 1
+          fi
+          mkdir -p release-sources
+          git archive --format=tar.gz --prefix="ai-bro-$VERSION/" -o "release-sources/AI-Bro-$VERSION-source.tar.gz" HEAD
+      - name: Test
+        run: |
+          npm run native:build
+          npm test
+          npm run test:cloud
+      - name: Build Apple Silicon application with Python runtime
+        run: npm run release:mac -- --output "$RUNNER_TEMP/ai-bro-release" --cache "$RUNNER_TEMP/ai-bro-downloads"
+      - name: Assemble release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          cp "$RUNNER_TEMP/ai-bro-release/"*.zip release-assets/
+          cp "$RUNNER_TEMP/ai-bro-release/release-manifest.json" release-assets/
+          cp "$RUNNER_TEMP/ai-bro-release/THIRD-PARTY-NOTICES.txt" release-assets/
+          cp "$RUNNER_TEMP/ai-bro-release/release-runtime-lock.json" release-assets/
+          cp "$RUNNER_TEMP/ai-bro-release/dependency-sources/"*.tar.gz release-assets/
+          cp release-sources/*.tar.gz release-assets/
+          cd release-assets
+          shasum -a 256 *.zip *.tar.gz *.json THIRD-PARTY-NOTICES.txt > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Bro-macos-arm64-preview
+          path: release-assets/
+          retention-days: 14
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: AI-Bro-macos-arm64-preview
+          path: release-assets
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh release create "$RELEASE_TAG" release-assets/* --repo "$REPOSITORY" --verify-tag --prerelease --title "AI Bro $RELEASE_TAG · macOS Preview" --notes-file docs/RELEASE_NOTES.md

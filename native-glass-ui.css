@@ -1,0 +1,80 @@
+/* Native NSGlassEffectView is below WebContents. The opaque shell opens only
+   acknowledged rounded holes. Content scrims protect DOM text, whose colors
+   do not receive AppKit's automatic vibrant-label contrast adaptation. */
+#nativeGlassShell {position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;fill:var(--bg)}
+html.native-liquid-glass body.liquid-glass[data-view] {isolation:isolate;--native-edge-scrim:rgba(22,22,24,.88);--native-content-scrim:rgba(22,22,24,.50)}
+html.native-liquid-glass body.liquid-glass[data-view].light-mode {--native-edge-scrim:rgba(247,247,245,.92);--native-content-scrim:rgba(247,247,245,.75)}
+html.native-liquid-glass,
+html.native-liquid-glass body.liquid-glass[data-view],
+html.native-liquid-glass body.liquid-glass[data-view].light-mode {background:transparent}
+html.native-liquid-glass body.liquid-glass[data-view] :is(.main,.reading-pane) {background:transparent}
+html.native-liquid-glass body.liquid-glass[data-view] .main>.view:not(#agent),
+html.native-liquid-glass body.liquid-glass[data-view] :is(.inspector-pane,.conversation-meta),
+html.native-liquid-glass body.liquid-glass[data-view] .reading-pane #previewDialog {background:var(--lg-content)}
+html.native-liquid-glass body.liquid-glass[data-view] :is(#agent,.chat-shell,.chat-grid) {background:transparent}
+html.native-liquid-glass body.liquid-glass[data-view] .conversation-pane {
+  background:linear-gradient(to bottom,var(--lg-content) 0,var(--lg-content) calc(100% - var(--lg-composer-height,170px) - 24px),transparent calc(100% - var(--lg-composer-height,170px) - 12px));
+}
+/* Native glass cannot refract DOM glyphs in its own WebContents. Remove those
+   glyphs beneath the input controls instead of exposing overlapping text. */
+html.native-liquid-glass body.liquid-glass[data-view] .conversation-pane[data-glass-chat=true] .message-list {
+  background:var(--lg-content);
+  mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - var(--lg-composer-height) - 24px),transparent calc(100% - var(--lg-composer-height) - 10px));
+  -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - var(--lg-composer-height) - 24px),transparent calc(100% - var(--lg-composer-height) - 10px));
+}
+html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region] {
+  position:relative;isolation:isolate;
+  background:transparent;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+  box-shadow:none;
+  border-color:transparent;
+}
+html.native-liquid-glass body.liquid-glass[data-view].light-mode [data-native-glass-region],
+html.native-liquid-glass body.liquid-glass[data-view] #composer[data-native-glass-region][data-glass-refracting=true] {
+  background:transparent;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+  box-shadow:none;
+}
+/* Tone down the complete native surface, including its rim. A feathered
+   second layer protects text without producing a naked black/white outline. */
+html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region]::before,
+html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region]::after {
+  content:'';display:block;position:absolute;inset:0;z-index:-1;pointer-events:none;
+  padding:0;border:0;border-radius:inherit;opacity:1;
+  box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;mask:none;-webkit-mask:none;
+}
+html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region]::before {background:var(--native-edge-scrim)}
+html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region]::after {
+  background:var(--native-content-scrim);
+  --native-feather-x:linear-gradient(to right,transparent,#000 6px calc(100% - 6px),transparent);
+  --native-feather-y:linear-gradient(to bottom,transparent,#000 6px calc(100% - 6px),transparent);
+  mask-image:var(--native-feather-x),var(--native-feather-y);mask-composite:intersect;
+  -webkit-mask-image:var(--native-feather-x),var(--native-feather-y);-webkit-mask-composite:source-in;
+}
+html.native-liquid-glass body.liquid-glass[data-view] #sidebar[data-native-glass-region]::before,
+html.native-liquid-glass body.liquid-glass[data-view] #sidebar[data-native-glass-region]::after {inset:8px 5px 8px 8px;border-radius:23px}
+html.native-liquid-glass body.liquid-glass[data-view] #conversationNavigator[data-native-glass-region]::before,
+html.native-liquid-glass body.liquid-glass[data-view] #conversationNavigator[data-native-glass-region]::after {border-radius:20px}
+html.native-liquid-glass body.liquid-glass[data-view] .topbar[data-native-glass-region]::before,
+html.native-liquid-glass body.liquid-glass[data-view] .topbar[data-native-glass-region]::after {border-radius:16px}
+html.native-liquid-glass body.liquid-glass[data-view] .reading-toolbar[data-native-glass-region]::before,
+html.native-liquid-glass body.liquid-glass[data-view] .reading-toolbar[data-native-glass-region]::after {border-radius:16px 16px 0 0}
+html.native-liquid-glass body.liquid-glass[data-view] .reading-toolbar[data-native-glass-region]::after {--native-feather-y:linear-gradient(to bottom,transparent,#000 6px)}
+html.native-liquid-glass body.liquid-glass[data-view] .reading-tabs[data-native-glass-region]::before,
+html.native-liquid-glass body.liquid-glass[data-view] .reading-tabs[data-native-glass-region]::after {border-radius:0 0 16px 16px}
+html.native-liquid-glass body.liquid-glass[data-view] .reading-tabs[data-native-glass-region]::after {--native-feather-y:linear-gradient(to bottom,#000 calc(100% - 6px),transparent)}
+@media(max-width:760px) {
+  html.native-liquid-glass body.liquid-glass[data-view] #sidebar[data-native-glass-region]::before,
+  html.native-liquid-glass body.liquid-glass[data-view] #sidebar[data-native-glass-region]::after {inset:6px 3px 6px 5px;border-radius:18px}
+}
+/* Menu/modal control layers are intentionally still CSS fallback surfaces. */
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more) {
+  html.native-liquid-glass,html.native-liquid-glass body.liquid-glass[data-view],html.native-liquid-glass body.liquid-glass[data-view].light-mode {background:var(--bg)}
+  html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region],html.native-liquid-glass body.liquid-glass[data-view].light-mode [data-native-glass-region] {background:var(--panel-raised);backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+@media(forced-colors:active) {
+  html.native-liquid-glass,html.native-liquid-glass body.liquid-glass[data-view],html.native-liquid-glass body.liquid-glass[data-view].light-mode {background:Canvas}
+  html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region],html.native-liquid-glass body.liquid-glass[data-view].light-mode [data-native-glass-region] {background:Canvas;border-color:CanvasText;backdrop-filter:none;-webkit-backdrop-filter:none}
+}

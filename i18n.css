@@ -1,0 +1,19 @@
+.language-settings-card { display:grid;grid-template-columns:minmax(0,1fr) auto minmax(150px,220px);align-items:center;gap:12px 20px;margin-bottom:20px }
+.language-settings-card h2 { margin:0 0 8px }
+.language-settings-card p { margin:0;line-height:1.5 }
+.language-settings-card .setting-label { margin:0 }
+.language-settings-card .setting-input { margin:0;width:100% }
+html[lang="en"] .nav-item { gap:10px }
+html[lang="en"] .nav-item>span:not(.icon-slot) { min-width:0 }
+html[lang="en"] .chat-header-actions { min-width:0;flex-wrap:wrap }
+html[lang="en"] .space-tabs,html[lang="en"] .project-tabs,html[lang="en"] .dialog-actions,html[lang="en"] .collection-batch { flex-wrap:wrap }
+html[lang="en"] .setting-label,html[lang="en"] .permission-row b,html[lang="en"] .permission-row small { overflow-wrap:anywhere }
+html[lang="en"] .permission-row>div { min-width:0 }
+html[lang="en"] .permission-row select { flex-shrink:0;max-width:52% }
+html[lang="en"] .reading-toolbar,html[lang="en"] .note-document-toolbar { gap:6px;flex-wrap:wrap }
+html[lang="en"] .reading-caption { white-space:normal;line-height:1.3 }
+html[lang="en"] .planning-card h3 { line-height:1.35 }
+html[lang="en"] .collection-toolbar { flex-wrap:wrap }
+html[lang="en"] .collection-toolbar .collection-search { min-width:140px }
+html[lang="en"] .onboarding-title { line-height:1.15 }
+@media(max-width:850px) { .language-settings-card { grid-template-columns:minmax(0,1fr) }.language-settings-card .setting-input { max-width:280px } }
