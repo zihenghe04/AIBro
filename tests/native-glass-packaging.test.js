@@ -88,3 +88,12 @@ test('deep signing an app bundle keeps its copied native runtime identity', {ski
   assert.equal(signed.status,0,signed.stderr);
   assert.equal(fingerprint(resources),fingerprint(source));
 });
+
+// Installed artifacts must not disclose the developer's absolute source path.
+test('native addon uses a relocatable install name without a local build path', {skip:process.platform!=='darwin'||!fs.existsSync(nativeAddon)}, () => {
+  const result=spawnSync('/usr/bin/otool',['-D',nativeAddon],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(result.stdout.trim().split('\n').slice(1).join('\n').trim(),'@rpath/native-glass.node');
+  const bytes=fs.readFileSync(nativeAddon);
+  assert.equal(bytes.includes(Buffer.from('/Users/')),false,'native module must not embed a developer home path');
+});

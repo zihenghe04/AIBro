@@ -28,7 +28,7 @@ function build(options = {}) {
   // Keep the final basename: codesign derives its default identifier from it.
   const buildDirectory=fs.mkdtempSync(path.join(path.dirname(destination),'.native-glass-build-'));
   const temporary = path.join(buildDirectory,path.basename(destination));
-  const args = ['clang++','-std=c++17','-fobjc-arc','-fblocks','-dynamiclib','-undefined','dynamic_lookup','-mmacosx-version-min=11.0','-arch',arch==='x64'?'x86_64':'arm64','-isysroot',sdk,'-I',include,'-DNAPI_VERSION=8','-DNODE_GYP_MODULE_NAME=ai_bro_native_glass','-framework','AppKit','-framework','Foundation',path.join(__dirname,'native-glass.mm'),'-o',temporary];
+  const args = ['clang++','-std=c++17','-fobjc-arc','-fblocks','-dynamiclib','-Wl,-install_name,@rpath/native-glass.node','-undefined','dynamic_lookup','-mmacosx-version-min=11.0','-arch',arch==='x64'?'x86_64':'arm64','-isysroot',sdk,'-I',include,'-DNAPI_VERSION=8','-DNODE_GYP_MODULE_NAME=ai_bro_native_glass','-framework','AppKit','-framework','Foundation',path.join(__dirname,'native-glass.mm'),'-o',temporary];
   try {
     const compiled=spawnSync('xcrun',args,{encoding:'utf8'});
     if (compiled.status !== 0) throw Error(`Native glass compilation failed.\n${compiled.stderr || compiled.error?.message || ''}`);
