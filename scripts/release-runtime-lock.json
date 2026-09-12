@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "platform": "darwin",
+  "arch": "arm64",
+  "pythonSeries": "3.12",
+  "python": {
+    "version": "3.12.14",
+    "release": "20260901",
+    "filename": "cpython-3.12.14+20260901-aarch64-apple-darwin-install_only_stripped.tar.gz",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "81a359f1cfadd4da11766534c5913791cea55f26e1bb902cacd2a531bb1e4b2b",
+    "size": 24981445,
+    "upstream": "https://github.com/astral-sh/python-build-standalone/releases/tag/20260901"
+  },
+  "pythonLicenses": {
+    "filename": "cpython-3.12.14+20260901-aarch64-apple-darwin-pgo+lto-full.tar.zst",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+    "sha256": "dbefa04d4107b449e17022f9c78d3eacbd37a1aa8c166c6220dbd95addf3f318",
+    "size": 54682677
+  },
+  "wheels": [
+    {
+      "name": "PyMuPDF",
+      "version": "1.26.5",
+      "filename": "pymupdf-1.26.5-cp39-abi3-macosx_11_0_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/c1/e2/e87e62284ba98d59f1fd4fc7542ef2ed0002525754a485fa4077b3bbddae/pymupdf-1.26.5-cp39-abi3-macosx_11_0_arm64.whl",
+      "sha256": "d58599479bc471d3ae56c3d68d9160d0b7de8a3bd40221ddc3a4eaae2d281b86",
+      "size": 22412612,
+      "license": "AGPL-3.0 or Artifex commercial license"
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "filename": "certifi-2026.7.22-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl",
+      "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+      "size": 136983,
+      "license": "MPL-2.0"
+    }
+  ],
+  "sources": [
+    {
+      "name": "PyMuPDF",
+      "version": "1.26.5",
+      "filename": "pymupdf-1.26.5.tar.gz",
+      "url": "https://files.pythonhosted.org/packages/8d/9a/e0a4e92a85fc17be7c54afdbb113f0ade2a8bca49856d510e28bd249e462/pymupdf-1.26.5.tar.gz",
+      "sha256": "8ef335e07f648492df240f2247854d0e7c0467afb9c4dc2376ec30978ec158c3",
+      "size": 84319274
+    },
+    {
+      "name": "MuPDF",
+      "version": "1.26.10",
+      "filename": "mupdf-1.26.10-source.tar.gz",
+      "url": "https://mupdf.com/downloads/archive/mupdf-1.26.10-source.tar.gz",
+      "sha256": "1653f35bd8fbd970f05523efdc7f86e41e9728e2564a3295296e03cf59a51437",
+      "size": 64530548
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+/* Brand asset is shared by the app icon and both appearances. */
+body.liquid-glass[data-view] .brand-mark {background:none;border:0;box-shadow:none;overflow:visible}
+body.liquid-glass[data-view] .brand-mark img {display:block;width:44px;height:44px;max-width:none;object-fit:contain}
+body.liquid-glass[data-view] .chat-orb.brand-orb {background:none;border:0;box-shadow:none;transform:none}
+body.liquid-glass[data-view] .brand-orb img {display:block;width:80px;height:80px;object-fit:contain}

@@ -1,0 +1,39 @@
+{
+  "name": "ai-bro",
+  "productName": "AI Bro",
+  "version": "0.6.3",
+  "private": true,
+  "description": "AI native personal knowledge and task workstation",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "./run-electron.sh",
+    "dev": "./run-electron.sh",
+    "app": "./build-electron-app.sh",
+    "app:electron": "./build-electron-app.sh",
+    "dist": "electron-builder --config electron-builder.config.cjs --mac",
+    "predist": "node build-native-glass.js --optional",
+    "assets:check": "node app-assets.js",
+    "test:server": "python3 run-server-tests.py",
+    "test": "node --test tests/*.test.js && npm run test:server && npm run assets:check",
+    "test:cloud": "python3 cloud/run-tests.py",
+    "native:build": "node build-native-glass.js",
+    "release:mac": "node scripts/release-macos.js",
+    "demo:record": "electron scripts/record-demo.cjs",
+    "demo:render": "python3 scripts/render-demo.py"
+  },
+  "devDependencies": {
+    "electron": "39.8.10",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "app.ai-workstation.studio",
+    "productName": "AI Bro",
+    "mac": {
+      "target": "dir",
+      "icon": "ai-bro-icon.icns"
+    }
+  },
+  "dependencies": {
+    "d3": "7.9.0"
+  }
+}

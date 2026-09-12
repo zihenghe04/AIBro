@@ -1,0 +1,45 @@
+services:
+  cloud:
+    build:
+      context: ..
+      dockerfile: cloud/Dockerfile
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8787"
+    environment:
+      CLOUD_DATA_DIR: /data
+    volumes:
+      - cloud_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/v1/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      CLOUD_DOMAIN: ${CLOUD_DOMAIN:?Set CLOUD_DOMAIN to your sync hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      cloud:
+        condition: service_healthy
+
+volumes:
+  cloud_data:
+  caddy_data:
+  caddy_config:

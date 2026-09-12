@@ -1,0 +1,989 @@
+[
+  {
+    "name": "cloud additions survive an old full snapshot",
+    "base": {
+      "_revision": 1,
+      "tasks": [
+        {
+          "id": "a",
+          "title": "A"
+        }
+      ]
+    },
+    "proposed": {
+      "_revision": 1,
+      "tasks": [
+        {
+          "id": "a",
+          "title": "A"
+        }
+      ],
+      "ui": {
+        "theme": "dark"
+      }
+    },
+    "current": {
+      "_revision": 2,
+      "tasks": [
+        {
+          "id": "a",
+          "title": "A"
+        },
+        {
+          "id": "b",
+          "title": "Cloud B"
+        }
+      ]
+    },
+    "expected": {
+      "_revision": 2,
+      "tasks": [
+        {
+          "id": "a",
+          "title": "A"
+        },
+        {
+          "id": "b",
+          "title": "Cloud B"
+        }
+      ],
+      "ui": {
+        "theme": "dark"
+      }
+    }
+  },
+  {
+    "name": "different task fields merge and newest timestamp wins",
+    "base": {
+      "tasks": [
+        {
+          "id": "t",
+          "title": "Old",
+          "status": "todo",
+          "updatedAt": 1
+        }
+      ]
+    },
+    "proposed": {
+      "tasks": [
+        {
+          "id": "t",
+          "title": "Local",
+          "status": "todo",
+          "updatedAt": 3
+        }
+      ]
+    },
+    "current": {
+      "tasks": [
+        {
+          "id": "t",
+          "title": "Old",
+          "status": "done",
+          "updatedAt": 4
+        }
+      ]
+    },
+    "expected": {
+      "tasks": [
+        {
+          "id": "t",
+          "title": "Local",
+          "status": "done",
+          "updatedAt": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "competing long note content is never concatenated",
+    "base": {
+      "notes": [
+        {
+          "id": "n",
+          "content": "Original",
+          "createdAt": 1,
+          "updatedAt": 1
+        }
+      ]
+    },
+    "proposed": {
+      "notes": [
+        {
+          "id": "n",
+          "content": "Local revision",
+          "createdAt": 2,
+          "updatedAt": 9
+        }
+      ]
+    },
+    "current": {
+      "notes": [
+        {
+          "id": "n",
+          "content": "Remote revision",
+          "createdAt": 3,
+          "updatedAt": 10
+        }
+      ]
+    },
+    "conflict": [
+      "notes",
+      "n",
+      "content"
+    ]
+  },
+  {
+    "name": "concurrent messages merge by id and timestamp",
+    "base": {
+      "conversations": [
+        {
+          "id": "chat",
+          "messages": [
+            {
+              "id": "a",
+              "text": "Greeting",
+              "at": 1
+            }
+          ]
+        }
+      ]
+    },
+    "proposed": {
+      "conversations": [
+        {
+          "id": "chat",
+          "messages": [
+            {
+              "id": "a",
+              "text": "Greeting",
+              "at": 1
+            },
+            {
+              "id": "p",
+              "text": "Local response",
+              "at": 3
+            }
+          ],
+          "draft": "unsent"
+        }
+      ]
+    },
+    "current": {
+      "conversations": [
+        {
+          "id": "chat",
+          "messages": [
+            {
+              "id": "a",
+              "text": "Greeting",
+              "at": 1
+            },
+            {
+              "id": "c",
+              "text": "Remote response",
+              "at": 2
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "conversations": [
+        {
+          "id": "chat",
+          "messages": [
+            {
+              "id": "a",
+              "text": "Greeting",
+              "at": 1
+            },
+            {
+              "id": "c",
+              "text": "Remote response",
+              "at": 2
+            },
+            {
+              "id": "p",
+              "text": "Local response",
+              "at": 3
+            }
+          ],
+          "draft": "unsent"
+        }
+      ]
+    }
+  },
+  {
+    "name": "delete against remote content edit conflicts",
+    "base": {
+      "tasks": [
+        {
+          "id": "t",
+          "title": "Before"
+        }
+      ]
+    },
+    "proposed": {
+      "tasks": []
+    },
+    "current": {
+      "tasks": [
+        {
+          "id": "t",
+          "title": "Changed"
+        }
+      ]
+    },
+    "conflict": [
+      "tasks",
+      "t"
+    ]
+  },
+  {
+    "name": "local content edit against remote deletion conflicts",
+    "base": {
+      "notes": [
+        {
+          "id": "n",
+          "content": "Before"
+        }
+      ]
+    },
+    "proposed": {
+      "notes": [
+        {
+          "id": "n",
+          "content": "Local"
+        }
+      ]
+    },
+    "current": {
+      "notes": []
+    },
+    "conflict": [
+      "notes",
+      "n"
+    ]
+  },
+  {
+    "name": "timestamp-only changes do not prevent deletion",
+    "base": {
+      "tasks": [
+        {
+          "id": "t",
+          "title": "Before",
+          "updatedAt": 1
+        }
+      ]
+    },
+    "proposed": {
+      "tasks": []
+    },
+    "current": {
+      "tasks": [
+        {
+          "id": "t",
+          "title": "Before",
+          "updatedAt": 999
+        }
+      ]
+    },
+    "expected": {
+      "tasks": []
+    }
+  },
+  {
+    "name": "same changed value is compatible",
+    "base": {
+      "notes": [
+        {
+          "id": "n",
+          "content": "Before"
+        }
+      ]
+    },
+    "proposed": {
+      "notes": [
+        {
+          "id": "n",
+          "content": "Same",
+          "updatedAt": 4
+        }
+      ]
+    },
+    "current": {
+      "notes": [
+        {
+          "id": "n",
+          "content": "Same",
+          "updatedAt": 7
+        }
+      ]
+    },
+    "expected": {
+      "notes": [
+        {
+          "id": "n",
+          "content": "Same",
+          "updatedAt": 7
+        }
+      ]
+    }
+  },
+  {
+    "name": "structured note fields merge independently",
+    "base": {
+      "papers": [
+        {
+          "id": "p",
+          "structured": {
+            "abstract": "Old",
+            "methods": "Method"
+          }
+        }
+      ]
+    },
+    "proposed": {
+      "papers": [
+        {
+          "id": "p",
+          "structured": {
+            "abstract": "Local",
+            "methods": "Method"
+          }
+        }
+      ]
+    },
+    "current": {
+      "papers": [
+        {
+          "id": "p",
+          "structured": {
+            "abstract": "Old",
+            "methods": "Remote"
+          }
+        }
+      ]
+    },
+    "expected": {
+      "papers": [
+        {
+          "id": "p",
+          "structured": {
+            "abstract": "Local",
+            "methods": "Remote"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "local paths and permissions stay device-owned",
+    "base": {
+      "projects": [
+        {
+          "id": "p",
+          "name": "Old",
+          "localFolder": {
+            "path": "/local"
+          }
+        }
+      ]
+    },
+    "proposed": {
+      "projects": [
+        {
+          "id": "p",
+          "name": "Old",
+          "localFolder": {
+            "path": "/local/new"
+          },
+          "permissionMode": "request"
+        }
+      ]
+    },
+    "current": {
+      "projects": [
+        {
+          "id": "p",
+          "name": "Remote name",
+          "localFolder": {
+            "path": "/foreign"
+          },
+          "permissionMode": "full"
+        },
+        {
+          "id": "new",
+          "name": "Remote project",
+          "localFolder": {
+            "path": "/foreign/new"
+          },
+          "permissionMode": "full"
+        }
+      ]
+    },
+    "expected": {
+      "projects": [
+        {
+          "id": "p",
+          "name": "Remote name",
+          "localFolder": {
+            "path": "/local/new"
+          },
+          "permissionMode": "request"
+        },
+        {
+          "id": "new",
+          "name": "Remote project"
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing field differs from explicit null",
+    "base": {
+      "tasks": [
+        {
+          "id": "t",
+          "description": "Old"
+        }
+      ]
+    },
+    "proposed": {
+      "tasks": [
+        {
+          "id": "t"
+        }
+      ]
+    },
+    "current": {
+      "tasks": [
+        {
+          "id": "t",
+          "description": null
+        }
+      ]
+    },
+    "conflict": [
+      "tasks",
+      "t",
+      "description"
+    ]
+  },
+  {
+    "name": "collection absent from baseline cannot erase remote additions",
+    "base": {},
+    "proposed": {},
+    "current": {
+      "imports": [
+        {
+          "id": "pdf",
+          "name": "Cloud.pdf"
+        }
+      ]
+    },
+    "expected": {
+      "imports": [
+        {
+          "id": "pdf",
+          "name": "Cloud.pdf"
+        }
+      ]
+    }
+  },
+  {
+    "name": "folder ids are scoped by folder kind",
+    "base": {
+      "folders": {
+        "projects": [],
+        "conversations": []
+      }
+    },
+    "proposed": {
+      "folders": {
+        "projects": [
+          {
+            "id": "same",
+            "name": "Projects"
+          }
+        ],
+        "conversations": []
+      }
+    },
+    "current": {
+      "folders": {
+        "projects": [],
+        "conversations": [
+          {
+            "id": "same",
+            "name": "Chats"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "folders": {
+        "projects": [
+          {
+            "id": "same",
+            "name": "Projects"
+          }
+        ],
+        "conversations": [
+          {
+            "id": "same",
+            "name": "Chats"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "duplicate ids reject even identical unchanged snapshots",
+    "base": {
+      "tasks": [
+        {
+          "id": "t"
+        },
+        {
+          "id": "t"
+        }
+      ]
+    },
+    "proposed": {
+      "tasks": [
+        {
+          "id": "t"
+        },
+        {
+          "id": "t"
+        }
+      ]
+    },
+    "current": {
+      "tasks": [
+        {
+          "id": "t"
+        },
+        {
+          "id": "t"
+        }
+      ]
+    },
+    "conflict": [
+      "tasks",
+      "t"
+    ]
+  },
+  {
+    "name": "duplicate message ids reject",
+    "base": {},
+    "proposed": {
+      "conversations": [
+        {
+          "id": "chat",
+          "messages": [
+            {
+              "id": "m"
+            },
+            {
+              "id": "m"
+            }
+          ]
+        }
+      ]
+    },
+    "current": {},
+    "conflict": [
+      "conversations",
+      "chat",
+      "messages",
+      "m"
+    ]
+  },
+  {
+    "name": "ordinary arrays do not silently erase either competing change",
+    "base": {
+      "notes": [
+        {
+          "id": "n",
+          "tags": [
+            "original"
+          ]
+        }
+      ]
+    },
+    "proposed": {
+      "notes": [
+        {
+          "id": "n",
+          "tags": [
+            "local"
+          ]
+        }
+      ]
+    },
+    "current": {
+      "notes": [
+        {
+          "id": "n",
+          "tags": [
+            "remote"
+          ]
+        }
+      ]
+    },
+    "conflict": [
+      "notes",
+      "n",
+      "tags"
+    ]
+  },
+  {
+    "name": "explicit local deletion preserves a separate new cloud record",
+    "base": {
+      "tasks": [
+        {
+          "id": "remove"
+        },
+        {
+          "id": "keep"
+        }
+      ]
+    },
+    "proposed": {
+      "tasks": [
+        {
+          "id": "keep"
+        }
+      ]
+    },
+    "current": {
+      "tasks": [
+        {
+          "id": "remove"
+        },
+        {
+          "id": "keep"
+        },
+        {
+          "id": "cloud"
+        }
+      ]
+    },
+    "expected": {
+      "tasks": [
+        {
+          "id": "keep"
+        },
+        {
+          "id": "cloud"
+        }
+      ]
+    }
+  },
+  {
+    "name": "same ids across entity types are independent",
+    "base": {
+      "tasks": [
+        {
+          "id": "x"
+        }
+      ],
+      "notes": [
+        {
+          "id": "x",
+          "content": "Old"
+        }
+      ]
+    },
+    "proposed": {
+      "tasks": [],
+      "notes": [
+        {
+          "id": "x",
+          "content": "Old"
+        }
+      ]
+    },
+    "current": {
+      "tasks": [
+        {
+          "id": "x"
+        }
+      ],
+      "notes": [
+        {
+          "id": "x",
+          "content": "New"
+        }
+      ]
+    },
+    "expected": {
+      "tasks": [],
+      "notes": [
+        {
+          "id": "x",
+          "content": "New"
+        }
+      ]
+    }
+  },
+  {
+    "name": "device snapshot fields come only from local proposal",
+    "base": {
+      "_revision": 1,
+      "settings": {
+        "permissions": "request"
+      }
+    },
+    "proposed": {
+      "_revision": 1,
+      "settings": {
+        "permissions": "request"
+      },
+      "_apiKey": "local-only-fixture",
+      "currentConversationId": "local"
+    },
+    "current": {
+      "_revision": 2,
+      "settings": {
+        "permissions": "full"
+      },
+      "_apiKey": "foreign",
+      "currentConversationId": "remote"
+    },
+    "expected": {
+      "_revision": 2,
+      "settings": {
+        "permissions": "request"
+      },
+      "_apiKey": "local-only-fixture",
+      "currentConversationId": "local"
+    }
+  },
+  {
+    "name": "existing createdAt remains stable and updatedAt accepts ISO dates",
+    "base": {
+      "notes": [
+        {
+          "id": "n",
+          "createdAt": 1,
+          "updatedAt": "2026-01-01T00:00:00Z"
+        }
+      ]
+    },
+    "proposed": {
+      "notes": [
+        {
+          "id": "n",
+          "createdAt": 99,
+          "updatedAt": "2026-01-02T00:00:00Z"
+        }
+      ]
+    },
+    "current": {
+      "notes": [
+        {
+          "id": "n",
+          "createdAt": 101,
+          "updatedAt": "2026-01-03T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "notes": [
+        {
+          "id": "n",
+          "createdAt": 1,
+          "updatedAt": "2026-01-03T00:00:00Z"
+        }
+      ]
+    }
+  },
+  {
+    "name": "prototype-like keys remain ordinary own data",
+    "base": {
+      "notes": [
+        {
+          "id": "__proto__",
+          "structured": {
+            "__proto__": {
+              "x": "base"
+            },
+            "constructor": "base"
+          }
+        }
+      ]
+    },
+    "proposed": {
+      "notes": [
+        {
+          "id": "__proto__",
+          "structured": {
+            "__proto__": {
+              "x": "local"
+            },
+            "constructor": "base"
+          }
+        }
+      ]
+    },
+    "current": {
+      "notes": [
+        {
+          "id": "__proto__",
+          "structured": {
+            "__proto__": {
+              "x": "base"
+            },
+            "constructor": "remote"
+          }
+        }
+      ]
+    },
+    "expected": {
+      "notes": [
+        {
+          "id": "__proto__",
+          "structured": {
+            "__proto__": {
+              "x": "local"
+            },
+            "constructor": "remote"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "identical concurrent create is not duplicated",
+    "base": {},
+    "proposed": {
+      "tasks": [
+        {
+          "id": "new",
+          "title": "Same"
+        }
+      ]
+    },
+    "current": {
+      "tasks": [
+        {
+          "id": "new",
+          "title": "Same"
+        }
+      ]
+    },
+    "expected": {
+      "tasks": [
+        {
+          "id": "new",
+          "title": "Same"
+        }
+      ]
+    }
+  },
+  {
+    "name": "streamed local message update preserves a cloud-added message",
+    "base": {
+      "conversations": [
+        {
+          "id": "chat",
+          "messages": [
+            {
+              "id": "m",
+              "text": "partial"
+            }
+          ]
+        }
+      ]
+    },
+    "proposed": {
+      "conversations": [
+        {
+          "id": "chat",
+          "messages": [
+            {
+              "id": "m",
+              "text": "completed locally"
+            }
+          ]
+        }
+      ]
+    },
+    "current": {
+      "conversations": [
+        {
+          "id": "chat",
+          "messages": [
+            {
+              "id": "m",
+              "text": "partial"
+            },
+            {
+              "id": "cloud",
+              "text": "new reply"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "conversations": [
+        {
+          "id": "chat",
+          "messages": [
+            {
+              "id": "m",
+              "text": "completed locally"
+            },
+            {
+              "id": "cloud",
+              "text": "new reply"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "legacy folder array keeps kind in stable identity",
+    "base": {
+      "folders": []
+    },
+    "proposed": {
+      "folders": [
+        {
+          "id": "f",
+          "kind": "projects",
+          "name": "Project folder"
+        }
+      ]
+    },
+    "current": {
+      "folders": [
+        {
+          "id": "f",
+          "kind": "conversations",
+          "name": "Conversation folder"
+        }
+      ]
+    },
+    "expected": {
+      "folders": [
+        {
+          "id": "f",
+          "kind": "projects",
+          "name": "Project folder"
+        },
+        {
+          "id": "f",
+          "kind": "conversations",
+          "name": "Conversation folder"
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,22 @@
+[Unit]
+Description=AI Workstation private cloud sync
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/ai-workstation-cloud/current
+ExecStart=/usr/bin/python3 %h/.local/share/ai-workstation-cloud/current/cloud_server.py --data-dir %h/.local/share/ai-workstation-cloud/data serve --host 127.0.0.1 --port 8787
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+NoNewPrivileges=true
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+LimitNOFILE=2048
+
+[Install]
+WantedBy=default.target

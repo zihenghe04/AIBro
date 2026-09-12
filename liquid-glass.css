@@ -1,0 +1,253 @@
+/* Liquid material with an SVG backdrop displacement lens on the composer.
+   Sources: Apple HIG / Materials; WWDC25 / Meet Liquid Glass; SVG Filter Effects.
+   Glass belongs to navigation and controls. Documents and tables remain solid.
+   Loaded last, this replaces previous material recipes without changing layout. */
+body.liquid-glass[data-view] {
+  --bg:#171719;--panel:#202022;--panel-raised:#2a2a2c;--panel-hover:#303032;
+  --canvas:#202022;--text:#f0f0f0;--muted:#aaaaaa;--faint:#929294;
+  --accent:#d0d0d2;--accent-solid:#555558;--accent-soft:rgba(220,220,222,.07);
+  --glass:rgba(48,48,48,.66);--sidebar:rgba(37,37,37,.53);
+  --line:rgba(255,255,255,.075);--line-strong:rgba(255,255,255,.14);--rim:rgba(255,255,255,.09);
+  --surface-wash:linear-gradient(155deg,#ffffff04,transparent 56%);
+  --ambient:radial-gradient(ellipse at -8% 5%,#ffffff08,transparent 43%),radial-gradient(ellipse at 110% 105%,#00000012,transparent 42%);
+  --lg-reflection:rgba(255,255,255,.055);--lg-rim:rgba(255,255,255,.12);--lg-rim-muted:rgba(255,255,255,.035);
+  --lg-edge-shadow:rgba(0,0,0,.3);--lg-nav:rgba(36,36,36,.53);--lg-control:rgba(62,62,62,.43);--lg-popup:rgba(40,40,40,.91);
+  --lg-highlight:rgba(255,255,255,.035);--lg-lens:rgba(255,255,255,.015);--lg-content:#202022;--lg-sheet:#252527;
+  --lg-select:linear-gradient(130deg,#d7d7d725,#a5a5a518);--lg-inset:rgba(0,0,0,.16);
+  --shadow-canvas:inset 0 1px 0 #ffffff09,0 1px 3px #00000033,0 12px 32px #00000028;
+  --shadow-card:inset 0 1px 0 #ffffff0c,0 1px 2px #00000033,0 5px 16px #00000022;
+  --shadow-button:inset 0 1px 0 #ffffff10,0 1px 2px #00000028;
+  --shadow-float:inset 0 1px 0 #ffffff18,0 0 0 1px #00000012,0 4px 10px #00000033,0 22px 52px #00000045;
+  background-color:var(--bg);background-image:var(--ambient);
+}
+body.liquid-glass[data-view].light-mode {
+  --bg:#f7f7f5;--panel:#ffffff;--panel-raised:#ffffff;--panel-hover:#f0f0ee;
+  --canvas:#f7f7f5;--text:#252527;--muted:#626264;--faint:#6b6b6e;
+  --accent:#3d3d40;--accent-solid:#39393c;--accent-soft:rgba(40,40,42,.055);
+  --glass:rgba(251,251,251,.61);--sidebar:rgba(244,244,244,.44);
+  --line:rgba(0,0,0,.075);--line-strong:rgba(0,0,0,.14);--rim:rgba(255,255,255,.52);
+  --surface-wash:linear-gradient(155deg,#ffffff77,transparent 56%);
+  --ambient:radial-gradient(ellipse at -8% 5%,#ffffff40,transparent 42%),linear-gradient(130deg,#f7f7f5,#f0f0ee 80%,#e9e9e7);
+  --lg-reflection:rgba(255,255,255,.32);--lg-rim:rgba(255,255,255,.65);--lg-rim-muted:rgba(0,0,0,.045);
+  --lg-edge-shadow:rgba(0,0,0,.105);--lg-nav:rgba(243,243,243,.32);--lg-control:rgba(253,253,253,.36);--lg-popup:rgba(252,252,252,.89);
+  --lg-highlight:rgba(255,255,255,.18);--lg-lens:rgba(90,90,92,.018);--lg-content:#f7f7f5;--lg-sheet:#ffffff;
+  --lg-select:linear-gradient(125deg,#ffffffb8,#f6f6f694);--lg-inset:rgba(0,0,0,.035);
+  --shadow-canvas:inset 0 1px 0 #ffffff99,0 0 0 1px #00000004,0 1px 2px #00000009,0 10px 28px #0000000d;
+  --shadow-card:inset 0 1px 0 #ffffff,0 1px 2px #40404009,0 4px 15px #40404008;
+  --shadow-button:inset 0 1px 0 #ffffff88,0 1px 2px #00000010;
+  --shadow-float:inset 0 1px 0 #ffffffb8,0 0 0 1px #00000008,0 3px 8px #00000010,0 20px 48px #00000018;
+  background-color:var(--bg);background-image:var(--ambient);
+}
+/* macOS supplies the actual desktop material through NSVisualEffectView.
+   Only the outer navigation surround opens to it; document planes stay solid.
+   Ordinary browsers retain the self-contained neutral ambient background. */
+html.native-glass-host {background:transparent}
+html.native-glass-host body.liquid-glass[data-view] {
+  background-color:rgba(24,24,24,.26);
+  background-image:radial-gradient(ellipse at -8% 5%,#c3c3c316,transparent 45%),linear-gradient(145deg,#fbfbfb07,#1f1f1f12);
+}
+html.native-glass-host body.liquid-glass[data-view].light-mode {
+  background-color:rgba(249,249,249,.16);
+  background-image:radial-gradient(ellipse at -8% 5%,#ffffff2e,transparent 45%),linear-gradient(145deg,#ffffff19,#b1b1b10b);
+}
+/* The navigation rail has a single, inset lens. Its pseudo-element occupies
+   the existing rail bounds; draggable widths and content hit areas are intact. */
+body.liquid-glass[data-view] .sidebar {
+  position:relative;isolation:isolate;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;
+}
+body.liquid-glass[data-view] .sidebar::before {
+  content:'';position:absolute;inset:8px 5px 8px 8px;z-index:-1;pointer-events:none;border:1px solid var(--lg-rim-muted);border-radius:23px;
+  background:radial-gradient(300px circle at var(--lg-pointer-x,12%) var(--lg-pointer-y,3%),var(--lg-highlight),transparent 76%),linear-gradient(145deg,var(--lg-reflection),transparent 16% 74%,var(--lg-lens)),var(--lg-nav);
+  backdrop-filter:blur(32px) saturate(1.02);-webkit-backdrop-filter:blur(32px) saturate(1.02);
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 3px #00000010,0 12px 26px -20px var(--lg-edge-shadow);
+}
+body.liquid-glass[data-view] .sidebar::after {
+  content:'';position:absolute;inset:9px 6px 9px 9px;z-index:-1;pointer-events:none;opacity:.28;border-radius:22px;border:1px solid transparent;
+  background:linear-gradient(125deg,var(--lg-rim),transparent 25% 68%,var(--lg-rim-muted)) border-box;
+  -webkit-mask:linear-gradient(#ffffff 0 0) padding-box,linear-gradient(#ffffff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+}
+body.liquid-glass[data-view] .conversation-navigator {
+  background:radial-gradient(330px circle at var(--lg-pointer-x,5%) var(--lg-pointer-y,2%),var(--lg-highlight),transparent 75%),linear-gradient(130deg,var(--lg-reflection),transparent 14% 85%,var(--lg-lens)),var(--lg-nav);
+  border-color:var(--lg-rim-muted);border-radius:20px 0 0 20px;
+  backdrop-filter:blur(34px) saturate(1.02);-webkit-backdrop-filter:blur(34px) saturate(1.02);
+  box-shadow:inset 1px 1px 0 var(--lg-rim),inset -1px 0 0 var(--line),0 5px 16px var(--lg-edge-shadow);
+}
+/* Opaque reading planes: text never inherits the pointer highlight or blur. */
+body.liquid-glass[data-view] .main,body.liquid-glass[data-view] .reading-pane {background:var(--lg-content);border-color:var(--line-strong);box-shadow:var(--shadow-canvas)}
+body.liquid-glass[data-view] .reading-pane {border-radius:20px}
+body.liquid-glass[data-view] .conversation-pane {background:radial-gradient(ellipse at 52% 116%,var(--lg-lens),transparent 58%),var(--lg-content)}
+body.liquid-glass[data-view] .card,body.liquid-glass[data-view] .metrics>div,body.liquid-glass[data-view] .overview-stat,body.liquid-glass[data-view] .activity-ui {background:var(--lg-sheet);border-color:var(--line);box-shadow:var(--shadow-card)}
+body.liquid-glass[data-view] .note-document-preview,body.liquid-glass[data-view] .collection-table,body.liquid-glass[data-view] .message-body {backdrop-filter:none;-webkit-backdrop-filter:none}
+/* Controls share one material recipe, with geometry-specific thickness. */
+body.liquid-glass[data-view] .topbar,body.liquid-glass[data-view] .reading-toolbar {
+  position:relative;isolation:isolate;
+  background:radial-gradient(230px circle at var(--lg-pointer-x,14%) var(--lg-pointer-y,0%),var(--lg-highlight),transparent 75%),linear-gradient(180deg,var(--lg-reflection),transparent 8px 70%,var(--lg-lens)),var(--lg-control);
+  backdrop-filter:blur(28px) saturate(1.02);-webkit-backdrop-filter:blur(28px) saturate(1.02);
+  border-bottom-color:var(--line);box-shadow:inset 0 1px 0 var(--lg-rim),inset 1px 0 0 var(--lg-rim-muted),0 3px 12px -6px var(--lg-edge-shadow);
+}
+body.liquid-glass[data-view] .topbar::after,body.liquid-glass[data-view] .reading-toolbar::after {
+  content:'';position:absolute;pointer-events:none;inset:0;z-index:-1;border-radius:inherit;
+  background:linear-gradient(100deg,transparent 8%,var(--lg-reflection) 27%,transparent 53%) top/100% 1px no-repeat,radial-gradient(ellipse at var(--lg-pointer-x,20%) 100%,var(--lg-rim-muted),transparent 65%) bottom/100% 1px no-repeat;
+}
+body.liquid-glass[data-view] .composer {
+  border:1px solid var(--line-strong);border-radius:25px;
+  background:radial-gradient(350px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),var(--lg-highlight),transparent 72%),linear-gradient(155deg,var(--lg-reflection),transparent 11% 80%,var(--lg-lens)),var(--lg-control);
+  backdrop-filter:blur(32px) saturate(1.02);-webkit-backdrop-filter:blur(32px) saturate(1.02);
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 3px #00000012,0 10px 26px -12px var(--lg-edge-shadow);
+  transition:box-shadow 220ms ease,border-color 220ms ease;
+}
+body.liquid-glass[data-view] .composer::after {
+  content:'';position:absolute;inset:0;pointer-events:none;opacity:.32;border-radius:inherit;padding:1px;
+  background:radial-gradient(240px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),var(--lg-rim),transparent 75%),linear-gradient(145deg,var(--lg-rim),transparent 30% 70%,var(--lg-rim-muted));
+  -webkit-mask:linear-gradient(#ffffff 0 0) content-box,linear-gradient(#ffffff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+}
+body.liquid-glass[data-view] .composer:focus-within {
+  border-color:color-mix(in srgb,var(--accent) 43%,var(--line-strong));
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 0 0 2px var(--accent-soft),0 10px 26px -12px var(--lg-edge-shadow);
+}
+/* The SVG map spatially remaps only pixels BEHIND this element. Unlike filter:
+   url(...), backdrop-filter never warps the textarea, attachments, or controls.
+   The center uses a 9px background frost; only the rim preserves sharp bending.
+   A translucent center veil supports foreground contrast without sealing edges. */
+body.liquid-glass[data-view] .conversation-pane[data-glass-chat=true] .message-list {
+  margin-bottom:calc(-1 * var(--lg-composer-height,0px));
+  padding-bottom:calc(var(--lg-composer-height,0px) + 30px);
+  scroll-padding-bottom:calc(var(--lg-composer-height,0px) + 30px);
+  /* A scroll-edge veil separates small foreground controls from dense text.
+     Content remains fully visible above the floating composer, then softly
+     dissolves as it enters the lens instead of showing sharp side-edge glyphs. */
+  mask-image:linear-gradient(to bottom,#000000 0,#000000 calc(100% - var(--lg-composer-height,0px) - 12px),#00000099 calc(100% - var(--lg-composer-height,0px) + 12px),#00000033 calc(100% - var(--lg-composer-height,0px) + 40px),#00000033 100%);
+}
+body.liquid-glass[data-view] .conversation-pane[data-glass-chat=true] .composer {z-index:2}
+body.liquid-glass[data-view] .composer[data-glass-refracting=true] {
+  --lg-center-veil:#25252770;--lg-active-center-veil:#222224b8;
+  background:linear-gradient(180deg,transparent,var(--lg-center-veil) 22px calc(100% - 22px),transparent),radial-gradient(310px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),#ffffff05,transparent 70%),linear-gradient(170deg,#ffffff0c,#20202208 24% 78%,transparent),#30303248;
+  backdrop-filter:var(--lg-refraction-filter) saturate(1.02);-webkit-backdrop-filter:var(--lg-refraction-filter) saturate(1.02);
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 2px #00000010,0 10px 26px -12px var(--lg-edge-shadow);
+}
+body.liquid-glass[data-view].light-mode .composer[data-glass-refracting=true] {
+  --lg-center-veil:#ffffff70;--lg-active-center-veil:#ffffffb0;
+  background:linear-gradient(180deg,transparent,var(--lg-center-veil) 22px calc(100% - 22px),transparent),radial-gradient(310px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),#ffffff24,transparent 70%),linear-gradient(170deg,#ffffff38,#f7f7f512 22% 80%,transparent),#ffffff2e;
+}
+body.liquid-glass[data-view] .composer[data-glass-refracting=true]:focus-within {border-color:color-mix(in srgb,var(--accent) 43%,var(--line-strong));box-shadow:inset 0 1px 0 var(--lg-rim),0 0 0 2px var(--accent-soft),0 10px 26px -12px var(--lg-edge-shadow)}
+body.liquid-glass[data-view] .composer[data-glass-refracting=true]:focus-within,body.liquid-glass[data-view].light-mode .composer[data-glass-refracting=true]:focus-within {--lg-center-veil:var(--lg-active-center-veil)}
+/* Resting controls are thin fills on glass: no nested backdrop filtering. */
+body.liquid-glass[data-view] .sidebar .nav-item,body.liquid-glass[data-view] .new-task,body.liquid-glass[data-view] .sidebar-theme-control {border-radius:13px}
+body.liquid-glass[data-view] .nav-item.active,body.liquid-glass[data-view] .conversation-item.active {background:var(--lg-select);border-color:var(--lg-rim-muted);box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 3px var(--lg-edge-shadow);color:var(--text)}
+body.liquid-glass[data-view] .nav-item.active .wi {color:var(--accent)}
+body.liquid-glass[data-view] .new-task {background:var(--lg-select);border-color:var(--line-strong);box-shadow:var(--shadow-button)}
+body.liquid-glass[data-view] .new-task:hover {background:var(--panel-raised);box-shadow:inset 0 1px 0 var(--lg-rim),0 2px 7px var(--lg-edge-shadow)}
+body.liquid-glass[data-view] .sidebar-theme-control,body.liquid-glass[data-view] .reader-theme-control,body.liquid-glass[data-view] #themeBtn.layout-theme-button,body.liquid-glass[data-view] .reading-toggle {background:var(--lg-select);border-color:var(--line);box-shadow:var(--shadow-button);backdrop-filter:none;-webkit-backdrop-filter:none}
+body.liquid-glass[data-view] .reading-control,body.liquid-glass[data-view] .reading-toggle,body.liquid-glass[data-view] .reader-theme-control,body.liquid-glass[data-view] #themeBtn.layout-theme-button {border-radius:10px}
+body.liquid-glass[data-view] .composer-footer button:not(.send-btn),body.liquid-glass[data-view] .chat-header-actions button {backdrop-filter:none;-webkit-backdrop-filter:none}
+body.liquid-glass[data-view] .send-btn {border-radius:50%;background:linear-gradient(150deg,#636366,var(--accent-solid));color:#ffffff;box-shadow:inset 0 1px 1px #ffffff5c,0 2px 4px #46464638,0 4px 10px #5959591f}
+body.liquid-glass[data-view] .send-btn:hover {filter:brightness(1.08)}
+body.liquid-glass[data-view] .primary {background:linear-gradient(160deg,color-mix(in srgb,var(--accent-solid) 92%,#bcbcbc),var(--accent-solid));color:#ffffff;border-color:color-mix(in srgb,var(--accent-solid) 75%,transparent);box-shadow:inset 0 1px 0 #ffffff46,0 1px 3px #35353521}
+body.liquid-glass[data-view] .user-message .message-body {background:var(--panel-hover);color:var(--text);border-color:var(--line);box-shadow:inset 0 1px 0 var(--rim)}
+body.liquid-glass[data-view] .agent-message .message-identity::before {background:var(--muted);box-shadow:none}
+body.liquid-glass[data-view] .chat-orb {background:linear-gradient(150deg,var(--panel-raised),var(--panel));color:var(--text);border-color:var(--line);box-shadow:inset 0 1px 0 var(--rim),0 5px 16px #0000000a}
+body.liquid-glass[data-view] .chat-orb::before {background:none;filter:none}
+body.liquid-glass[data-view] .secondary {background:linear-gradient(170deg,var(--lg-rim-muted),transparent 70%),var(--panel-raised);border-color:var(--line-strong);box-shadow:var(--shadow-button)}
+body.liquid-glass[data-view] .reading-tabs {background:color-mix(in srgb,var(--lg-nav) 75%,var(--lg-content));box-shadow:inset 0 1px 0 var(--lg-rim-muted)}
+body.liquid-glass[data-view] .reading-tab.active {background:var(--lg-sheet);border-color:var(--line);box-shadow:inset 0 1px 0 var(--lg-rim)}
+body.liquid-glass[data-view] .note-document-toolbar {background:var(--lg-content);box-shadow:0 7px 16px -13px var(--lg-edge-shadow)}
+body.liquid-glass[data-view] .progress-track,body.liquid-glass[data-view] .activity-ui-track,body.liquid-glass[data-view] .mini-progress {background:var(--lg-inset);box-shadow:inset 0 1px 2px #23232318;border-radius:999px}
+body.liquid-glass[data-view] .progress-fill,body.liquid-glass[data-view] .mini-progress span {background:linear-gradient(90deg,var(--accent-solid),color-mix(in srgb,var(--accent-solid) 60%,#cfcfcf));box-shadow:inset 0 1px 0 #ffffff35;border-radius:inherit}
+/* Menus are a thicker lens, kept separate from modal scrim and reading text. */
+body.liquid-glass[data-view] dialog:not(#previewDialog),body.liquid-glass[data-view] #skillPicker,body.liquid-glass[data-view] .polish-popover,body.liquid-glass[data-view] .onboarding-card {
+  background:linear-gradient(150deg,var(--lg-rim-muted),transparent 16% 85%,var(--lg-lens)),var(--lg-popup);border-color:var(--line-strong);box-shadow:var(--shadow-float);
+  backdrop-filter:blur(30px) saturate(1.02);-webkit-backdrop-filter:blur(30px) saturate(1.02);
+}
+body.liquid-glass[data-view] dialog:not(#previewDialog)::backdrop {background:color-mix(in srgb,#272727 25%,transparent);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+body.liquid-glass[data-view] .setting-input,body.liquid-glass[data-view] .task-field input,body.liquid-glass[data-view] .task-field textarea {background:var(--lg-sheet);border-color:var(--line-strong);box-shadow:inset 0 1px 2px var(--lg-inset)}
+body.liquid-glass[data-view] :is(.topbar,.reading-toolbar,.composer)[data-glass-lit=true] {--lg-lens:color-mix(in srgb,var(--accent) 10%,transparent)}
+body.liquid-glass-unfocused {--lg-highlight:transparent;--lg-reflection:var(--lg-rim-muted)}
+body.liquid-glass-unfocused .sidebar {opacity:.92}
+/* Secondary controls use the same optical thickness as the main navigation.
+   These are the actual model / polish / skills / search surfaces. Their
+   backgrounds frost the scene, while input text and results stay unfiltered. */
+body.liquid-glass[data-view] {
+  --lg-menu-core:rgba(36,36,36,.76);--lg-menu-top:rgba(255,255,255,.055);
+  --lg-menu-bottom:transparent;--lg-menu-inner:rgba(255,255,255,.035);
+  --lg-menu-shadow:rgba(9,9,9,.46);--lg-menu-well:rgba(20,20,20,.42);
+}
+body.liquid-glass[data-view].light-mode {
+  --lg-menu-core:rgba(252,252,252,.72);--lg-menu-top:rgba(255,255,255,.48);
+  --lg-menu-bottom:rgba(0,0,0,.018);--lg-menu-inner:rgba(255,255,255,.3);
+  --lg-menu-shadow:rgba(56,56,56,.19);--lg-menu-well:rgba(255,255,255,.64);
+}
+body.liquid-glass[data-view] :is(#modelPicker,#polishDialog,#skillPicker,#skillsDialog,#searchDialog,.permission-picker) {
+  isolation:isolate;border:1px solid var(--lg-rim-muted);border-radius:20px;
+  background:linear-gradient(178deg,var(--lg-menu-top),transparent 3px calc(100% - 3px),var(--lg-menu-bottom)),radial-gradient(ellipse at 5% -18%,var(--lg-menu-inner),transparent 65%),var(--lg-menu-core);
+  backdrop-filter:blur(34px) saturate(1.02);-webkit-backdrop-filter:blur(34px) saturate(1.02);
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 0 0 1px var(--line),0 2px 5px var(--lg-menu-shadow),0 18px 48px -18px var(--lg-menu-shadow);
+}
+/* The model chooser is an anchored menu, not a second frosted full-screen
+   sheet. The menu lens alone filters the background below it. */
+body.liquid-glass[data-view] #modelPicker::backdrop {background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none}
+body.liquid-glass[data-view] :is(.model-picker-heading,.polish-heading,.skills-header,.search-field-row) {
+  background:linear-gradient(145deg,var(--lg-menu-inner),transparent 70%);
+  border-bottom-color:var(--line);box-shadow:inset 0 1px 0 var(--lg-rim-muted);
+}
+body.liquid-glass[data-view] :is(.model-picker-footer,.search-footer) {
+  background:linear-gradient(180deg,var(--lg-menu-inner),transparent),var(--lg-inset);
+  border-top-color:var(--line);box-shadow:inset 0 1px 0 var(--lg-rim-muted);
+}
+body.liquid-glass[data-view] :is(#modelPickerForm .model-picker-field,.polish-options) :is(input,select),
+body.liquid-glass[data-view] #skillsDialog .skills-input {
+  background:var(--lg-menu-well);border-color:var(--line-strong);
+  box-shadow:inset 0 1px 2px var(--lg-inset),0 1px 0 var(--lg-rim-muted);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+body.liquid-glass[data-view] :is(#skillPicker .skill-option[aria-selected=true],.permission-choice[aria-pressed=true]) {
+  background:var(--lg-select);border-color:var(--lg-rim-muted);
+  box-shadow:inset 0 1px 0 var(--lg-rim),inset 0 -1px 0 var(--line),0 2px 5px var(--lg-menu-shadow);
+}
+body.liquid-glass[data-view] .reading-toolbar {
+  background:linear-gradient(178deg,var(--lg-menu-top),transparent 3px 80%,var(--lg-menu-bottom)),var(--lg-control);
+  box-shadow:inset 0 1px 0 var(--lg-rim),inset 1px 0 0 var(--lg-rim-muted),inset -1px 0 0 var(--lg-rim-muted),inset 0 -1px 0 var(--lg-rim-muted),0 5px 15px -10px var(--lg-menu-shadow);
+}
+body.liquid-glass[data-view] .reading-tabs {
+  background:linear-gradient(180deg,var(--lg-menu-inner),transparent),var(--lg-nav);
+  box-shadow:inset 0 1px 0 var(--lg-rim-muted),inset 0 -1px 0 var(--line);
+}
+/* This sticky strip actually passes over the Markdown document on scroll.
+   A substantial frost prevents document glyphs colliding with its controls. */
+body.liquid-glass[data-view] .note-document-toolbar {
+  background:linear-gradient(180deg,var(--lg-menu-top),transparent 2px 90%,var(--lg-menu-bottom)),var(--lg-menu-core);
+  backdrop-filter:blur(28px) saturate(1.02);-webkit-backdrop-filter:blur(28px) saturate(1.02);
+  border-bottom-color:var(--line-strong);box-shadow:inset 0 1px 0 var(--lg-rim),0 5px 14px -10px var(--lg-menu-shadow);
+}
+body.liquid-glass[data-view] :is(.reading-control,.note-document-toolbar button):hover {
+  background:var(--lg-select);border-color:var(--lg-rim-muted);box-shadow:var(--shadow-button);
+}
+@media(max-width:760px){body.liquid-glass[data-view] .sidebar::before{inset:6px 3px 6px 5px;border-radius:18px}body.liquid-glass[data-view] .sidebar::after{inset:7px 4px 7px 6px;border-radius:17px}body.liquid-glass[data-view] .composer{border-radius:20px}body.liquid-glass[data-view] .sidebar .nav-item,body.liquid-glass[data-view] .new-task{border-radius:12px}}
+/* No capability or layout depends on blur/masking. CSS-only fallback remains
+   usable on older engines, and accessibility settings remove the material. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+  body.liquid-glass[data-view] .sidebar::before,body.liquid-glass[data-view] .conversation-navigator,body.liquid-glass[data-view] .topbar,body.liquid-glass[data-view] .reading-toolbar,body.liquid-glass[data-view] .composer,body.liquid-glass[data-view] dialog:not(#previewDialog),body.liquid-glass[data-view] .polish-popover,body.liquid-glass[data-view] .onboarding-card {background:var(--panel-raised)}
+}
+@supports not ((mask-composite:exclude) or (-webkit-mask-composite:xor)) {body.liquid-glass[data-view] .sidebar::after,body.liquid-glass[data-view] .composer::after {display:none}}
+@media(prefers-reduced-transparency:reduce) {
+  html.native-glass-host {background:Canvas}
+  html.native-glass-host body.liquid-glass[data-view],html.native-glass-host body.liquid-glass[data-view].light-mode {background:var(--bg)}
+  body.liquid-glass[data-view] .composer[data-glass-refracting=true],body.liquid-glass[data-view].light-mode .composer[data-glass-refracting=true] {background:var(--panel-raised);backdrop-filter:none;-webkit-backdrop-filter:none}
+  body.liquid-glass[data-view] .sidebar::before,body.liquid-glass[data-view] .conversation-navigator,body.liquid-glass[data-view] .topbar,body.liquid-glass[data-view] .reading-toolbar,body.liquid-glass[data-view] .composer,body.liquid-glass[data-view] dialog:not(#previewDialog),body.liquid-glass[data-view] #skillPicker,body.liquid-glass[data-view] .polish-popover,body.liquid-glass[data-view] .onboarding-card {background:var(--panel-raised);backdrop-filter:none;-webkit-backdrop-filter:none}
+  body.liquid-glass[data-view] .sidebar::after,body.liquid-glass[data-view] .composer::after,body.liquid-glass[data-view] .topbar::after,body.liquid-glass[data-view] .reading-toolbar::after {display:none}
+  body.liquid-glass[data-view] dialog:not(#previewDialog)::backdrop {backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+@media(prefers-reduced-motion:reduce) {body.liquid-glass[data-view] .composer,body.liquid-glass[data-view] .sidebar,body.liquid-glass[data-view] .reading-toolbar,body.liquid-glass[data-view] .topbar {transition:none;animation:none}}
+@media(prefers-contrast:more) {body.liquid-glass[data-view] {--line:var(--line-strong);--muted:var(--text)}body.liquid-glass[data-view] .composer,body.liquid-glass[data-view] .sidebar::before,body.liquid-glass[data-view] .topbar,body.liquid-glass[data-view] .reading-toolbar,body.liquid-glass[data-view] .conversation-navigator {background:var(--panel-raised)}}
+@media(forced-colors:active) {html.native-glass-host,html.native-glass-host body.liquid-glass[data-view],html.native-glass-host body.liquid-glass[data-view].light-mode{background:Canvas}body.liquid-glass[data-view] .sidebar::before,body.liquid-glass[data-view] .composer,body.liquid-glass[data-view] .composer[data-glass-refracting=true],body.liquid-glass[data-view].light-mode .composer[data-glass-refracting=true],body.liquid-glass[data-view] .topbar,body.liquid-glass[data-view] .reading-toolbar,body.liquid-glass[data-view] .conversation-navigator {background:Canvas;border-color:CanvasText;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}body.liquid-glass[data-view] .sidebar::after,body.liquid-glass[data-view] .composer::after {display:none}}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+  body.liquid-glass[data-view] :is(#modelPicker,#polishDialog,#skillPicker,#skillsDialog,#searchDialog,.permission-picker,.note-document-toolbar) {background:var(--panel-raised)}
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more) {
+  body.liquid-glass[data-view] :is(#modelPicker,#polishDialog,#skillPicker,#skillsDialog,#searchDialog,.permission-picker,.note-document-toolbar,.reading-toolbar,.reading-tabs) {background:var(--panel-raised);backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+@media(prefers-reduced-motion:reduce) {
+  body.liquid-glass[data-view] :is(#modelPicker,#polishDialog,#skillPicker,#skillsDialog,#searchDialog,.permission-picker,.note-document-toolbar) {animation:none;transition:none}
+}
+@media(forced-colors:active) {
+  body.liquid-glass[data-view] :is(#modelPicker,#polishDialog,#skillPicker,#skillsDialog,#searchDialog,.permission-picker,.note-document-toolbar,.reading-toolbar,.reading-tabs) {background:Canvas;border-color:CanvasText;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+}

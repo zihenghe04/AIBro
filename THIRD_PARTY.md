@@ -1,0 +1,5 @@
+# Third-party software
+
+AI Bro includes D3 7.9.0 by Mike Bostock and Observable, Inc. under the ISC license. The browser bundle `d3.min.js` is copied without modification from the official npm `d3@7.9.0` package; see [D3-LICENSE.txt](D3-LICENSE.txt) for the full license.
+
+Electron, electron-builder, and their dependencies retain their upstream licenses, recorded in the locked npm dependency tree. Source development installs PyMuPDF via `requirements.txt`. Portable release bundles include locked CPython, PyMuPDF/MuPDF and certifi builds, their license notices, and runtime metadata. The release includes PyMuPDF and MuPDF corresponding source archives. See `scripts/release-runtime-lock.json` for exact versions, URLs and SHA-256 hashes. PyMuPDF/MuPDF is AGPL/commercial software; a private repository does not remove license obligations. Confirm applicable licensing before further distribution.
