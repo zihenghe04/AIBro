@@ -13,6 +13,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    # Source mirrors and forks must not deploy the canonical product website.
+    if: github.repository == 'zihenghe04/AIBro' && github.event.repository.private == false
     runs-on: ubuntu-latest
     environment:
       name: github-pages
