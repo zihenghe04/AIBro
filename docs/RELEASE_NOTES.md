@@ -2,7 +2,7 @@ AI Bro connects conversations, project files, editable knowledge, and tasks in a
 
 ### Download / 下载
 
-- **Apple Silicon Mac · macOS 12+**: download the `macos-arm64-preview.zip`, extract it, and move `AI Bro.app` to Applications.
+- **Apple Silicon Mac · macOS 12+**: download the `macos-arm64-preview.dmg`, extract it, and move `AI Bro.app` to Applications.
 - Includes Python and PDF runtime; Node.js, Python, and Homebrew do not need to be installed separately.
 - Preview is ad-hoc signed, **not Apple-notarized**. Native Liquid Glass requires macOS 26.
 - Custom API connections are configured in the app. OpenAI account sign-in requires a separately installed official Codex CLI.

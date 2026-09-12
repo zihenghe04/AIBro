@@ -20,7 +20,7 @@ function sourceFixture(t,{repository=true,untracked}={}){
  const root=temp(t),manifest={schemaVersion:1,web:['index.html'],runtime:['runtime.js','package.json'],optionalRuntime:['native-glass.node','python-runtime-manifest.json']};
  fs.mkdirSync(path.join(root,'app'));
  fs.writeFileSync(path.join(root,'app/asset-manifest.json'),JSON.stringify(manifest));fs.writeFileSync(path.join(root,'app/index.html'),'<!doctype html><title>Synthetic release</title>');fs.writeFileSync(path.join(root,'app/runtime.js'),'module.exports = "fixture";');
- fs.mkdirSync(path.join(root,'scripts'));for(const file of ['LICENSE','scripts/build-electron-app.sh','app/ai-bro-icon.icns','package-lock.json','requirements.txt','scripts/release-macos.js','scripts/release-runtime.js','scripts/release-verify.js','scripts/release-runtime-lock.json'])fs.writeFileSync(path.join(root,file),'synthetic '+file);
+ fs.mkdirSync(path.join(root,'scripts'));for(const file of ['LICENSE','scripts/build-electron-app.sh','app/ai-bro-icon.icns','package-lock.json','requirements.txt','scripts/release-macos.js','scripts/release-dmg.js','scripts/release-runtime.js','scripts/release-verify.js','scripts/release-runtime-lock.json'])fs.writeFileSync(path.join(root,file),'synthetic '+file);
  fs.copyFileSync(path.join(root,'LICENSE'),path.join(root,'app/LICENSE'));
  const pkg={name:'ai-bro',productName:'AI Bro',version:'0.6.3',license:'AGPL-3.0-only',private:true,main:'electron-main.js'};
  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({...pkg,main:'app/electron-main.js'}));fs.writeFileSync(path.join(root,'app/package.json'),JSON.stringify(pkg));
