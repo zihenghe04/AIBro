@@ -15,7 +15,7 @@ Work can continue after AI finishes reading a handout or paper. AI Bro keeps ori
 
 Screenshots and films use isolated example workspaces, with no personal data. Films show real app interactions and saves with scripted model responses, edited for presentation.
 
-> The first public App Release is being prepared. Source builds are available now; binary availability will be updated here.
+> [v0.6.3 for macOS is available](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.3), with the Apple Silicon app, corresponding source, checksums, and Chinese / English product films.
 
 
 ## From a source to your next step

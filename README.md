@@ -9,7 +9,7 @@
 
 AI 帮你读完一份课件或论文之后，工作可以继续。AI Bro 将原件、可编辑 Markdown 笔记、任务与项目关联保存；换个对话，也能检索已有知识，从来源继续核对。
 
-> 首个公开 App Release 正在准备，当前可从源码运行。二进制下载开放后会在这里更新。
+> [v0.6.3 macOS 预览版已发布](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.3)：提供 Apple Silicon 安装包、对应源码、校验文件与中英文产品短片。
 
 **当前为 macOS 开发预览版。**发行包支持 Apple Silicon、macOS 12+；使用 ad-hoc 签名，尚未完成 Apple Developer ID 签名与公证，不含自动更新。代码采用 AGPL-3.0 开源许可。
 

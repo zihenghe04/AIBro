@@ -2,7 +2,7 @@
 
 AI Bro 提供两条路径，使用同一份版本代码和资源清单。
 
-> 首个公开二进制 Release 尚未发布；目前请使用下方源码方式。以下下载步骤在 Release 开放后适用。 / The first public binary is not published yet; use the source-build path below.
+> [下载 v0.6.3 / Download v0.6.3](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.3)：Apple Silicon macOS 预览版。安装包、对应源码与 SHA-256 校验文件均在同一 Release。
 
 ## 1. 下载 App / Download the app
 
