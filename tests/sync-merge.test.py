@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str((Path(__file__).resolve().parents[1] / 'app')))
 from sync_merge import MergeConflict, merge_local_snapshot
 
 FIXTURES = json.loads((Path(__file__).parent / 'fixtures' / 'sync-merge.json').read_text())

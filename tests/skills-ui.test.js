@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const Core = require('../skills-core');
-const source = fs.readFileSync(require.resolve('../skills-ui'), 'utf8');
+const Core = require('../app/skills-core');
+const source = fs.readFileSync(require.resolve('../app/skills-ui'), 'utf8');
 
 function harness() {
   class Element {

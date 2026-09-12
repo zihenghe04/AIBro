@@ -11,7 +11,7 @@ import tempfile
 import threading
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str((Path(__file__).resolve().parents[1] / 'app')))
 from cloud_sync import CloudClient, CloudSync, CloudSyncError, CredentialStore, server_url
 from sync_store import SyncStore
 

@@ -3,8 +3,8 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),http=require('node:http');
 const {spawn}=require('node:child_process');
 const {once}=require('node:events');
-const {selectPythonRuntime}=require('../python-runtime');
-const {fingerprint}=require('../app-assets');
+const {selectPythonRuntime}=require('../app/python-runtime');
+const {fingerprint}=require('../app/app-assets');
 const {command,verifyRuntime,treeHash}=require('./release-runtime');
 
 function get(origin,route){return new Promise((resolve,reject)=>{

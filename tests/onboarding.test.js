@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Tour = require('../onboarding');
+const Tour = require('../app/onboarding');
 const deferred = () => { let resolve; const promise = new Promise(yes => resolve = yes); return { promise, resolve }; };
 function fixture(options = {}) {
   const nodes = new Map(), documentListeners = new Map(), windowListeners = new Map(), navigations = [], saves = [], toasts = [];
@@ -102,10 +102,10 @@ test('startup waits for hydration and respects a preference loaded during that w
 });
 
 test('tour anchors match actual application controls and absent reading tabs have a real fallback',()=>{
- const fs=require('node:fs');const html=fs.readFileSync(require.resolve('../index.html'),'utf8');const reader=fs.readFileSync(require.resolve('../reading-pane'),'utf8');
+ const fs=require('node:fs');const html=fs.readFileSync(require.resolve('../app/index.html'),'utf8');const reader=fs.readFileSync(require.resolve('../app/reading-pane'),'utf8');
  for(const id of ['provider','composer','agentInput','inspectorToggle','dashboardTasks','projectList'])assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(html,/settings-connection-card/);assert.match(reader,/pane\.id = 'readingPane'/);assert.match(reader,/toggle\.id = 'readingToggle'/);
- const app=fs.readFileSync(require.resolve('../app'),'utf8');assert.match(app,/result\.type === 'note'.*data-open-note=/);
+ const app=fs.readFileSync(require.resolve('../app/app'),'utf8');assert.match(app,/result\.type === 'note'.*data-open-note=/);
  const note=Tour.steps.find(step=>step.id==='notes');assert.ok(note.selectors.includes('#messageList [data-open-note]'));assert.ok(note.selectors.includes('#messageList'));assert.ok(note.selectors.includes('#composer'));assert.ok(!note.selectors.includes('#inspectorToggle'));
 });
 

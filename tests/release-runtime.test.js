@@ -17,37 +17,47 @@ function git(root,...args){
  assert.equal(result.status,0,result.stderr);return result.stdout.trim();
 }
 function sourceFixture(t,{repository=true,untracked}={}){
- const root=temp(t),manifest={schemaVersion:1,web:['index.html'],runtime:['runtime.js'],optionalRuntime:['native-glass.node','python-runtime-manifest.json']};
- fs.writeFileSync(path.join(root,'asset-manifest.json'),JSON.stringify(manifest));fs.writeFileSync(path.join(root,'index.html'),'<!doctype html><title>Synthetic release</title>');fs.writeFileSync(path.join(root,'runtime.js'),'module.exports = "fixture";');
- fs.mkdirSync(path.join(root,'scripts'));for(const file of ['build-electron-app.sh','ai-bro-icon.icns','package-lock.json','requirements.txt','scripts/release-macos.js','scripts/release-runtime.js','scripts/release-verify.js','scripts/release-runtime-lock.json'])fs.writeFileSync(path.join(root,file),'synthetic '+file);
+ const root=temp(t),manifest={schemaVersion:1,web:['index.html'],runtime:['runtime.js','package.json'],optionalRuntime:['native-glass.node','python-runtime-manifest.json']};
+ fs.mkdirSync(path.join(root,'app'));
+ fs.writeFileSync(path.join(root,'app/asset-manifest.json'),JSON.stringify(manifest));fs.writeFileSync(path.join(root,'app/index.html'),'<!doctype html><title>Synthetic release</title>');fs.writeFileSync(path.join(root,'app/runtime.js'),'module.exports = "fixture";');
+ fs.mkdirSync(path.join(root,'scripts'));for(const file of ['scripts/build-electron-app.sh','app/ai-bro-icon.icns','package-lock.json','requirements.txt','scripts/release-macos.js','scripts/release-runtime.js','scripts/release-verify.js','scripts/release-runtime-lock.json'])fs.writeFileSync(path.join(root,file),'synthetic '+file);
+ const pkg={name:'ai-bro',productName:'AI Bro',version:'0.6.3',private:true,main:'electron-main.js'};
+ fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({...pkg,main:'app/electron-main.js'}));fs.writeFileSync(path.join(root,'app/package.json'),JSON.stringify(pkg));
  fs.writeFileSync(path.join(root,'.gitignore'),'native-glass.node\npython-runtime-manifest.json\n');
  if(repository){git(root,'init','--quiet','--template=');git(root,'add','--','.gitignore',...P.requiredSourceInputs(root).filter(file=>file!==untracked));git(root,'commit','--quiet','-m','Synthetic release inputs');}
  return root;
 }
 test('clean committed release inputs keep the original commit identity; generated optional files are excluded',t=>{
  const root=sourceFixture(t),before=P.sourceIdentity(root);assert.equal(before.revision,git(root,'rev-parse','HEAD'));assert.equal(before.trackedSourceClean,true);assert.match(before.inputsSha256,/^[a-f0-9]{64}$/);
- fs.writeFileSync(path.join(root,'native-glass.node'),'regenerated native fixture');fs.writeFileSync(path.join(root,'python-runtime-manifest.json'),'generated marker');fs.writeFileSync(path.join(root,'unrelated-untracked.txt'),'never packaged');
- assert.deepEqual(P.verifySourceIdentity(root,before),before);assert.ok(!P.requiredSourceInputs(root).includes('native-glass.node'));
+ fs.writeFileSync(path.join(root,'app/native-glass.node'),'regenerated native fixture');fs.writeFileSync(path.join(root,'app/python-runtime-manifest.json'),'generated marker');fs.writeFileSync(path.join(root,'unrelated-untracked.txt'),'never packaged');
+ assert.deepEqual(P.verifySourceIdentity(root,before),before);assert.ok(!P.requiredSourceInputs(root).includes('app/native-glass.node'));
 });
 test('uncommitted and staged changes refuse release before output or runtime work',async t=>{
- const root=sourceFixture(t),output=path.join(root,'new-output');fs.appendFileSync(path.join(root,'runtime.js'),'\nchanged');assert.throws(()=>P.sourceIdentity(root),/uncommitted.*Commit/);
+ const root=sourceFixture(t),output=path.join(root,'new-output');fs.appendFileSync(path.join(root,'app/runtime.js'),'\nchanged');assert.throws(()=>P.sourceIdentity(root),/uncommitted.*Commit/);
  if(process.platform==='darwin'&&process.arch==='arm64')await assert.rejects(P.buildRelease({root,output}),/uncommitted/);assert.equal(fs.existsSync(output),false);
- git(root,'add','runtime.js');assert.throws(()=>P.sourceIdentity(root),/uncommitted/);
+ git(root,'add','app/runtime.js');assert.throws(()=>P.sourceIdentity(root),/uncommitted/);
 });
 test('a required runtime, icon, build script, or dependency lock cannot remain outside the commit',t=>{
- for(const untracked of ['runtime.js','ai-bro-icon.icns','build-electron-app.sh','scripts/release-runtime-lock.json','package-lock.json']){
+ for(const untracked of ['app/runtime.js','app/ai-bro-icon.icns','scripts/build-electron-app.sh','package.json','app/package.json','scripts/release-runtime-lock.json','package-lock.json']){
   const root=sourceFixture(t,{untracked});assert.equal(git(root,'status','--porcelain','--untracked-files=no'),'');
   assert.throws(()=>P.sourceIdentity(root),error=>/not tracked.*commit/.test(error.message)&&error.message.includes(untracked));
  }
 });
 test('post-build verification rejects both a changed commit and newly dirty tracked source',t=>{
  const root=sourceFixture(t),before=P.sourceIdentity(root);git(root,'commit','--quiet','--allow-empty','-m','Later commit with the same files');assert.throws(()=>P.verifySourceIdentity(root,before),/changed during the build/);
- const current=P.sourceIdentity(root);fs.appendFileSync(path.join(root,'index.html'),'changed');assert.throws(()=>P.verifySourceIdentity(root,current),/uncommitted/);
+ const current=P.sourceIdentity(root);fs.appendFileSync(path.join(root,'app/index.html'),'changed');assert.throws(()=>P.verifySourceIdentity(root,current),/uncommitted/);
 });
 test('an extracted source archive has an explicit null revision and remains content-checked',t=>{
  const root=sourceFixture(t,{repository:false}),before=P.sourceIdentity(root);assert.equal(before.revision,null);assert.equal(before.trackedSourceClean,null);assert.deepEqual(P.verifySourceIdentity(root,before),before);
  fs.appendFileSync(path.join(root,'scripts/release-runtime-lock.json'),'changed');assert.throws(()=>P.verifySourceIdentity(root,before),/changed during the build/);
 });
 test('required source links are refused rather than packing files outside the source archive',t=>{
- const root=sourceFixture(t,{repository:false}),file=path.join(root,'ai-bro-icon.icns');fs.renameSync(file,path.join(root,'outside-icon'));fs.symlinkSync('outside-icon',file);assert.throws(()=>P.sourceIdentity(root),/regular file/);
+ const root=sourceFixture(t,{repository:false}),file=path.join(root,'app/ai-bro-icon.icns');fs.renameSync(file,path.join(root,'outside-icon'));fs.symlinkSync('../outside-icon',file);assert.throws(()=>P.sourceIdentity(root),/regular file/);
+});
+
+test('release refuses mismatched runtime metadata while allowing the repository main entry',t=>{
+ const root=sourceFixture(t,{repository:false});assert.equal(P.validateRuntimePackage(root).main,'app/electron-main.js');
+ const filename=path.join(root,'app/package.json'),pkg=JSON.parse(fs.readFileSync(filename,'utf8'));
+ for(const field of ['name','productName','version']){fs.writeFileSync(filename,JSON.stringify({...pkg,[field]:'mismatch'}));assert.throws(()=>P.validateRuntimePackage(root),/differs from the root/);}
+ fs.writeFileSync(filename,JSON.stringify({...pkg,main:'app/electron-main.js'}));assert.throws(()=>P.validateRuntimePackage(root),/Invalid Electron/);
 });

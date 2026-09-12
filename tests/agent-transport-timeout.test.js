@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
-const source = fs.readFileSync(require.resolve('../agent-transport'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/agent-transport'), 'utf8');
 const flush = async () => { for (let i = 0; i < 16; i++) await Promise.resolve(); };
 function clock() {
   let now = 0, id = 0; const timers = new Map();
@@ -29,7 +29,7 @@ function channel(contentType='text/event-stream', status=200) {
 }
 function setup(fetch) {
   const timer=clock(),requests=[];
-  const ctx=vm.createContext({WorkstationCore:require('../workstation-core'),AbortController,TextDecoder,setTimeout:timer.setTimeout,clearTimeout:timer.clearTimeout,fetch:(url,options)=>{requests.push({url,options});return fetch(url,options)}});
+  const ctx=vm.createContext({WorkstationCore:require('../app/workstation-core'),AbortController,TextDecoder,setTimeout:timer.setTimeout,clearTimeout:timer.clearTimeout,fetch:(url,options)=>{requests.push({url,options});return fetch(url,options)}});
   vm.runInContext(source,ctx);
   return {timer,requests,transport:ctx.AgentTransport};
 }

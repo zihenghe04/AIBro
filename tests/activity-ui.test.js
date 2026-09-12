@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ActivityUI = require('../activity-ui.js');
+const ActivityUI = require('../app/activity-ui.js');
 
 class Node {
   constructor(dataset = {}, pressed = 'true') { this.dataset = dataset; this.style = {}; this.listeners = {}; this.pressed = pressed; this.attrs = {}; }
@@ -87,7 +87,7 @@ test('rerender and date switching remove archived or missing project activity fr
 });
 
 test('real D3 produces a shared integer axis and genuine sparse data without synthetic points', () => {
-  const d3 = require('../d3.min.js'), Core = require('../activity-core.js');
+  const d3 = require('../app/d3.min.js'), Core = require('../app/activity-core.js');
   const data = Core.aggregate(state, options);
   for (const width of [280, 500, 1100]) {
     const geometry = ActivityUI.chartGeometry(data, width, d3);

@@ -18,7 +18,7 @@ const output=path.resolve(option('--output',path.join(os.tmpdir(),'ai-bro-demo-'
 assert.ok(!fs.existsSync(path.join(output,'manifest.json')),'Refusing to overwrite an existing recording');
 const quick=argv.includes('--quick'),probe=argv.includes('--capture-probe'),FPS=24,WIDTH=1440,HEIGHT=900;
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'ai-bro-demo-private-')),assets=path.join(temp,'app'),appData=path.join(temp,'app-data'),store=path.join(temp,'store');
-require('../app-assets').copyAssets(assets);for(const dir of [appData,store,output,path.join(output,'frames')])fs.mkdirSync(dir,{recursive:true});
+require('../app/app-assets').copyAssets(assets);for(const dir of [appData,store,output,path.join(output,'frames')])fs.mkdirSync(dir,{recursive:true});
 app.setPath('appData',appData);app.setPath('userData',path.join(appData,'profile'));
 process.env.AI_WORKSTATION_DATA_DIR=store;process.env.AI_WORKSTATION_ASSET_DIR=assets;
 const fixture=createDemo(lang),manifest={schemaVersion:1,lang,width:WIDTH,height:HEIGHT,fps:FPS,scriptedResponses:true,syntheticOnly:true,disclosure:fixture.disclosure,capture:'Electron webContents frame subscription and capturePage; isolated synthetic workspace; no desktop capture',frames:[],chapters:[]};

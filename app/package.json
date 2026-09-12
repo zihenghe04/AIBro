@@ -1,0 +1,8 @@
+{
+  "name": "ai-bro",
+  "productName": "AI Bro",
+  "version": "0.6.3",
+  "private": true,
+  "description": "AI native personal knowledge and task workstation",
+  "main": "electron-main.js"
+}

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../auth-ui.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/auth-ui.js'), 'utf8');
 
 // No network or account session is used. These doubles implement the form
 // operations used by the real controller; fetch responses and polling are
@@ -55,7 +55,7 @@ function harness({ stored = {}, initialState = {}, desktop = false, integration 
   vm.createContext(context); vm.runInContext(source, context);
   let integrationInit;
   if (integration) {
-    const appSource = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+    const appSource = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
     for (const name of ['defaultModelConfiguration', 'syncComposerModel', 'renderSettings']) {
       const start = appSource.indexOf(`function ${name}(`);
       if (start < 0) continue;

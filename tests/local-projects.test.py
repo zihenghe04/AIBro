@@ -10,7 +10,7 @@ from http_test_support import python_http_service
 
 from local_projects import LocalProjectError, LocalProjects
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = (Path(__file__).resolve().parents[1] / 'app')
 
 
 def reject(action, status=None):

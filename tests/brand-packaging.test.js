@@ -8,7 +8,7 @@ const { spawnSync } = require('node:child_process');
 const root = path.join(__dirname, '..');
 const source = name => fs.readFileSync(path.join(root, name), 'utf8');
 const pkg = JSON.parse(source('package.json'));
-const builder = source('build-electron-app.sh');
+const builder = source('scripts/build-electron-app.sh');
 
 test('AI Bro display/package names retain the existing application bundle identity', () => {
   assert.equal(pkg.name, 'ai-bro');
@@ -16,8 +16,8 @@ test('AI Bro display/package names retain the existing application bundle identi
   assert.equal(pkg.build.productName, 'AI Bro');
   assert.equal(pkg.build.appId, 'app.ai-workstation.studio');
   assert.equal(pkg.private, true);
-  assert.equal(pkg.main, 'electron-main.js');
-  assert.equal(pkg.build.mac.icon, 'ai-bro-icon.icns');
+  assert.equal(pkg.main, 'app/electron-main.js');
+  assert.equal(pkg.build.mac.icon, 'app/ai-bro-icon.icns');
 });
 
 test('both builders select the AI Bro icon and preserve one default output and runtime executable', () => {
@@ -28,23 +28,23 @@ test('both builders select the AI Bro icon and preserve one default output and r
   assert.match(builder, /Set :CFBundleDisplayName AI Bro/);
   assert.match(builder, /Set :CFBundleExecutable Electron/);
   assert.match(builder, /Set :CFBundleIconFile ai-bro-icon\.icns/);
-  assert.match(builder, /cp "\$ROOT_DIR\/ai-bro-icon\.icns" "\$OUT_APP\/Contents\/Resources\/ai-bro-icon\.icns"/);
+  assert.match(builder, /cp "\$SOURCE_DIR\/ai-bro-icon\.icns" "\$OUT_APP\/Contents\/Resources\/ai-bro-icon\.icns"/);
   assert.doesNotMatch(builder, /(?:rm|mv|cp|ditto).*AI Workstation\.app/);
   assert.doesNotMatch(builder, /(?:rm|mv|cp|ditto).*ai-workstation-studio/);
   const module = { exports: {} }, files = ['index.html', 'ai-bro-icon.png', 'package.json'];
-  vm.runInNewContext(source('electron-builder.config.cjs'), {
+  vm.runInNewContext(source('scripts/electron-builder.config.cjs'), {
     module, __dirname: root,
-    require: name => name === './app-assets' ? { validateAssets: () => ({ files }) } : pkg
+    require: name => name === 'node:path' ? path : name === '../app/app-assets' ? { validateAssets: () => ({ files }) } : pkg
   });
   assert.equal(module.exports.appId, 'app.ai-workstation.studio');
   assert.equal(module.exports.productName, 'AI Bro');
-  assert.equal(module.exports.mac.icon, 'ai-bro-icon.icns');
+  assert.equal(module.exports.mac.icon, 'app/ai-bro-icon.icns');
   assert.equal(module.exports.asar, false);
   assert.equal(module.exports.files, files);
 });
 
 function iconPreflight(icons) {
-  const marker = 'node - "$ROOT_DIR" <<\'NODE\'\n';
+  const marker = 'node - "$SOURCE_DIR" <<\'NODE\'\n';
   const start = builder.indexOf(marker) + marker.length;
   assert.ok(start >= marker.length);
   const end = builder.indexOf('\nNODE', start);
@@ -76,12 +76,12 @@ test('icon preflight fails before bundle replacement when PNG or ICNS inputs are
 });
 
 test('launch messages use AI Bro while existing runtime selection and shell syntax remain valid', () => {
-  const launcher = source('run-electron.sh');
+  const launcher = source('scripts/run-electron.sh');
   assert.match(launcher, /AI Bro could not find an Electron executable/);
   assert.match(launcher, /AI Bro: using Electron runtime/);
   assert.match(launcher, /ELECTRON_BIN/);
   for (const filename of ['run-electron.sh', 'build-electron-app.sh']) {
-    const result = spawnSync('/bin/sh', ['-n', path.join(root, filename)], { encoding: 'utf8' });
+    const result = spawnSync('/bin/sh', ['-n', path.join(root, "scripts", filename)], { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
   }
 });

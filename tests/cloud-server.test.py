@@ -29,7 +29,7 @@ if not hasattr(hashlib, 'scrypt'):
             os.execv(executable, [executable, *sys.argv])
     raise SystemExit('Cloud tests require a Python build with hashlib.scrypt (for example Python 3.12).')
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = (Path(__file__).resolve().parents[1] / 'app')
 PASSWORD = 'fixture-password-42!'
 
 
@@ -288,7 +288,7 @@ with tempfile.TemporaryDirectory(prefix='workstation-cloud-test-') as temporary:
     assert PASSWORD not in created.stdout + created.stderr
     repeated = subprocess.run(command, input=PASSWORD + '\n', capture_output=True, text=True)
     assert repeated.returncode != 0 and PASSWORD not in repeated.stdout + repeated.stderr
-    assert 'COPY --chown=10001:10001 cloud_server.py /app/cloud_server.py' in (ROOT / 'cloud' / 'Dockerfile').read_text()
-    assert 'server.py /app/server.py' not in (ROOT / 'cloud' / 'Dockerfile').read_text()
+    assert 'COPY --chown=10001:10001 app/cloud_server.py /app/cloud_server.py' in (ROOT.parent / 'cloud' / 'Dockerfile').read_text()
+    assert 'server.py /app/server.py' not in (ROOT.parent / 'cloud' / 'Dockerfile').read_text()
 
 print('Cloud protocol v1 accounts, token hashes, CAS/idempotency/tombstones, atomic changes, private blobs, limits, revocation, CLI and restart tests passed')

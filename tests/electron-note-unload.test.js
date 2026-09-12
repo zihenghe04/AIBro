@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../electron-main.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/electron-main.js'), 'utf8');
 
 function harness(choice) {
   const handlers = {}, appHandlers = {}, prompts = [];

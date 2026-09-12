@@ -1,9 +1,9 @@
-<p align="center"><img src="ai-bro-icon.png" width="96" height="96" alt="AI Bro" /></p>
+<p align="center"><img src="app/ai-bro-icon.png" width="96" height="96" alt="AI Bro" /></p>
 <h1 align="center">AI Bro</h1>
 <p align="center"><strong>Your companion for knowledge and action</strong></p>
 <p align="center">Conversations, source material, your understanding, and next steps—in one workspace.</p>
 <p align="center"><a href="README.md">简体中文</a> · English</p>
-<p align="center"><a href="https://github.com/zihenghe04/ai-bro-app/releases">Get the Mac app</a> · <a href="https://zihenghe04.github.io/ai-bro-app/?lang=en">Product & film</a> · <a href="#quick-start">Quick start</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases">Get the Mac app</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en">Product & film</a> · <a href="#quick-start">Quick start</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
 
 ![A course project with an editable main note](launch/dist/assets/read-edit-en.jpg)
 
@@ -11,7 +11,7 @@ Work can continue after AI finishes reading a handout or paper. AI Bro keeps ori
 
 **AI Bro is a macOS developer preview.** Release packages support Apple Silicon and macOS 12+. They are ad-hoc signed, without Apple Developer ID signing, notarization, or automatic updates. The project license is still being decided; no particular open-source license is claimed.
 
-[Watch the English product film](https://zihenghe04.github.io/ai-bro-app/assets/film-en.mp4) · [观看中文短片](https://zihenghe04.github.io/ai-bro-app/assets/film-zh.mp4)
+[Watch the English product film](https://zihenghe04.github.io/AIBro/assets/film-en.mp4) · [观看中文短片](https://zihenghe04.github.io/AIBro/assets/film-zh.mp4)
 
 Screenshots and films use isolated example workspaces, with no personal data. Films show real app interactions and saves with scripted model responses, edited for presentation.
 
@@ -65,7 +65,7 @@ Switch between Chinese and English, light and dark appearances, and resizable pa
 
 ### Option 1: Download the app
 
-1. Download `AI-Bro-<version>-macos-arm64-preview.zip` and its checksum file from [Releases](https://github.com/zihenghe04/ai-bro-app/releases).
+1. Download `AI-Bro-<version>-macos-arm64-preview.zip` and its checksum file from [Releases](https://github.com/zihenghe04/AIBro/releases).
 2. Verify the checksum, extract the ZIP, and move `AI Bro.app` to Applications. Quit the previous app before replacing it; the workspace is retained.
 3. Connect a model in Settings, then follow the introduction or try a sample document.
 
@@ -76,8 +76,8 @@ Release packages include Python and PDF runtimes. **Running the app does not req
 Requires macOS, Node.js 22+ (24 recommended for release builds), and Python 3.10+. PDF rendering and figure extraction use PyMuPDF.
 
 ```sh
-git clone https://github.com/zihenghe04/ai-bro-app.git
-cd ai-bro-app
+git clone https://github.com/zihenghe04/AIBro.git
+cd AIBro
 npm ci
 python3 -m venv .venv
 source .venv/bin/activate
@@ -109,15 +109,15 @@ npm run release:mac -- --output "$PWD/release/preview"
 - **Finite file and context budgets:** originals, page images, or text are delivered according to the connection. File sizes, image budgets, and model context limits still apply.
 - **Sync is not backup:** optional self-hosted sync propagates supported changes and deletions. End-to-end encryption, selective project sync, and real-time team collaboration are not included. Model keys and local folder grants do not sync.
 
-Upgrades preserve the earlier AI Workstation app identity and data locations. See [desktop documentation](DESKTOP_APP.md) for directories, backups, recovery, and deletion behavior, and [cloud sync](CLOUD_SYNC.md) for scope, device revocation, and server-readable data.
+Upgrades preserve the earlier AI Workstation app identity and data locations. See [desktop documentation](docs/DESKTOP_APP.md) for directories, backups, recovery, and deletion behavior, and [cloud sync](docs/CLOUD_SYNC.md) for scope, device revocation, and server-readable data.
 
 ## Documentation and development
 
 | Guide | Covers |
 | --- | --- |
 | [Installation and distribution](docs/DISTRIBUTION.md) | Downloads, first launch, builds, versions, and checksums |
-| [Desktop guide](DESKTOP_APP.md) | Storage, model settings, backups, and recovery |
-| [Self-hosted sync](CLOUD_SYNC.md) / [Server deployment](cloud/README.md) | Synced content, conflicts, accounts, and operations |
+| [Desktop guide](docs/DESKTOP_APP.md) | Storage, model settings, backups, and recovery |
+| [Self-hosted sync](docs/CLOUD_SYNC.md) / [Server deployment](cloud/README.md) | Synced content, conflicts, accounts, and operations |
 | [Appearance and accessibility](docs/APPEARANCE.md) | Themes, native glass, fallbacks, and implementation notes |
 | [Release notes](docs/RELEASE_NOTES.md) | Published changes and current limitations |
 | [Contributing](CONTRIBUTING.md) | Development, tests, reports, and pull requests |
@@ -131,4 +131,20 @@ npm run test:cloud
 
 The supported backend runners create isolated temporary workspaces for each test group. No personal files or real model keys are required. `asset-manifest.json` is the shared resource entry point for web, server, and desktop builds.
 
-The project license is not yet finalized. Third-party components retain their own licenses; see [distribution details](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source). The logo's design source is documented in [BRAND](BRAND.md).
+The project license is not yet finalized. Third-party components retain their own licenses; see [distribution details](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source). The logo's design source is documented in [BRAND](docs/BRAND.md).
+
+## Repository layout
+
+Application code, engineering tools, and the product site are kept separate. Run the commands above from the repository root.
+
+```text
+AIBro/
+├── app/          # Electron, UI, local backend & runtime assets
+├── scripts/      # Start, build, release & demo tooling
+├── tests/        # Unit, integration & UI regression tests
+├── docs/         # Usage, distribution, architecture & branding
+├── cloud/        # Self-hosted sync deployment
+├── demo/         # Fictional demo fixtures
+├── launch/       # Bilingual product website
+└── .github/      # CI & GitHub Pages workflows
+```

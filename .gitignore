@@ -44,7 +44,7 @@ coverage/
 *.mp4
 *.mov
 *.wav
-/python-runtime-manifest.json
+/app/python-runtime-manifest.json
 
 # The authored static launch page ships with reviewed fictional-workspace media.
 !/launch/dist/

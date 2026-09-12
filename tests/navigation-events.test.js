@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 
 test('view navigation binds buttons without making the body a bubbling click handler', () => {
   const statement = source.split('\n').find(line => line.startsWith("$$('") && line.includes('[data-view]') && line.includes('.onclick'));

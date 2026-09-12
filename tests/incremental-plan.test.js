@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Core = require('../workstation-core');
+const Core = require('../app/workstation-core');
 const empty = () => ({ projects: [], imports: [], tasks: [], notes: [], papers: [], links: [], conversations: [], trash: [], agentRuns: [] });
 
 test('matching an existing task merges new sources without resetting user progress', () => {

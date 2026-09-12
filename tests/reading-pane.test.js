@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const AttachmentAnalysis = require('../attachment-analysis');
-const Reading = require('../reading-pane');
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const AttachmentAnalysis = require('../app/attachment-analysis');
+const Reading = require('../app/reading-pane');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 const deferred = () => { let resolve, reject; const promise = new Promise((a,b) => {resolve=a;reject=b;}); return {promise,resolve,reject}; };
 function dom() {
   class Node {
@@ -39,7 +39,7 @@ function harness({real=false,getBlob,beforeLeave}={}) {
   const d=dom();const state={projects:[{id:'p',name:'课程'}],imports:[{id:'a',name:'原件.pdf',mimeType:'application/pdf',projectId:'p'},{id:'b',name:'图片.png',mimeType:'image/png',projectId:'p'}],notes:[{id:'n',title:'研究笔记',content:'实际笔记',projectId:'p',sourceAttachmentIds:['a']}],papers:[],tasks:[{id:'t',title:'任务'}],previewRecord:null,openTaskId:'t'};
   const calls=[],revoked=[];let api,serial=0,context;
   if(real){
-    context=vm.createContext({NoteMarkdown:require('../note-markdown'),state,$:d.$,document:d.document,window:{AttachmentAnalysis},AttachmentAnalysis,URL:{createObjectURL:()=>`blob:test-${++serial}`,revokeObjectURL:url=>revoked.push(url)},Blob,previewObjectUrl:null,pdfPreviewVersion:0,pdfPreviewAbort:{abort:()=>calls.push(['abort'])},
+    context=vm.createContext({NoteMarkdown:require('../app/note-markdown'),state,$:d.$,document:d.document,window:{AttachmentAnalysis},AttachmentAnalysis,URL:{createObjectURL:()=>`blob:test-${++serial}`,revokeObjectURL:url=>revoked.push(url)},Blob,previewObjectUrl:null,pdfPreviewVersion:0,pdfPreviewAbort:{abort:()=>calls.push(['abort'])},
       esc:String,uiIcon:()=>'',toast:message=>calls.push(['toast',message]),renderRichText:content=>`<p>${content}</p>`,visibleProject:p=>!p.archived,visibleImport:i=>!i.archived,visibleNote:n=>!n.archived,
       fileStoreGet:async id=>getBlob?getBlob(id):new Blob(['file'],{type:state.imports.find(x=>x.id===id)?.mimeType}),mountPdfPreview:(container,item,blob,page)=>{container.innerHTML='PDF rendered';calls.push(['pdf',item.id,page]);},renderTaskDialog:()=>calls.push(['render-task']),openPaper:()=>{},openProject:()=>{},dataUrlToBlob:()=>new Blob(['file'])});
     vm.runInContext(source.slice(source.indexOf('function importAnalysis('), source.indexOf('function entityImport(')) + source.slice(source.indexOf('function renderPreviewAnalysis('), source.indexOf('// Stage a focused analysis request')), context);

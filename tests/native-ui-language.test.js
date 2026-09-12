@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createNativeLanguage } = require('../native-ui-language');
+const { createNativeLanguage } = require('../app/native-ui-language');
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-bro-native-locale-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));

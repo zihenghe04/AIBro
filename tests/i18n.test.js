@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../i18n'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/i18n'), 'utf8');
 function harness(saved, shared, dictionary) {
   class Element {
     constructor(tag='div', attrs={}) { this.nodeType=1;this.tagName=tag;this.attributes={...attrs};this.childNodes=[];this.listeners={};this.value=''; }
@@ -72,13 +72,13 @@ test('placeholders and aria labels are localized without changing values or inte
   h.api.setLanguage('zh-CN');assert.equal(field.getAttribute('placeholder'),'搜索名称');
 });
 test('settings entry and language resources are packaged and initialized before any application render',()=>{
-  const html=fs.readFileSync(require.resolve('../index.html'),'utf8'),app=fs.readFileSync(require.resolve('../app.js'),'utf8'),manifest=require('../asset-manifest.json');
+  const html=fs.readFileSync(require.resolve('../app/index.html'),'utf8'),app=fs.readFileSync(require.resolve('../app/app.js'),'utf8'),manifest=require('../app/asset-manifest.json');
   assert.match(html,/<select[^>]+id="interfaceLanguage"/);assert.ok(html.indexOf('i18n-en.js')<html.indexOf('i18n.js'));assert.ok(html.indexOf('i18n.js')<html.indexOf('app.js'));
   for(const file of ['i18n.js','i18n-en.js','i18n.css'])assert.ok(manifest.web.includes(file));assert.ok(manifest.runtime.includes('native-ui-language.js'));
   assert.ok(app.indexOf('WorkstationI18n?.init()')<app.indexOf('renderAll();'));assert.doesNotMatch(app,/state\.(?:settings|ui)\.language\s*=/);
 });
 test('paper filters, citation metadata, relative time and effort translate without rewriting adjacent user names',()=>{
-  const h=harness('en',null,require('../i18n-en'));
+  const h=harness('en',null,require('../app/i18n-en'));
   const filter=h.add('button',{'data-paper-filter':'pending'},'待审阅'),review=h.add('span',{class:'paper-review-status'},'已审阅');
   const legend=h.add('span',{'data-i18n':''},'虚线：共同标签'),summary=h.add('summary',{'data-i18n':''},'已参考项目资料 · 4 项');
   const source=h.add('button',{'data-open-import':'fixture','data-source-page':'1'}),name=h.add('span',{'data-user-content':''},'第 1 页',source),page=h.add('span',{'data-i18n':''},'第 1 页',source);
@@ -99,7 +99,7 @@ test('newly mounted note editor translates fixed controls inside a protected rea
 });
 
 test('no-deadline and unsaved interface states translate without changing matching task titles or note text',()=>{
-  const h=harness('en',null,require('../i18n-en'));
+  const h=harness('en',null,require('../app/i18n-en'));
   const card=h.add('button',{class:'message-result-link'});
   const title=h.add('b',{'data-user-content':''},'未设置截止时间',card);
   const status=h.add('span',{'data-i18n':''},'未设置截止时间',card);
@@ -109,7 +109,7 @@ test('no-deadline and unsaved interface states translate without changing matchi
   h.init();
   assert.equal(status.textContent,'No deadline set');assert.equal(saveStatus.textContent,'Unsaved changes');
   assert.equal(title.textContent,'未设置截止时间');assert.equal(body.textContent,'尚未保存');
-  const app=fs.readFileSync(require.resolve('../app.js'),'utf8');
+  const app=fs.readFileSync(require.resolve('../app/app.js'),'utf8');
   assert.match(app,/<span data-i18n>未设置截止时间<\/span>/);
   h.api.setLanguage('zh-CN');
   assert.equal(status.textContent,'未设置截止时间');assert.equal(saveStatus.textContent,'尚未保存');
@@ -117,7 +117,7 @@ test('no-deadline and unsaved interface states translate without changing matchi
 });
 
 test('builtin skill labels translate reversibly while identical custom names and commands remain unchanged',()=>{
- const h=harness('en',null,require('../i18n-en'));
+ const h=harness('en',null,require('../app/i18n-en'));
  const builtin=h.add('div',{class:'skills-name skills-builtin'}),title=h.add('span',{'data-i18n':''},'论文深读',builtin),command=h.add('code',{'data-i18n':''},'/paper',builtin);
  const custom=h.add('div',{class:'skills-name'}),customTitle=h.add('span',{'data-user-content':''},'论文深读',custom),customDescription=h.add('p',{'data-user-content':''},'允许注入技能说明');
  h.init();assert.equal(title.textContent,'Deep paper reading');assert.equal(customTitle.textContent,'论文深读');assert.equal(customDescription.textContent,'允许注入技能说明');assert.equal(command.textContent,'/paper');h.api.setLanguage('zh-CN');assert.equal(title.textContent,'论文深读');
@@ -125,7 +125,7 @@ test('builtin skill labels translate reversibly while identical custom names and
 
 
 test('declared templates translate fixed option text while preserving arbitrary project and conversation names',()=>{
-  const h=harness('en',null,require('../i18n-en'));
+  const h=harness('en',null,require('../app/i18n-en'));
   const name='日常 {title} <b>课程</b>';
   const option=h.add('option',{'data-i18n-template':'课程 · {project}','data-i18n-vars':JSON.stringify({project:name}),value:'project-1'},'课程 · '+name);
   const description=h.add('p',{'data-i18n-template':'{title} · 仅影响后续消息','data-i18n-vars':JSON.stringify({title:name})},'');

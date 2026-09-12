@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 function extractFunction(name, dependencies = '') {
   const start = source.indexOf(`function ${name}`);
   assert.notEqual(start, -1, `${name} should remain available in app.js`);

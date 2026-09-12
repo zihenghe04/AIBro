@@ -13,7 +13,7 @@ import unittest
 import urllib.request
 from zipfile import ZipFile
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = (Path(__file__).resolve().parents[1] / 'app')
 sys.path.insert(0, str(ROOT))
 IMPORT_HOME = tempfile.TemporaryDirectory(prefix='workstation-vault-import-')
 prior_data_dir = os.environ.get('AI_WORKSTATION_DATA_DIR')

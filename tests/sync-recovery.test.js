@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 const between = (start, end) => {
   const begin = source.indexOf(start), finish = source.indexOf(end, begin);
   assert.ok(begin >= 0 && finish > begin, `Cannot extract real source: ${start}`);

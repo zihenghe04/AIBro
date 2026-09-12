@@ -42,10 +42,10 @@ def main():
         with tempfile.TemporaryDirectory(prefix='ai-bro-cloud-test-') as temporary:
             environment = os.environ.copy()
             environment.update({
-                'PYTHONPATH': str(ROOT),
+                'PYTHONPATH': str(ROOT / 'app'),
                 'PYTHONDONTWRITEBYTECODE': '1',
                 'AI_WORKSTATION_DATA_DIR': str(Path(temporary) / 'workspace'),
-                'AI_WORKSTATION_ASSET_DIR': str(ROOT),
+                'AI_WORKSTATION_ASSET_DIR': str(ROOT / 'app'),
                 'AI_WORKSTATION_PORT': '0',
                 'CLOUD_DATA_DIR': str(Path(temporary) / 'cloud'),
             })

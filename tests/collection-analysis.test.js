@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Collection = require('../collection-ui.js');
+const Collection = require('../app/collection-ui.js');
 
 // Exercise delegated browser events while leaving persistent changes entirely
 // to the host. The collection is deliberately not an AI invocation boundary.

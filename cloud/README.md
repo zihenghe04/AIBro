@@ -30,8 +30,8 @@ python3 -c 'import getpass; print(getpass.getpass("初始账号密码（至少12
 以下命令从仓库根目录运行；若此前在 `cloud` 目录部署，请先返回上一级。
 
 ```sh
-python3 -c 'import getpass; print(getpass.getpass("开发账号密码: "))' | python3 cloud_server.py --data-dir /tmp/workstation-cloud-dev init --username developer --password-stdin
-python3 cloud_server.py --data-dir /tmp/workstation-cloud-dev serve --host 127.0.0.1 --port 8787
+python3 -c 'import getpass; print(getpass.getpass("开发账号密码: "))' | python3 app/cloud_server.py --data-dir /tmp/workstation-cloud-dev init --username developer --password-stdin
+python3 app/cloud_server.py --data-dir /tmp/workstation-cloud-dev serve --host 127.0.0.1 --port 8787
 ```
 
 服务器需要提供 `hashlib.scrypt` 的 Python（推荐 Python 3.12）；部分 macOS 自带 Python 没有该能力，此时请使用已安装的 Python 3.12 或 Docker 镜像。桌面客户端不需要 scrypt，不受此运行时要求影响。测试运行器从当前 Python、已有 PATH 和常用 Homebrew 路径中选择支持 scrypt 的 Python，不会安装依赖或改用较弱的密码算法。

@@ -1,9 +1,9 @@
-<p align="center"><img src="ai-bro-icon.png" width="96" height="96" alt="AI Bro" /></p>
+<p align="center"><img src="app/ai-bro-icon.png" width="96" height="96" alt="AI Bro" /></p>
 <h1 align="center">AI Bro</h1>
 <p align="center"><strong>你的知识与行动伙伴</strong></p>
 <p align="center">把持续对话、原始资料、自己的理解和下一步，放在同一个工作区。</p>
 <p align="center">简体中文 · <a href="README.en.md">English</a></p>
-<p align="center"><a href="https://github.com/zihenghe04/ai-bro-app/releases">下载 Mac App</a> · <a href="https://zihenghe04.github.io/ai-bro-app/">产品与短片</a> · <a href="#快速开始">快速开始</a> · <a href="CONTRIBUTING.md">参与改进</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases">下载 Mac App</a> · <a href="https://zihenghe04.github.io/AIBro/">产品与短片</a> · <a href="#快速开始">快速开始</a> · <a href="CONTRIBUTING.md">参与改进</a></p>
 
 ![课程项目与可编辑的主笔记](launch/dist/assets/read-edit-zh.jpg)
 
@@ -13,7 +13,7 @@ AI 帮你读完一份课件或论文之后，工作可以继续。AI Bro 将原�
 
 **当前为 macOS 开发预览版。**发行包支持 Apple Silicon、macOS 12+；使用 ad-hoc 签名，尚未完成 Apple Developer ID 签名与公证，不含自动更新。许可证仍在确认中，当前不宣称采用某项开源许可。
 
-[观看中文产品短片](https://zihenghe04.github.io/ai-bro-app/assets/film-zh.mp4) · [Watch in English](https://zihenghe04.github.io/ai-bro-app/assets/film-en.mp4)
+[观看中文产品短片](https://zihenghe04.github.io/AIBro/assets/film-zh.mp4) · [Watch in English](https://zihenghe04.github.io/AIBro/assets/film-en.mp4)
 
 截图与短片来自隔离的示例工作区，不含个人资料。短片使用预设模型回复，展示真实应用操作和保存过程，经过剪辑。
 
@@ -64,7 +64,7 @@ AI 帮你读完一份课件或论文之后，工作可以继续。AI Bro 将原�
 
 ### 方式一：下载 App
 
-1. 从 [Releases](https://github.com/zihenghe04/ai-bro-app/releases) 下载 `AI-Bro-<version>-macos-arm64-preview.zip` 与对应校验文件。
+1. 从 [Releases](https://github.com/zihenghe04/AIBro/releases) 下载 `AI-Bro-<version>-macos-arm64-preview.zip` 与对应校验文件。
 2. 核对校验值，解压并将 `AI Bro.app` 移到「应用程序」。更新前正常退出旧版 App；工作区会保留。
 3. 打开「设置」连接模型，再从新手引导或一份示例资料开始。
 
@@ -75,8 +75,8 @@ AI 帮你读完一份课件或论文之后，工作可以继续。AI Bro 将原�
 需要 macOS、Node.js 22+（发行构建推荐 24）、Python 3.10+。PDF 预览与图表提取使用 PyMuPDF。
 
 ```sh
-git clone https://github.com/zihenghe04/ai-bro-app.git
-cd ai-bro-app
+git clone https://github.com/zihenghe04/AIBro.git
+cd AIBro
 npm ci
 python3 -m venv .venv
 source .venv/bin/activate
@@ -108,15 +108,15 @@ npm run release:mac -- --output "$PWD/release/preview"
 - **长文件有边界**：原件、页面图像或文字的投递方式取决于连接；文件大小、图片预算和模型上下文仍有限制。
 - **同步不等于备份**：自托管首版会同步支持的修改和删除，不提供端到端加密、按项目选择同步或实时多人协作；模型密钥和本机目录授权不随工作区同步。
 
-旧版 AI Workstation 的工作区与内部应用标识会保留。数据目录、备份、恢复与删除语义见[桌面文档](DESKTOP_APP.md)；同步范围、设备撤销和服务器明文边界见[云同步说明](CLOUD_SYNC.md)。
+旧版 AI Workstation 的工作区与内部应用标识会保留。数据目录、备份、恢复与删除语义见[桌面文档](docs/DESKTOP_APP.md)；同步范围、设备撤销和服务器明文边界见[云同步说明](docs/CLOUD_SYNC.md)。
 
 ## 文档与开发
 
 | 文档 | 内容 |
 | --- | --- |
 | [安装与构建](docs/DISTRIBUTION.md) | 下载、首次打开、构建、版本与校验 |
-| [桌面使用](DESKTOP_APP.md) | 数据目录、模型设置、备份与恢复 |
-| [自托管同步](CLOUD_SYNC.md) / [服务部署](cloud/README.md) | 同步范围、冲突、账号与运维 |
+| [桌面使用](docs/DESKTOP_APP.md) | 数据目录、模型设置、备份与恢复 |
+| [自托管同步](docs/CLOUD_SYNC.md) / [服务部署](cloud/README.md) | 同步范围、冲突、账号与运维 |
 | [外观与可访问性](docs/APPEARANCE.md) | 主题、系统玻璃、回退与开发细节 |
 | [版本说明](docs/RELEASE_NOTES.md) | 已发布改动与当前限制 |
 | [贡献指南](CONTRIBUTING.md) | 开发环境、测试、问题反馈与 PR |
@@ -130,4 +130,20 @@ npm run test:cloud
 
 后端测试入口为每组测试创建独立临时工作区，不需要真实资料或模型密钥。`asset-manifest.json` 是 Web、服务端与桌面构建的共同资源入口。
 
-项目许可证尚未确定；第三方依赖保留各自许可证，相关说明见[发行文档](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source)。Logo 的设计来源见[品牌文档](BRAND.md)。
+项目许可证尚未确定；第三方依赖保留各自许可证，相关说明见[发行文档](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source)。Logo 的设计来源见[品牌文档](docs/BRAND.md)。
+
+## 仓库结构
+
+应用源码、工程工具和产品展示分开组织；从仓库根目录运行上面的命令即可。
+
+```text
+AIBro/
+├── app/          # Electron, UI, local backend & runtime assets
+├── scripts/      # Start, build, release & demo tooling
+├── tests/        # Unit, integration & UI regression tests
+├── docs/         # Usage, distribution, architecture & branding
+├── cloud/        # Self-hosted sync deployment
+├── demo/         # Fictional demo fixtures
+├── launch/       # Bilingual product website
+└── .github/      # CI & GitHub Pages workflows
+```

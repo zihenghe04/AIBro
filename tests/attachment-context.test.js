@@ -1,6 +1,6 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const Context=require('../attachment-context.js');
+const Context=require('../app/attachment-context.js');
 const document=(id,count,body=page=>`第${page}页的一般知识。`.repeat(90))=>({id,name:`${id}.pdf`,pageCount:count,pages:Array.from({length:count},(_,index)=>({page:index+1,text:body(index+1)}))});
 function checkBudget(result,budget){assert.ok(result.text.length<=budget);assert.equal(result.coverage.chars,result.text.length);if(result.text)assert.doesNotThrow(()=>JSON.parse(result.text));}
 

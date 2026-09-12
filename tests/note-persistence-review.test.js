@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 function harness() {
   const requests = [], timers = [];
   const context = vm.createContext({
@@ -63,7 +63,7 @@ test('a completed persistence error queues a new version after the editor can ro
 });
 
 test('independent research follow-up permits its actual prior note without new attachments, resolving merged IDs but excluding unrelated notes', () => {
-  const NoteConsolidation = require('../note-consolidation');
+  const NoteConsolidation = require('../app/note-consolidation');
   const state = {
     projects: [{ id: 'other-project', workspace: '科研' }],
     notes: [

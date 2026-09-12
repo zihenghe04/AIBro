@@ -1,4 +1,4 @@
-const {test}=require('node:test');const assert=require('node:assert/strict');const M=require('../note-markdown');
+const {test}=require('node:test');const assert=require('node:assert/strict');const M=require('../app/note-markdown');
 test('export writes current identity and all source IDs while preserving exact edited body and custom YAML',()=>{
  const body='\n# My edited title\n\n```yaml\nsourceAttachmentIds: []\n```\n';
  const note={id:'n',paperId:'p',title:'New',projectId:'new-project',workspace:'科研',sourceAttachmentIds:['a','b'],content:'---\nid: "p"\ntitle: Old\nsourceAttachmentIds:\n  - a\ncustom:\n  private_label: yes\n---\n'+body};

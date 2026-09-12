@@ -1,7 +1,7 @@
 /* Isolated AppKit/Chromium integration. No workspace, credentials or network. */
 const {app,BrowserWindow}=require('electron');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict');
-const root=path.resolve(__dirname,'..'),profile=fs.mkdtempSync(path.join(os.tmpdir(),'ai-bro-native-glass-smoke-'));
+const root=path.resolve(__dirname, '../app'),profile=fs.mkdtempSync(path.join(os.tmpdir(),'ai-bro-native-glass-smoke-'));
 app.setPath('userData',profile);let win;
 const guard=setTimeout(()=>finish(1),30000);
 function finish(code){clearTimeout(guard);try{win?.destroy()}catch{}try{fs.rmSync(profile,{recursive:true,force:true})}catch{}app.exit(code);}

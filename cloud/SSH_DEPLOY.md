@@ -37,7 +37,7 @@ systemctl --user --version
 WORKSTATION_SSH_HOST=my-sync-host
 WORKSTATION_RELEASE=$(date -u +%Y%m%dT%H%M%SZ)
 ssh "$WORKSTATION_SSH_HOST" "mkdir -p ~/.local/share/ai-workstation-cloud/releases/$WORKSTATION_RELEASE ~/.local/share/ai-workstation-cloud/data ~/.config/systemd/user"
-scp cloud_server.py "$WORKSTATION_SSH_HOST:.local/share/ai-workstation-cloud/releases/$WORKSTATION_RELEASE/cloud_server.py"
+scp app/cloud_server.py "$WORKSTATION_SSH_HOST:.local/share/ai-workstation-cloud/releases/$WORKSTATION_RELEASE/cloud_server.py"
 scp cloud/ai-workstation-cloud.service "$WORKSTATION_SSH_HOST:.config/systemd/user/ai-workstation-cloud.service"
 ssh "$WORKSTATION_SSH_HOST" "/usr/bin/python3 -c \"import ast,pathlib; ast.parse(pathlib.Path.home().joinpath('.local/share/ai-workstation-cloud/releases/$WORKSTATION_RELEASE/cloud_server.py').read_text())\""
 ssh "$WORKSTATION_SSH_HOST" "cd ~/.local/share/ai-workstation-cloud && ln -s 'releases/$WORKSTATION_RELEASE' 'current-$WORKSTATION_RELEASE' && mv -Tf 'current-$WORKSTATION_RELEASE' current && chmod 700 data"
@@ -176,4 +176,4 @@ curl --fail --silent --show-error http://127.0.0.1:8787/v1/health
 4. 提示目标不匹配：核对是否改了 URL、端口或云账号。恢复原目标；当前版本不支持直接迁移绑定。
 5. 存在待上传或冲突：在工作站查看明确状态并处理冲突。待上传数量不为零时不能把它视为已经备份成功。
 
-同步范围、附件限制和当前产品边界见 [客户端云同步说明](../CLOUD_SYNC.md)，协议与服务限额见 [云服务说明](README.md)。
+同步范围、附件限制和当前产品边界见 [客户端云同步说明](../docs/CLOUD_SYNC.md)，协议与服务限额见 [云服务说明](README.md)。

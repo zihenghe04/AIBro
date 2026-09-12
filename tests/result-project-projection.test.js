@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 const cut = (start, end) => {
   const at = source.indexOf(start), stop = source.indexOf(end, at);
   assert.ok(at >= 0 && stop > at, `Real application function: ${start}`);
@@ -36,7 +36,7 @@ function harness(state = fixture()) {
   };
 }
 test('message source and model metadata mark only fixed labels for localization',()=>{
-  const h=harness();h.context.ConversationModels=require('../model-picker');h.context.window.ConversationModels=h.context.ConversationModels;
+  const h=harness();h.context.ConversationModels=require('../app/model-picker');h.context.window.ConversationModels=h.context.ConversationModels;
   h.state.imports.push({id:'source'});
   const children=h.render({modelConfig:{provider:'api',model:'中',effort:'medium'},retrievedSources:[{type:'import',id:'source',title:'第 1 页',page:1}]});
   const identity=children.find(item=>item.className==='message-identity'),info=identity.children.find(item=>item.className==='message-model-info');
@@ -140,6 +140,6 @@ test('result cards localize fixed status and receipt labels without translating 
   const h=harness();h.state.projects[1].name='已保存';h.state.tasks.push({id:'task',title:'已归入',projectId:'new',workspace:'课程',status:'todo'});
   const before=JSON.stringify(h.state),box=h.render({results:[result('task','task')]}).find(item=>item.className==='message-result-links');
   assert.match(box.innerHTML,/<span data-i18n>已归入<\/span>/);assert.match(box.innerHTML,/<span data-user-content>已保存<\/span>/);assert.match(box.innerHTML,/<b data-user-content>已归入<\/b>/);assert.match(box.innerHTML,/<span data-i18n>课程<\/span>/);assert.equal(JSON.stringify(h.state),before);
-  const dictionary=require('../i18n-en.js');
+  const dictionary=require('../app/i18n-en.js');
   for(const label of ['项目','任务','知识','论文','资料','新建','更新','已有','待合并','草稿已处理','已归档','已重命名','已保存','待开始','进行中','已完成','未命名','打开详情','日常空间','课程空间','科研空间','独立科研资料','未归属项目','已归入','已保存至工作区','内容已保存，可打开核对'])assert.ok(dictionary.exact[label],`missing result label: ${label}`);
 });

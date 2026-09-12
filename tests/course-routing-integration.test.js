@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const Core = require('../workstation-core');
-const CourseRouting = require('../course-routing');
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const Core = require('../app/workstation-core');
+const CourseRouting = require('../app/course-routing');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 const section = (from, to) => source.slice(source.indexOf(from), source.indexOf(to, source.indexOf(from)));
 const code = section('function actionsNeedApproval(', 'function actionSummary(') + '\n' + section('function assertRunActive(', 'let activeRunController');
 function fixture(mode = 'full', actions) {

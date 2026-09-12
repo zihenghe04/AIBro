@@ -6,7 +6,7 @@ We welcome reproducible reports, documentation and translation improvements, and
 
 ## 先从一个具体问题开始 / Start with a concrete problem
 
-在 [Issues](https://github.com/zihenghe04/ai-bro-app/issues) 描述预期行为、实际行为和最短复现步骤。较大的流程、数据结构或依赖变更，先写明使用场景与方案，便于维护者判断范围。
+在 [Issues](https://github.com/zihenghe04/AIBro/issues) 描述预期行为、实际行为和最短复现步骤。较大的流程、数据结构或依赖变更，先写明使用场景与方案，便于维护者判断范围。
 
 For an issue, include expected behavior, actual behavior, and the shortest reproduction. Explain the use case before proposing a major workflow, data-model, or dependency change.
 
@@ -26,8 +26,8 @@ Do not attach personal workspaces, account sessions, local source trees, or priv
 macOS、Node.js 22+（推荐 24）、Python 3.10+。云服务测试需要带 `hashlib.scrypt` 的 Python；常规 Python 3.12 安装可作为测试环境。原生玻璃的可选工具链见 [APPEARANCE](docs/APPEARANCE.md)。
 
 ```sh
-git clone https://github.com/zihenghe04/ai-bro-app.git
-cd ai-bro-app
+git clone https://github.com/zihenghe04/AIBro.git
+cd AIBro
 npm ci
 python3 -m venv .venv
 source .venv/bin/activate
@@ -42,7 +42,7 @@ A normal `npm start` uses the stable local workspace and desktop profile. For is
 AI_BRO_DEV_DATA="$(mktemp -d -t ai-bro-dev)"
 AI_WORKSTATION_DATA_DIR="$AI_BRO_DEV_DATA" \
 AI_WORKSTATION_PORT=0 \
-python server.py
+python app/server.py
 ```
 
 使用控制台打印的地址，并在独立浏览器配置中打开。这个命令隔离的是后端工作区，不会改变已有 Electron 配置。需要桌面 UI 验证时，沿用对应 `tests/*-smoke.cjs` 的临时 appData、临时数据目录和模拟服务方案；先阅读脚本的输入与断言。

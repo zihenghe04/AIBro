@@ -4,9 +4,9 @@
 const {app,BrowserWindow,session,nativeTheme}=require('electron');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),net=require('node:net'),assert=require('node:assert/strict');
 const {spawnSync}=require('node:child_process');
-const root=path.resolve(__dirname,'..'),temporary=fs.mkdtempSync(path.join(os.tmpdir(),'ai-bro-native-app-'));
+const root=path.resolve(__dirname, '../app'),temporary=fs.mkdtempSync(path.join(os.tmpdir(),'ai-bro-native-app-'));
 const assets=path.join(temporary,'app'),appData=path.join(temporary,'app-data'),store=path.join(temporary,'store');
-require('../app-assets').copyAssets(assets);
+require('../app/app-assets').copyAssets(assets);
 for(const folder of [appData,store])fs.mkdirSync(folder,{recursive:true});
 if(process.env.AI_BRO_GLASS_DIAGNOSTIC)fs.copyFileSync(process.env.AI_BRO_GLASS_DIAGNOSTIC,path.join(assets,'native-glass.node'));
 app.setPath('appData',appData);

@@ -4,8 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const dictionary = require('../i18n-en.js');
-const root = path.join(__dirname, '..');
+const dictionary = require('../app/i18n-en.js');
+const root = path.join(__dirname, '../app');
 
 function translate(value) {
   if (Object.prototype.hasOwnProperty.call(dictionary.exact, value)) return dictionary.exact[value];

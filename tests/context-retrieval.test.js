@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const { buildContext, tokens } = require('../context-retrieval.js');
+const { buildContext, tokens } = require('../app/context-retrieval.js');
 
 const library = () => ({
   projects: [{ id: 'visa', name: '差旅准备', workspace: '日常' }, { id: 'control', name: '智能控制', workspace: '课程' }, { id: 'lab', name: '控制研究', workspace: '科研' }],
@@ -128,7 +128,7 @@ test('task excerpts retain completion state, deadline and checklist, without rea
 });
 
 test('browser UMD exposes the same pure API with malformed collections handled safely', () => {
-  const context = { self: {} }; vm.runInNewContext(fs.readFileSync(require.resolve('../context-retrieval.js'), 'utf8'), context);
+  const context = { self: {} }; vm.runInNewContext(fs.readFileSync(require.resolve('../app/context-retrieval.js'), 'utf8'), context);
   assert.equal(typeof context.self.ContextRetrieval.buildContext, 'function');
   const result = context.self.ContextRetrieval.buildContext({ projects: null, notes: 'invalid', tasks: [null] }, { query: 'attention' });
   assert.equal(result.text, '');
@@ -145,7 +145,7 @@ test('tight budgets retain the keyword neighborhood instead of unrelated leading
 });
 
 test('new unscoped attachments do not pull unrelated projects through generic checklist wording', () => {
-  const { buildContext } = require('../context-retrieval');
+  const { buildContext } = require('../app/context-retrieval');
   const state = { projects:[{id:'visa',name:'签证准备',workspace:'日常'}], notes:[{id:'visa-list',title:'材料清单',content:'截止日期与材料清单，护照原件',projectId:'visa',workspace:'日常'}] };
   assert.equal(buildContext(state,{query:'露营新项目，整理材料清单与截止日期',requireProjectMatch:true}).entries.length,0);
   assert.equal(buildContext(state,{query:'签证准备，整理材料清单与截止日期',requireProjectMatch:true}).entries[0].recordId,'visa-list');

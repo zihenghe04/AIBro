@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const Native = require('../native-glass-ui');
+const Native = require('../app/native-glass-ui');
 const tick = async () => { for (let n=0;n<8;n++) await Promise.resolve(); };
 function deferred() { let resolve,reject; const promise=new Promise((r,j)=>{resolve=r;reject=j;});return {promise,resolve,reject}; }
 function classes(initial=[]) { const values=new Set(initial);return {values,contains:n=>values.has(n),add:(...names)=>names.forEach(n=>values.add(n)),remove:(...names)=>names.forEach(n=>values.delete(n)),toggle:(n,on)=>on?values.add(n):values.delete(n)}; }
@@ -70,7 +70,7 @@ test('native failures or malformed acknowledgements keep opaque fallback and cle
   }
 });
 test('native CSS only exposes acknowledged surfaces and protects solid reading planes and reduced transparency',()=>{
-  const css=fs.readFileSync(require.resolve('../native-glass-ui.css'),'utf8');assert.match(css,/html\.native-liquid-glass/);assert.match(css,/\[data-native-glass-region\]/);assert.match(css,/#previewDialog \{background:var\(--lg-content\)\}/);assert.match(css,/prefers-reduced-transparency/);assert.match(css,/forced-colors/);assert.match(css,/message-list[\s\S]*?mask-image/);
+  const css=fs.readFileSync(require.resolve('../app/native-glass-ui.css'),'utf8');assert.match(css,/html\.native-liquid-glass/);assert.match(css,/\[data-native-glass-region\]/);assert.match(css,/#previewDialog \{background:var\(--lg-content\)\}/);assert.match(css,/prefers-reduced-transparency/);assert.match(css,/forced-colors/);assert.match(css,/message-list[\s\S]*?mask-image/);
   assert.doesNotMatch(css,/[;{]\s*(?:transform|filter)\s*:/);assert.match(css,/backdrop-filter:none/);assert.match(css,/mask-composite:intersect/);
 });
 
@@ -82,7 +82,7 @@ test('the opaque shell is present before activation and updates only to acknowle
 });
 
 test('native text scrims guarantee 4.5 contrast on the worst possible external background in both themes',()=>{
-  const css=fs.readFileSync(require.resolve('../native-glass-ui.css'),'utf8'),fallback=fs.readFileSync(require.resolve('../liquid-glass.css'),'utf8');
+  const css=fs.readFileSync(require.resolve('../app/native-glass-ui.css'),'utf8'),fallback=fs.readFileSync(require.resolve('../app/liquid-glass.css'),'utf8');
   const luminance=rgb=>rgb.map(n=>n/255).map(n=>n<=.04045?n/12.92:((n+.055)/1.055)**2.4).reduce((sum,n,i)=>sum+n*[.2126,.7152,.0722][i],0);
   for(const [suffix,external] of [['',255],['.light-mode',0]]){
     const selector=`body.liquid-glass[data-view]${suffix} {`,start=fallback.indexOf(selector),block=fallback.slice(start,fallback.indexOf('}',start));

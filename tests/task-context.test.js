@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const TaskContext = require('../task-context');
+const TaskContext = require('../app/task-context');
 const anchor = { now: '2026-09-11T17:05:06.000Z', timeZone: 'Asia/Shanghai' };
 const conversation = (extra = {}) => ({ id: 'c', workspace: 'auto', messages: [], ...extra });
 const task = (id, extra = {}) => ({ id, title: `任务 ${id}`, status: 'todo', priority: 'medium', workspace: '日常', dueAt: null, ...extra });
@@ -11,7 +11,7 @@ const build = (state, conv, options = {}) => TaskContext.build(state, conv, { ..
 
 test('UMD exposes its pure API in the browser without requiring Node', () => {
   const context = vm.createContext({ Intl });
-  vm.runInContext(fs.readFileSync(require.resolve('../task-context'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../app/task-context'), 'utf8'), context);
   assert.equal(typeof context.TaskContext.build, 'function'); assert.equal(typeof context.TaskContext.assertUnchanged, 'function');
 });
 

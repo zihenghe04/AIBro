@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Core = require('../workstation-core');
+const Core = require('../app/workstation-core');
 const fixture = (human = true) => ({
   projects:[{id:'project',name:'Course',workspace:'课程'}],imports:[{id:'source-old',name:'Original.pdf'},{id:'source-new',name:'Increment.pdf'}],tasks:[],papers:[],links:[],trash:[],conversations:[],agentRuns:[],
   notes:[{id:'note',title:'Course summary',content:'Human correction',projectId:'project',workspace:'课程',sourceAttachmentIds:['source-old'],createdAt:10,updatedAt:20,userEdited:human,userEditedAt:human?20:undefined,revisionHistory:[{title:'Course summary',content:'Before correction',savedAt:20,updatedAt:10,userEdited:false}]}],

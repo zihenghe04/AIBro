@@ -2,17 +2,24 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# Source checkout uses app/; release staging is an isolated flat runtime.
+if [ -f "$ROOT_DIR/../app/asset-manifest.json" ]; then
+  ROOT_DIR=$(CDPATH= cd -- "$ROOT_DIR/.." && pwd)
+  SOURCE_DIR="$ROOT_DIR/app"
+else
+  SOURCE_DIR="$ROOT_DIR"
+fi
 OUT_APP="${AI_WORKSTATION_OUT_APP:-$ROOT_DIR/AI Bro.app}"
 # This is an existing application's display-name update, not a new identity.
 APP_ID="app.ai-workstation.studio"
 
 # Fail before touching an existing app if an HTML dependency is missing or
 # absent from the shared HTTP/build manifest.
-node "$ROOT_DIR/build-native-glass.js" --optional
-node "$ROOT_DIR/app-assets.js"
+node "$SOURCE_DIR/build-native-glass.js" --optional
+node "$SOURCE_DIR/app-assets.js"
 
 # Validate both icon inputs before replacing an existing application bundle.
-node - "$ROOT_DIR" <<'NODE'
+node - "$SOURCE_DIR" <<'NODE'
 const fs = require('fs');
 const path = require('path');
 const root = process.argv[2];
@@ -61,9 +68,9 @@ ditto "$SOURCE_APP" "$OUT_APP"
 # Electron expects the application entrypoint under Contents/Resources/app.
 APP_DIR="$OUT_APP/Contents/Resources/app"
 mkdir -p "$APP_DIR"
-node "$ROOT_DIR/app-assets.js" --copy "$APP_DIR"
+node "$SOURCE_DIR/app-assets.js" --copy "$APP_DIR"
 APP_VERSION=$(node -e 'process.stdout.write(require(process.argv[1]).version)' "$ROOT_DIR/package.json")
-cp "$ROOT_DIR/ai-bro-icon.icns" "$OUT_APP/Contents/Resources/ai-bro-icon.icns"
+cp "$SOURCE_DIR/ai-bro-icon.icns" "$OUT_APP/Contents/Resources/ai-bro-icon.icns"
 
 # Keep the runtime executable name used by Electron. Changing this filename
 # makes LaunchServices reject some copied Electron bundles as executable-less.

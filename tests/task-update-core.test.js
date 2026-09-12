@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Core = require('../workstation-core');
+const Core = require('../app/workstation-core');
 
 function fixture() {
   return { projects: [{ id: 'project', name: '课程项目', workspace: '课程' }, { id: 'other', name: '另一个项目', workspace: '课程' }], imports: [], notes: [], papers: [], links: [{ id: 'link', sourceId: 'old-source', targetId: 'task', relation: 'source' }], trash: [], conversations: [], agentRuns: [],

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const Lifecycle = require('../content-lifecycle');
+const Lifecycle = require('../app/content-lifecycle');
 const clone = value => JSON.parse(JSON.stringify(value));
 const ids = items => items.map(item => item.id).sort();
 const frozen = value => { if (value && typeof value === 'object') { Object.values(value).forEach(frozen); Object.freeze(value); } return value; };
@@ -209,7 +209,7 @@ test('invalid batch identifiers reject rather than collide with existing trash',
 
 test('browser export is a pure API with no filesystem, network or DOM capability', () => {
   const context = vm.createContext({});
-  vm.runInContext(fs.readFileSync(require.resolve('../content-lifecycle'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../app/content-lifecycle'), 'utf8'), context);
   assert.deepEqual(Object.keys(context.ContentLifecycle).sort(), ['preview', 'remove', 'restore']);
   assert.equal(Object.isFrozen(context.ContentLifecycle), true);
 });
