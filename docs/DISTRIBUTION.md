@@ -6,17 +6,17 @@ AI Bro 提供两条路径，使用同一份版本代码和资源清单。
 
 ## 1. 下载 App / Download the app
 
-从 [GitHub Releases](https://github.com/zihenghe04/AIBro/releases) 下载当前版本的 `AI-Bro-<version>-macos-arm64-preview.zip`。公开仓库中的 Release 与源码均可直接访问。
+从 [GitHub Releases](https://github.com/zihenghe04/AIBro/releases) 下载当前版本的 `AI-Bro-<version>-macos-arm64-preview.dmg`。公开仓库中的 Release 与源码均可直接访问。
 
-1. 下载 ZIP 与 `SHA256SUMS.txt`。在下载目录运行 `shasum -a 256 -c SHA256SUMS.txt --ignore-missing`，核对已下载文件。
-2. 解压，将 `AI Bro.app` 移到“应用程序”，正常退出旧版本后替换。应用升级保留已有工作区。
+1. 下载 DMG 与对应的 SHA-256 校验文件。v0.6.3 的补充 DMG 使用 `SHA256SUMS-DMG.txt`，运行 `shasum -a 256 -c SHA256SUMS-DMG.txt` 核对。ZIP 仍可作为备用下载。
+2. 打开 DMG，将 `AI Bro.app` 拖到“应用程序”，正常退出旧版本后替换。应用升级保留已有工作区。
 3. 在设置中连接兼容 API。OpenAI 账号连接另外需要本机安装官方 Codex CLI；本版本不内置 Codex CLI。
 
 当前发行包支持 **Apple Silicon（M 系列）Mac、macOS 12+**；原生 Liquid Glass 需要 macOS 26。Intel、Windows、Linux 发行包暂未提供。发行包内置 Python 与 PDF 运行时，不必先安装 Node.js、Python 或 Homebrew。
 
 预览包使用 ad-hoc 签名，**尚未获得 Apple Developer ID 签名与公证**。下载后可能被 Gatekeeper 拦截；确认下载来源和校验值后，按 macOS“系统设置 → 隐私与安全性”显示的提示允许本次打开。不要关闭系统整体安全保护。公开商用分发前仍需完成正式签名、公证和依赖许可审核。
 
-Download the Apple Silicon ZIP from the public [Releases page](https://github.com/zihenghe04/AIBro/releases). Extract it and move `AI Bro.app` to Applications after quitting the older copy. Python and PDF dependencies are included. Node.js and Homebrew are not required to run the release app. A compatible API connection is configured in Settings; account sign-in additionally requires an installed official Codex CLI. The preview is ad-hoc signed, not notarized, and may require an explicit per-app approval in macOS Privacy & Security. Native glass requires macOS 26; other supported versions use the web material.
+Download the Apple Silicon DMG from the public [Releases page](https://github.com/zihenghe04/AIBro/releases). Open it and drag `AI Bro.app` to Applications after quitting the older copy. Python and PDF dependencies are included. Node.js and Homebrew are not required to run the release app. A compatible API connection is configured in Settings; account sign-in additionally requires an installed official Codex CLI. The preview is ad-hoc signed, not notarized, and may require an explicit per-app approval in macOS Privacy & Security. Native glass requires macOS 26; other supported versions use the web material.
 
 ## 2. 从源代码构建 / Build from source
 

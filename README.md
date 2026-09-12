@@ -64,8 +64,8 @@ AI 帮你读完一份课件或论文之后，工作可以继续。AI Bro 将原�
 
 ### 方式一：下载 App
 
-1. 从 [Releases](https://github.com/zihenghe04/AIBro/releases) 下载 `AI-Bro-<version>-macos-arm64-preview.zip` 与对应校验文件。
-2. 核对校验值，解压并将 `AI Bro.app` 移到「应用程序」。更新前正常退出旧版 App；工作区会保留。
+1. 从 [Releases](https://github.com/zihenghe04/AIBro/releases) 下载 `AI-Bro-<version>-macos-arm64-preview.dmg` 与对应校验文件。
+2. 核对校验值，打开 DMG 并将 `AI Bro.app` 移到「应用程序」。更新前正常退出旧版 App；工作区会保留。
 3. 打开「设置」连接模型，再从新手引导或一份示例资料开始。
 
 发行包内置 Python 与 PDF 运行时，**运行 App 不需要另外安装 Node.js、Python 或 Homebrew**。首次打开可能需要在 macOS「隐私与安全性」中允许该预览 App；完整步骤见[安装与构建](docs/DISTRIBUTION.md)。Intel、Windows、Linux 发行包暂未提供。

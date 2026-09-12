@@ -4,12 +4,13 @@ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cryp
 const {copyAssets,fingerprint,validateAssets}=require('../app/app-assets');
 const {LOCK,buildRuntime,download,command,sha256,treeHash,notices}=require('./release-runtime');
 const {verifyPackagedApp}=require('./release-verify');
+const {buildDmg}=require('./release-dmg');
 const ROOT=path.resolve(__dirname,'..');
 function requiredSourceInputs(root) {
   const manifest=validateAssets(path.join(root,'app')),generated=new Set(['native-glass.node','python-runtime-manifest.json']);
   const assets=manifest.files.filter(file=>!(manifest.optionalRuntime||[]).includes(file)||!generated.has(file)).map(file=>'app/'+file);
   return [...new Set([...assets,'scripts/build-electron-app.sh','app/ai-bro-icon.icns','app/package.json','LICENSE','package.json','package-lock.json','requirements.txt',
-    'scripts/release-macos.js','scripts/release-runtime.js','scripts/release-verify.js','scripts/release-runtime-lock.json'])].sort();
+    'scripts/release-macos.js','scripts/release-dmg.js','scripts/release-runtime.js','scripts/release-verify.js','scripts/release-runtime-lock.json'])].sort();
 }
 function validateRuntimePackage(root) {
   const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
@@ -95,7 +96,8 @@ async function buildRelease({output,cache=path.join(os.tmpdir(),'ai-bro-release-
     const manifest={schemaVersion:1,product:'AI Bro',version:pkg.version,platform:'darwin',arch:'arm64',minimumMacOS:electron.minimumMacOS,electron:electron.version,signature:'ad-hoc-preview',notarized:false,source:sourceBefore,assetFingerprint:assetHash,nativeGlass:fs.existsSync(path.join(assets,'native-glass.node')),runtime,verification};
     fs.writeFileSync(path.join(product,'release-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
     const zipName=`AI-Bro-${pkg.version}-macos-arm64-preview.zip`;command('/usr/bin/ditto',['-c','-k','--sequesterRsrc','--keepParent',app,path.join(product,zipName)]);
-    const published=[zipName,'LICENSE','release-manifest.json','release-runtime-lock.json','THIRD-PARTY-NOTICES.txt',...LOCK.sources.map(item=>'dependency-sources/'+item.filename)];
+    const dmgName=`AI-Bro-${pkg.version}-macos-arm64-preview.dmg`;buildDmg({app,output:path.join(product,dmgName)});
+    const published=[zipName,dmgName,'LICENSE','release-manifest.json','release-runtime-lock.json','THIRD-PARTY-NOTICES.txt',...LOCK.sources.map(item=>'dependency-sources/'+item.filename)];
     fs.writeFileSync(path.join(product,'SHA256SUMS.txt'),published.map(file=>`${sha256(path.join(product,file))}  ${file}`).join('\n')+'\n');
     verifySourceIdentity(root,sourceBefore);
     fs.renameSync(product,output);return {output,archive:path.join(output,zipName),manifest};

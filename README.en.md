@@ -65,8 +65,8 @@ Switch between Chinese and English, light and dark appearances, and resizable pa
 
 ### Option 1: Download the app
 
-1. Download `AI-Bro-<version>-macos-arm64-preview.zip` and its checksum file from [Releases](https://github.com/zihenghe04/AIBro/releases).
-2. Verify the checksum, extract the ZIP, and move `AI Bro.app` to Applications. Quit the previous app before replacing it; the workspace is retained.
+1. Download `AI-Bro-<version>-macos-arm64-preview.dmg` and its checksum file from [Releases](https://github.com/zihenghe04/AIBro/releases).
+2. Verify the checksum, open the DMG, and drag `AI Bro.app` to Applications. Quit the previous app before replacing it; the workspace is retained.
 3. Connect a model in Settings, then follow the introduction or try a sample document.
 
 Release packages include Python and PDF runtimes. **Running the app does not require a separate Node.js, Python, or Homebrew installation.** macOS may require per-app approval in Privacy & Security for this preview; see [installation and distribution](docs/DISTRIBUTION.md). Intel, Windows, and Linux release packages are not currently provided.
