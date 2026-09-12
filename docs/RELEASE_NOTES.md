@@ -28,3 +28,5 @@ AI Bro connects conversations, project files, editable knowledge, and tasks in a
 The films use isolated fictional workspaces and scripted model responses. They show real app interactions and persistence, with edited pacing; they are not model quality or latency benchmarks. No personal workspace, credentials, real papers, or account details are used.
 
 This is a public macOS preview. Intel/Windows/Linux downloads, automatic updates, and Apple notarization are not included.
+
+License: **AGPL-3.0-only**. The application includes the full license text. User workspace data is not part of the licensed source distribution.

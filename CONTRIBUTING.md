@@ -1,8 +1,8 @@
 # 参与改进 / Contributing
 
-欢迎提交可复现的问题、文档与翻译建议、交互改进方案。项目仍处于 macOS 开发预览阶段，许可证与代码贡献条款正在确认中；本指南不另行指定许可证。
+欢迎提交可复现的问题、文档与翻译建议、交互改进方案。项目仍处于 macOS 开发预览阶段，代码采用 [AGPL-3.0-only](LICENSE)。提交贡献时，请确认你有权以同一许可提供这些改动；第三方内容须注明来源及许可。不要求转让版权。
 
-We welcome reproducible reports, documentation and translation improvements, and interaction proposals. AI Bro is a macOS developer preview. The project license and code-contribution terms are still being finalized; this guide does not assign a license.
+We welcome reproducible reports, documentation and translation improvements, and interaction proposals. AI Bro is a macOS developer preview. The code is licensed under [AGPL-3.0-only](LICENSE). Submit contributions only when you have the right to provide them under the same license. Identify the source and license of third-party material. No copyright assignment is required.
 
 ## 先从一个具体问题开始 / Start with a concrete problem
 
@@ -84,9 +84,9 @@ Replace `your-feature.test.js` with a real test file. `npm test` runs Node tests
 | 自托管同步 / Self-hosted sync | `cloud_sync.py`, `cloud_server.py`, `cloud/` |
 | 宣传页 / Product page | `launch/` |
 
-新增运行资源时同步检查 `asset-manifest.json`；Web、Python 服务与打包 App 使用同一份清单。测试与演示素材不要加入应用运行清单。保持锁定依赖和第三方许可信息，涉及打包的变更也要核对发行产物中的来源身份。
+新增运行资源时同步检查 `app/asset-manifest.json`；Web、Python 服务与打包 App 使用同一份清单。测试与演示素材不要加入应用运行清单。保持锁定依赖和第三方许可信息，涉及打包的变更也要核对发行产物中的来源身份。
 
-Keep `asset-manifest.json` current when adding runtime resources. Do not package test or demonstration assets as app runtime files. Preserve dependency locks and third-party notices, and verify source identity when changing distribution code.
+Keep `app/asset-manifest.json` current when adding runtime resources. Do not package test or demonstration assets as app runtime files. Preserve dependency locks and third-party notices, and verify source identity when changing distribution code.
 
 ## 提交说明 / Pull requests
 
