@@ -1,7 +1,7 @@
 (async () => {
 const assert = require('node:assert/strict');
-globalThis.WorkstationCore = require('../workstation-core.js');
-require('../agent-transport.js');
+globalThis.WorkstationCore = require('../app/workstation-core.js');
+require('../app/agent-transport.js');
 
 const events = [
   { type: 'response.reasoning_summary_text.delta', delta: '检查项目' },

@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../model-picker.js'), 'utf8');
-const markup = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/model-picker.js'), 'utf8');
+const markup = fs.readFileSync(require.resolve('../app/index.html'), 'utf8');
 const plain = value => JSON.parse(JSON.stringify(value));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const catalogue = [

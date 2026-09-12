@@ -1,5 +1,5 @@
 const assert = require('assert/strict');
-const { normalizePaper, upsertPaper, paperMarkdown, citationEdges } = require('../research-library');
+const { normalizePaper, upsertPaper, paperMarkdown, citationEdges } = require('../app/research-library');
 
 const first = normalizePaper({ title: 'A Study', doi: 'https://doi.org/10.1234/ABC ', authors: ['Alice'], year: 2024, structured: { abstract: 'Evidence' }, sourceAttachmentId: 'att-1' }, { now: 100 });
 assert.equal(first.doi, '10.1234/abc');

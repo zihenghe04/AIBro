@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const AttachmentAnalysis = require('../attachment-analysis');
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const AttachmentAnalysis = require('../app/attachment-analysis');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 
 function harness() {
   const elements = new Map();
@@ -31,7 +31,7 @@ function harness() {
     present(kind, id) { active = { kind, id }; visible = true; $('#readingPane').hidden = false; $('#previewDialog').open = true; presents.push({ kind, id }); },
     reconcile() {},
   };
-  const context = vm.createContext({NoteMarkdown:require('../note-markdown'), state, $, $$: () => fields, window: { ReadingPane: reader, AttachmentAnalysis }, AttachmentAnalysis, Blob,
+  const context = vm.createContext({NoteMarkdown:require('../app/note-markdown'), state, $, $$: () => fields, window: { ReadingPane: reader, AttachmentAnalysis }, AttachmentAnalysis, Blob,
     URL: { createObjectURL(blob) { const url = `blob:test-${++serial}`; blobs.set(url, blob); return url; }, revokeObjectURL(url) { revoked.push(url); } },
     Research: { sectionText: value => value || '', paperMarkdown: paper => `# 分析\n\n${paper.structured.tldr}` },
     previewObjectUrl: null, pdfPreviewVersion: 0, pdfPreviewAbort: null,

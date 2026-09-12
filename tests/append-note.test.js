@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Core = require('../workstation-core');
+const Core = require('../app/workstation-core');
 const copy = value => JSON.parse(JSON.stringify(value));
 const fixture = () => ({projects:[{id:'project',name:'Research',workspace:'科研'}],
   notes:[{id:'note',title:'Complete master',content:'# Complete original\n\nFirst part.\n\n## Later part\n\nKeep these exact bytes.\n',workspace:'科研',projectId:'project',folderPath:'文献/DemoGraph',kind:'论文分析',sourceAttachmentIds:['original'],updatedAt:10,revisionHistory:[{content:'Earlier version'}]}],

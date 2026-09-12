@@ -2,12 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../agent-transport'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/agent-transport'), 'utf8');
 const encode = value => new TextEncoder().encode(value);
 async function run(events, options = {}) {
   const activities = [], phases = [], deltas = [];
   const payload = options.json ? JSON.stringify(events) : [...events,{type:'response.completed'}].map(event => `data: ${JSON.stringify(event)}\r\n\r\n`).join('');
-  const ctx = vm.createContext({ AbortController, TextDecoder, WorkstationCore: require('../workstation-core'), fetch: async () => new Response(new ReadableStream({ start(controller) {
+  const ctx = vm.createContext({ AbortController, TextDecoder, WorkstationCore: require('../app/workstation-core'), fetch: async () => new Response(new ReadableStream({ start(controller) {
     const bytes = encode(payload);
     if (options.fragmented) for (let index = 0; index < bytes.length; index += 5) controller.enqueue(bytes.slice(index, index + 5));
     else controller.enqueue(bytes);

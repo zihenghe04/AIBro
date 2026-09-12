@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Planning = require('../planning-workbench');
+const Planning = require('../app/planning-workbench');
 
 function fixture() {
   return {
@@ -143,7 +143,7 @@ test('chart clicks revalidate current entity availability instead of reopening d
 
 test('single-day calendar scales show unique hour ticks rather than repeating the same date', () => {
   const value = new Date('2026-09-13T00:00:00').getTime();
-  for (const d3 of [undefined,require('../d3.min.js')]) {
+  for (const d3 of [undefined,require('../app/d3.min.js')]) {
     for (const width of [180,440,900]) {
       const scale=Planning.timelineScale({min:value,max:value},{width,d3});
       assert.equal(scale.hourly,true); assert.match(scale.caption,/2026-09-13/);
@@ -156,7 +156,7 @@ test('single-day calendar scales show unique hour ticks rather than repeating th
 
 test('multi-day calendar ticks align at actual midnight and do not round fractional dates into duplicates', () => {
   const min=new Date('2026-09-10T12:00:00').getTime(),max=new Date('2026-10-02T15:00:00').getTime();
-  const scale=Planning.timelineScale({min,max},{width:440,d3:require('../d3.min.js')});
+  const scale=Planning.timelineScale({min,max},{width:440,d3:require('../app/d3.min.js')});
   assert.equal(scale.hourly,false); assert.equal(new Set(scale.ticks.map(tick=>tick.label)).size,scale.ticks.length);
   assert.ok(scale.ticks.every(tick=>new Date(tick.value).getHours()===0));
   assert.equal(scale.min,min);assert.equal(scale.max,max);

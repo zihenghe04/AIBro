@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Core = require('../workstation-core');
+const Core = require('../app/workstation-core');
 const blank = () => ({ projects: [{ id: 'course', name: '智能控制课程', workspace: '课程' }, { id: 'research', name: '鲁棒控制研究', workspace: '科研' }], imports: [{ id: 'pdf', name: 'paper.pdf', url: 'https://arxiv.org/abs/2401.12345', projectId: null }], papers: [], notes: [], tasks: [], links: [], trash: [] });
 const paper = (patch = {}) => ({ type: 'upsert_paper', title: 'Robust control', workspace: '科研', sourceAttachmentIds: ['pdf'], url: 'https://arxiv.org/abs/2401.12345', structured: { methods: { text: 'Analyze stability under bounded uncertainty.' } }, ...patch });
 const context = projectId => ({ workspace: '科研', projectId, conversationId: 'conversation', runId: 'run' });

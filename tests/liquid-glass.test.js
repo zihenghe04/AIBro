@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const Glass = require('../liquid-glass');
+const Glass = require('../app/liquid-glass');
 function fixture(initial = {}) {
   const classes = new Set(), body = { classList: { contains: name => classes.has(name), add: (...names) => names.forEach(name => classes.add(name)), remove: (...names) => names.forEach(name => classes.delete(name)), toggle: (name, yes) => yes ? classes.add(name) : classes.delete(name) }, contains: element => element.owned !== false };
   const listeners = new Map(), windowListeners = new Map(), frames = new Map(), queries = new Map(); let sequence = 0;
@@ -70,7 +70,7 @@ test('cleanup removes listeners, media observers, variables and scheduled work',
 });
 
 test('material stylesheet has explicit content/accessibility fallback and does not redefine pane widths or positions', () => {
-  const css = fs.readFileSync(require.resolve('../liquid-glass.css'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../app/liquid-glass.css'), 'utf8');
   assert.match(css, /body\.liquid-glass\[data-view\]\.light-mode/); assert.match(css, /prefers-reduced-transparency/); assert.match(css, /prefers-reduced-motion/); assert.match(css, /forced-colors/); assert.match(css, /@supports not/);
   assert.match(css, /\.note-document-preview[^}]+backdrop-filter:none/); assert.doesNotMatch(css, /[;{\n]\s*(?:width|min-width|max-width|flex-basis|margin-left|margin-right|transform)\s*:/);
   assert.doesNotMatch(css, /pointer-events\s*:\s*(auto|all)/); assert.match(css, /pointer-events:none/);
@@ -81,7 +81,7 @@ function contrast(a, b) {
   const values = [luminance(a), luminance(b)].sort((x, y) => y - x); return (values[0] + .05) / (values[1] + .05);
 }
 test('reading text and muted metadata retain at least 4.5:1 contrast on both solid document planes', () => {
-  const css = fs.readFileSync(require.resolve('../liquid-glass.css'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../app/liquid-glass.css'), 'utf8');
   for (const selector of ['body.liquid-glass[data-view] {', 'body.liquid-glass[data-view].light-mode {']) {
     const start=css.indexOf(selector), block=css.slice(start,css.indexOf('}',start));
     const value=name=>new RegExp(`--${name}:#([0-9a-fA-F]{6});`).exec(block)[1];
@@ -150,7 +150,7 @@ test('SVG filter displaces the backdrop, corrects sRGB neutrality, and never app
   const displacement=filter.children.find(n=>n.name==='feDisplacementMap');assert.equal(displacement.attrs.get('in'),'SourceGraphic');assert.equal(displacement.attrs.get('in2'),'lens-map');
   assert.equal(displacement.attrs.get('xChannelSelector'),'R');assert.equal(displacement.attrs.get('yChannelSelector'),'G');
   assert.ok(h.composer.style.props.get('--lg-refraction-filter').startsWith('url('));assert.equal(h.composer.style.props.has('filter'),false);
-  const css=fs.readFileSync(require.resolve('../liquid-glass.css'),'utf8');assert.match(css,/backdrop-filter:var\(--lg-refraction-filter\)/);
+  const css=fs.readFileSync(require.resolve('../app/liquid-glass.css'),'utf8');assert.match(css,/backdrop-filter:var\(--lg-refraction-filter\)/);
   assert.doesNotMatch(css,/(?:^|[;{])\s*filter\s*:\s*(?:url|var\(--lg-refraction)/);
 });
 
@@ -188,14 +188,14 @@ test('floating composer reserves its measured height, follows an already pinned 
 });
 
 test('secondary glass targets real floating controls, preserves content planes, and has matching accessibility fallbacks', () => {
-  const css = fs.readFileSync(require.resolve('../liquid-glass.css'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../app/liquid-glass.css'), 'utf8');
   const patch = css.slice(css.indexOf('/* Secondary controls use'), css.indexOf('@media(max-width:760px)'));
-  const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../app/index.html'), 'utf8');
   for (const id of ['modelPicker','searchDialog']) {
     assert.match(html, new RegExp(`id="${id}"`)); assert.ok(patch.includes(`#${id}`));
   }
   for (const [file, ids] of [['skills-ui.js',['skillsDialog','skillPicker']],['prompt-polisher.js',['polishDialog']]]) {
-    const source = fs.readFileSync(require.resolve(`../${file}`), 'utf8');
+    const source = fs.readFileSync(require.resolve(`../app/${file}`), 'utf8');
     for (const id of ids) { assert.match(source, new RegExp(`\\.id\\s*=\\s*['"]${id}['"]`)); assert.ok(patch.includes(`#${id}`)); }
   }
   assert.match(patch, /backdrop-filter:blur\(34px\)/);
@@ -209,7 +209,7 @@ test('secondary glass targets real floating controls, preserves content planes, 
 });
 
 test('material palette has no fixed blue dye or luminous lower rim while keeping neutral chat controls', () => {
-  const css=fs.readFileSync(require.resolve('../liquid-glass.css'),'utf8');
+  const css=fs.readFileSync(require.resolve('../app/liquid-glass.css'),'utf8');
   for (const match of css.matchAll(/#([0-9a-fA-F]{6})(?:[0-9a-fA-F]{2})?\b/g)) {
     const rgb=[0,2,4].map(index=>parseInt(match[1].slice(index,index+2),16));
     assert.ok(Math.max(...rgb)-Math.min(...rgb)<=3,`Fixed material dye: ${match[0]}`);

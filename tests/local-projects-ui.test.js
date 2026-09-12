@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Local = require('../local-projects-ui.js');
+const Local = require('../app/local-projects-ui.js');
 const folder = { id: 'local_home', rootId: 'root_projects', name: '个人主页', path: '/tmp/Projects/homepage' };
 const scope = { id: folder.rootId, name: 'Projects', path: '/tmp/Projects' };
 const source = () => ({ folder: { ...folder }, tree: [{ path: 'src', type: 'directory' }, { path: 'src/index.html', type: 'file' }, { path: 'large.md', type: 'file' }], files: [{ path: 'src/index.html', content: '<script>steal()</script>', truncated: false }], summary: '2 个源文件', totalFiles: 2, truncated: false });

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Editor = require('../note-editor.js');
+const Editor = require('../app/note-editor.js');
 const fixture = () => ({ projects: [{ id: 'p', name: '智能控制' }], imports: [{ id: 'a', name: 'lecture.pdf' }], notes: [{ id: 'n', title: '课后笔记', content: '原文 **摘要**', projectId: 'p', workspace: '课程', sourceAttachmentIds: ['a'], createdAt: 1, updatedAt: 2 }] });
 const edit = (state, changes) => Object.assign(Editor.begin(state, 'n'), changes);
 

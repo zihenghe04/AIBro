@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from http_test_support import python_http_service
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = (Path(__file__).resolve().parents[1] / 'app')
 
 
 def node(script, *arguments):
@@ -123,7 +123,7 @@ with tempfile.TemporaryDirectory(prefix='workstation-assets-test-') as temporary
     optional = [name for name in manifest.get('optionalRuntime', []) if (assets / name).is_file()]
     assert int(copied_count) == len(manifest['web']) + len(manifest['runtime']) + len(optional) + 1
     expected_fingerprint = node("process.stdout.write(require('./app-assets').fingerprint(process.argv[1]))", assets)
-    config = json.loads(node("const c=require('./electron-builder.config.cjs'); process.stdout.write(JSON.stringify({files:c.files, asar:c.asar}))"))
+    config = json.loads(node("const c=require('../scripts/electron-builder.config.cjs'); process.stdout.write(JSON.stringify({files:c.files, asar:c.asar}))"))
     assert config['asar'] is False, 'Python must receive unpacked application resources'
     assert set(config['files']) == set(manifest['web'] + manifest['runtime'] + optional + ['asset-manifest.json'])
 

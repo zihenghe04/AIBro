@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const History = require('../run-history.js');
+const History = require('../app/run-history.js');
 const fixture = () => ({
   projects: [{ id: 'p', name: '控制理论' }],
   conversations: [{ id: 'live', title: '当前论文', projectId: 'p' }, { id: 'archived', title: '旧课程', archived: true }, { id: 'deleted', deletedAt: 5 }],

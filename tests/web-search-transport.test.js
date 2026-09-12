@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 function harness(fetch) {
-  const context = vm.createContext({ fetch, URL, AbortController, setTimeout, clearTimeout, TextDecoder, WorkstationCore: require('../workstation-core') });
-  vm.runInContext(fs.readFileSync(require.resolve('../agent-transport'), 'utf8'), context);
+  const context = vm.createContext({ fetch, URL, AbortController, setTimeout, clearTimeout, TextDecoder, WorkstationCore: require('../app/workstation-core') });
+  vm.runInContext(fs.readFileSync(require.resolve('../app/agent-transport'), 'utf8'), context);
   return context.AgentTransport;
 }
 const stream = events => new Response(new ReadableStream({ start(controller) { for (const event of events) controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)); controller.close(); } }), { headers: { 'content-type': 'text/event-stream' } });

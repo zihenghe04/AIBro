@@ -3,8 +3,8 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
-const {createNativeGlass,normalizeRegions}=require('../native-liquid-glass');
-const {headerDirectory}=require('../build-native-glass');
+const {createNativeGlass,normalizeRegions}=require('../app/native-liquid-glass');
+const {headerDirectory}=require('../app/build-native-glass');
 const region=(extra={})=>({id:'composer',x:10,y:20,width:100,height:80,radius:20,style:'regular',...extra});
 function fixture(extra={}) {
   const frame={url:'http://127.0.0.1:8765/index.html'},calls=[];
@@ -51,7 +51,7 @@ test('closed-window disposal never reads its stale handle and is safe to repeat'
   const h=fixture();h.native.setRegions(h.event,[region()]);h.win.isDestroyed=()=>true;h.win.getNativeWindowHandle=()=>{throw Error('stale');};h.native.dispose();h.native.dispose();assert.equal(h.native.status().active,false);assert.ok(h.calls.slice(1).every(call=>call.clear.length===0));
 });
 test('source uses SDK public NSGlassEffectView properties, click-through views and weak owner cleanup',()=>{
-  const source=fs.readFileSync(require.resolve('../native-glass.mm'),'utf8');assert.match(source,/NSGlassEffectViewStyleRegular/);assert.match(source,/NSGlassEffectViewStyleClear/);assert.match(source,/glass\.cornerRadius/);assert.match(source,/glass\.tintColor = nil/);assert.match(source,/hitTest:[^\n]+return nil/);assert.match(source,/weakToStrongObjectsMapTable/);assert.match(source,/positioned:NSWindowBelow/);
+  const source=fs.readFileSync(require.resolve('../app/native-glass.mm'),'utf8');assert.match(source,/NSGlassEffectViewStyleRegular/);assert.match(source,/NSGlassEffectViewStyleClear/);assert.match(source,/glass\.cornerRadius/);assert.match(source,/glass\.tintColor = nil/);assert.match(source,/hitTest:[^\n]+return nil/);assert.match(source,/weakToStrongObjectsMapTable/);assert.match(source,/positioned:NSWindowBelow/);
   assert.doesNotMatch(source,/objc_msgSend|sel_registerName|setValue:.*forKey:|unstable|_variant|scrimState|NSClassFromString/);
 });
 test('build can use explicit Node-API headers without a package installation',t=>{

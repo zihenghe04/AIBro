@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Trash = require('../trash-ui.js');
+const Trash = require('../app/trash-ui.js');
 
 const fixture = (count = 3) => ({trash:Array.from({length:count},(_,index)=>({
   id:`bin-${index}`,title:`已删除内容 ${index}`,type:'content',deletedAt:1000+index,

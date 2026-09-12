@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const Core = require('../workstation-core.js');
+const Core = require('../app/workstation-core.js');
 
 const baseState = {
   projects: [{ id: 'p-visa', name: '示例差旅资料准备', workspace: '日常', archived: false }],

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 function harness() {
   const state = {projects:[{id:'p',workspace:'课程'}],tasks:[{id:'same',projectId:'p'}],notes:[{id:'same',projectId:'p'}],imports:[{id:'same',projectId:'p'}]};
   const opened=[],messages=[],renders=[];

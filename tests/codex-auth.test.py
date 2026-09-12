@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = (Path(__file__).resolve().parents[1] / 'app')
 sys.path.insert(0, str(ROOT))
 import codex_bridge as bridge_module
 from codex_bridge import BridgeError, CodexBridge, SAFE_CONFIG, convert_input, runtime_command, runtime_config, request_config, web_sources

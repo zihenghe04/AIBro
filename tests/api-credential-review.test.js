@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { createApiCredentialStore, registerApiCredentialHandlers } = require('../native-api-credentials');
+const { createApiCredentialStore, registerApiCredentialHandlers } = require('../app/native-api-credentials');
 const SECRET = 'synthetic-review-credential';
 
 // Contract test for the OS encryption adapter, never the user's keychain.

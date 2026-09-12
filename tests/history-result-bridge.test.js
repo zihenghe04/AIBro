@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 const body = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 function render(run) {
   const classes = new Map();

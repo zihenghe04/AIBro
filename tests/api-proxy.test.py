@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = (Path(__file__).resolve().parents[1] / 'app')
 sys.path.insert(0, str(ROOT))
 IMPORT_HOME = tempfile.TemporaryDirectory(prefix='workstation-proxy-import-')
 with patch.dict(os.environ, {'AI_WORKSTATION_DATA_DIR': IMPORT_HOME.name}):

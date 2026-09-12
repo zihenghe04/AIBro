@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
-const dictionary = require('../i18n-en');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
+const dictionary = require('../app/i18n-en');
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function translate(value) {
   if (Object.hasOwn(dictionary.exact, value)) return dictionary.exact[value];

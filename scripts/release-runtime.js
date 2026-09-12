@@ -3,7 +3,7 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto'),zlib=require('node:zlib');
 const {spawnSync}=require('node:child_process');
 const LOCK=require('./release-runtime-lock.json');
-const {PYTHON_SERIES}=require('../python-runtime');
+const {PYTHON_SERIES}=require('../app/python-runtime');
 const MAX_UNPACKED=768*1024*1024;
 const sha256=filename=>crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex');
 function command(file,args,options={}){

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Research = require('../research-library');
-const Core = require('../workstation-core');
+const Research = require('../app/research-library');
+const Core = require('../app/workstation-core');
 const extra = {training:'TRAINING evidence',relatedWork:'RELATED WORK explanation',criticalAnalysis:'CRITICAL reasoning',counterArguments:'COUNTER argument',dataGaps:'MISSING evidence',reproduction:'REPRODUCTION steps'};
 const copy=value=>JSON.parse(JSON.stringify(value));
 

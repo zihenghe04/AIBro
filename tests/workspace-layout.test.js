@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Layout = require('../workspace-layout');
+const Layout = require('../app/workspace-layout');
 const wait = () => { let resolve,reject; const promise=new Promise((a,b)=>{resolve=a;reject=b;});return{promise,resolve,reject}; };
 const context = values => ({width:1440,view:'agent',...values});
 test('layout clamps all requested widths and reserves a usable main area across desktop widths',()=>{

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Web = require('../conversation-web');
+const Web = require('../app/conversation-web');
 const response = (id='url-pdf') => ({ ok:true, json:async()=>({id,name:'paper.pdf',mimeType:'application/pdf',size:100,storedLocally:true}) });
 
 test('normal message and Markdown URLs acquire the arXiv original, once per version', () => {

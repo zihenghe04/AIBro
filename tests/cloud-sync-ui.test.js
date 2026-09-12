@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Cloud = require('../cloud-sync-ui.js');
+const Cloud = require('../app/cloud-sync-ui.js');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const connected = overrides => ({ connected: true, state: 'synced', serverUrl: 'https://sync.example.test', account: { username: 'researcher' }, device: { id: 'this-device', name: '我的电脑' }, autoSync: true, pending: 0, conflicts: 0, lastSyncAt: 1789000000000, remoteAppliedRevision: 0, ...overrides });
 

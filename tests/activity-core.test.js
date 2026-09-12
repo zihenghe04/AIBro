@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Activity = require('../activity-core.js');
+const Activity = require('../app/activity-core.js');
 
 test('aggregates a cross-month window by local calendar date', () => {
   const state = {

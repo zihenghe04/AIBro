@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
 # Prefer a project-local Electron. A system runtime or an explicit
 # ELECTRON_BIN can be used when dependencies are not installed locally.
@@ -30,6 +30,6 @@ if [ "$#" -eq 0 ]; then
   set -- "$ROOT_DIR"
 fi
 
-node "$ROOT_DIR/build-native-glass.js" --optional
+node "$ROOT_DIR/app/build-native-glass.js" --optional
 echo "AI Bro: using Electron runtime: $ELECTRON_BIN" >&2
 exec "$ELECTRON_BIN" "$@"

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Collection = require('../collection-ui.js');
+const Collection = require('../app/collection-ui.js');
 const { records, filteredItems, completeSelected, timestamp } = Collection._private;
 
 const ui = overrides => ({ query: '', type: 'all', sort: 'updated', dir: 'desc', ...overrides });

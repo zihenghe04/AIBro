@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {createDemo}=require('../demo/fixtures/workspace.cjs');
-const Core=require('../workstation-core');
-const Analysis=require('../attachment-analysis');
+const Core=require('../app/workstation-core');
+const Analysis=require('../app/attachment-analysis');
 for(const lang of ['zh-CN','en'])test('synthetic '+lang+' plans preserve one-note/source/task ownership and update the existing daily task',()=>{
  const demo=createDemo(lang,Date.parse('2026-09-12T04:00:00Z'));let sequence=0;
  const sourceId='demo-test-original',state=structuredClone(demo.state);state.imports.push({id:sourceId,name:'lesson.pdf',content:demo.pdf.pages.map(page=>page.body.join('\n')).join('\n'),workspace:'课程',analysis:{status:'pending'}});

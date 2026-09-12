@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Editor = require('../note-editor');
+const Editor = require('../app/note-editor');
 
 const initial = () => ({ projects: [{ id: 'p', name: '科研项目', workspace: '科研' }], imports: [{ id: 'pdf', name: 'paper.pdf' }], notes: [{ id: 'n', title: '主题主笔记', content: '# 动机\n\n原始分析', workspace: '科研', projectId: 'p', paperId: 'paper', sourceAttachmentIds: ['pdf'], createdAt: 1, updatedAt: 2 }, { id: 'other', title: '另一篇', content: '其他正文', workspace: '科研' }] });
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };

@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const source=fs.readFileSync(require.resolve('../app.js'),'utf8'),dictionary=require('../i18n-en');
+const source=fs.readFileSync(require.resolve('../app/app.js'),'utf8'),dictionary=require('../app/i18n-en');
 function translate(value){if(Object.hasOwn(dictionary.exact,value))return dictionary.exact[value];for(const rule of dictionary.patterns){const regex=new RegExp(rule.source);if(regex.test(value))return value.replace(regex,rule.replacement);}return value;}
 function render(overrides={},analysisStatus='analyzed'){
  const nodes=new Map(),state={projects:[{id:'p',name:'知识库',workspace:'课程',description:'项目状态'}],tasks:[{id:'t',title:'尚未开始',workspace:'课程',projectId:'p',status:'todo',priority:'medium',dueAt:'2026-09-15T10:00:00Z'}],notes:[{id:'n',title:'规划与任务',kind:'User category',workspace:'课程',projectId:'p',content:'知识条目'}],imports:[],papers:[],conversations:[],...overrides};

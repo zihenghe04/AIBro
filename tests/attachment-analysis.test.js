@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Analysis = require('../attachment-analysis');
-const Core = require('../workstation-core');
-const Research = require('../research-library');
+const Analysis = require('../app/attachment-analysis');
+const Core = require('../app/workstation-core');
+const Research = require('../app/research-library');
 
 const content = '课程围绕数据建模展开。建议先用小规模数据核对误差，再比较不同参数设置；实际提交形式仍需向教师确认。';
 function fixture() {

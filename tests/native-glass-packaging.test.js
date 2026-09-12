@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
-const {copyAssets, fingerprint, readManifest} = require('../app-assets');
+const {copyAssets, fingerprint, readManifest} = require('../app/app-assets');
 
 function fixture(t) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-bro-native-assets-'));
@@ -63,7 +63,7 @@ test('an invalid required resource fails before cleaning the last packaged addon
   assert.equal(fs.readFileSync(path.join(output,'native-glass.node'),'utf8'),'last valid build');
 });
 
-const nativeAddon=path.join(__dirname,'..','native-glass.node');
+const nativeAddon=path.join(__dirname,'../app','native-glass.node');
 test('ad-hoc bundle signing preserves the already signed addon fingerprint', {skip:process.platform!=='darwin'||!fs.existsSync(nativeAddon)}, t => {
   const {source,output}=fixture(t);
   fs.copyFileSync(nativeAddon,path.join(source,'native-glass.node'));

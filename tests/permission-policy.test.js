@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const Policy = require('../permission-policy.js');
+const Policy = require('../app/permission-policy.js');
 
 test('conversation mode is explicit and isolated, while unset or unrecognized preferences retain legacy policy', () => {
   for (const mode of ['request','smart','full']) assert.equal(Policy.effectiveMode({permissionMode:mode}),mode);
@@ -33,7 +33,7 @@ test('full is limited to the supported workstation executor and never auto-autho
 });
 
 test('the permission catalogue stays aligned with actions actually supported by the transactional executor', () => {
-  const supported = Object.keys(require('../workstation-core.js').actionLabels);
+  const supported = Object.keys(require('../app/workstation-core.js').actionLabels);
   for (const type of supported) {
     assert.equal(Policy.needsApproval({mode:'full',actions:[{type}]}),false,`${type} needs an explicit policy when added to Core`);
     assert.equal(Policy.needsApproval({mode:'request',actions:[{type}]}),true);
@@ -69,7 +69,7 @@ test('policy decisions are immutable and ignore inherited/prototype workspace se
 
 test('the browser UMD exports the same pure contract without filesystem or DOM access', () => {
   const context = vm.createContext({});
-  vm.runInContext(fs.readFileSync(require.resolve('../permission-policy.js'),'utf8'),context);
+  vm.runInContext(fs.readFileSync(require.resolve('../app/permission-policy.js'),'utf8'),context);
   const browser = context.WorkstationPermissionPolicy;
   assert.equal(browser.effectiveMode({permissionMode:'full'}),'full');
   assert.equal(browser.needsApproval({mode:'smart',actions:[{type:'delete_task'}]}),true);

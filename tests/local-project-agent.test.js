@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Agent = require('../local-project-agent');
-const Core = require('../workstation-core');
+const Agent = require('../app/local-project-agent');
+const Core = require('../app/workstation-core');
 const folder = {id:'local-1',rootId:'root-1',name:'homepage',path:'/fixture/homepage'};
 const empty = () => ({projects:[],tasks:[],notes:[],imports:[],papers:[],links:[],trash:[]});
 const snapshot = (text='Current source') => ({folder,tree:[{path:'README.md'}],files:[{path:'README.md',content:text}],summary:'1 source',totalFiles:1});

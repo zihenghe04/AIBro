@@ -6,7 +6,7 @@ AI Bro 提供两条路径，使用同一份版本代码和资源清单。
 
 ## 1. 下载 App / Download the app
 
-从 [GitHub Releases](https://github.com/zihenghe04/ai-bro-app/releases) 下载当前版本的 `AI-Bro-<version>-macos-arm64-preview.zip`。公开仓库中的 Release 与源码均可直接访问。
+从 [GitHub Releases](https://github.com/zihenghe04/AIBro/releases) 下载当前版本的 `AI-Bro-<version>-macos-arm64-preview.zip`。公开仓库中的 Release 与源码均可直接访问。
 
 1. 下载 ZIP 与 `SHA256SUMS.txt`。在下载目录运行 `shasum -a 256 -c SHA256SUMS.txt --ignore-missing`，核对已下载文件。
 2. 解压，将 `AI Bro.app` 移到“应用程序”，正常退出旧版本后替换。应用升级保留已有工作区。
@@ -16,15 +16,15 @@ AI Bro 提供两条路径，使用同一份版本代码和资源清单。
 
 预览包使用 ad-hoc 签名，**尚未获得 Apple Developer ID 签名与公证**。下载后可能被 Gatekeeper 拦截；确认下载来源和校验值后，按 macOS“系统设置 → 隐私与安全性”显示的提示允许本次打开。不要关闭系统整体安全保护。公开商用分发前仍需完成正式签名、公证和依赖许可审核。
 
-Download the Apple Silicon ZIP from the public [Releases page](https://github.com/zihenghe04/ai-bro-app/releases). Extract it and move `AI Bro.app` to Applications after quitting the older copy. Python and PDF dependencies are included. Node.js and Homebrew are not required to run the release app. A compatible API connection is configured in Settings; account sign-in additionally requires an installed official Codex CLI. The preview is ad-hoc signed, not notarized, and may require an explicit per-app approval in macOS Privacy & Security. Native glass requires macOS 26; other supported versions use the web material.
+Download the Apple Silicon ZIP from the public [Releases page](https://github.com/zihenghe04/AIBro/releases). Extract it and move `AI Bro.app` to Applications after quitting the older copy. Python and PDF dependencies are included. Node.js and Homebrew are not required to run the release app. A compatible API connection is configured in Settings; account sign-in additionally requires an installed official Codex CLI. The preview is ad-hoc signed, not notarized, and may require an explicit per-app approval in macOS Privacy & Security. Native glass requires macOS 26; other supported versions use the web material.
 
 ## 2. 从源代码构建 / Build from source
 
 需要 macOS、Node.js 24（发行构建推荐）、Python 3.10+。原生玻璃编译另外需要 macOS 26 SDK 和 Node-API 头文件；缺少时，开发构建使用 CSS 材质。
 
 ```sh
-git clone https://github.com/zihenghe04/ai-bro-app.git
-cd ai-bro-app
+git clone https://github.com/zihenghe04/AIBro.git
+cd AIBro
 npm ci
 python3 -m venv .venv
 source .venv/bin/activate

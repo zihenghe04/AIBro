@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Progress = require('../agent-progress');
+const Progress = require('../app/agent-progress');
 
 test('public event deltas update one row; unrelated raw reasoning is ignored', () => {
   const message = {};

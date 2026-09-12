@@ -1,15 +1,22 @@
 #!/usr/bin/env node
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto');
-const {copyAssets,fingerprint,validateAssets}=require('../app-assets');
+const {copyAssets,fingerprint,validateAssets}=require('../app/app-assets');
 const {LOCK,buildRuntime,download,command,sha256,treeHash,notices}=require('./release-runtime');
 const {verifyPackagedApp}=require('./release-verify');
 const ROOT=path.resolve(__dirname,'..');
 function requiredSourceInputs(root) {
-  const manifest=validateAssets(root),generated=new Set(['native-glass.node','python-runtime-manifest.json']);
-  const assets=manifest.files.filter(file=>!(manifest.optionalRuntime||[]).includes(file)||!generated.has(file));
-  return [...new Set([...assets,'build-electron-app.sh','ai-bro-icon.icns','package-lock.json','requirements.txt',
+  const manifest=validateAssets(path.join(root,'app')),generated=new Set(['native-glass.node','python-runtime-manifest.json']);
+  const assets=manifest.files.filter(file=>!(manifest.optionalRuntime||[]).includes(file)||!generated.has(file)).map(file=>'app/'+file);
+  return [...new Set([...assets,'scripts/build-electron-app.sh','app/ai-bro-icon.icns','app/package.json','package.json','package-lock.json','requirements.txt',
     'scripts/release-macos.js','scripts/release-runtime.js','scripts/release-verify.js','scripts/release-runtime-lock.json'])].sort();
+}
+function validateRuntimePackage(root) {
+  const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+  const runtime=JSON.parse(fs.readFileSync(path.join(root,'app/package.json'),'utf8'));
+  for(const field of ['name','productName','version'])if(runtime[field]!==pkg[field])throw Error(`Runtime package ${field} differs from the root package.json. Update both before building.`);
+  if(runtime.main!=='electron-main.js'||runtime.private!==true)throw Error('Invalid Electron runtime package metadata.');
+  return pkg;
 }
 function hasGitCheckout(root) {
   for(let directory=root;;directory=path.dirname(directory)) {
@@ -61,11 +68,13 @@ function electronRuntime(root){
   return {source,version:expected,minimumMacOS:command('/usr/libexec/PlistBuddy',['-c','Print :LSMinimumSystemVersion',plist]).trim()};
 }
 async function buildRelease({output,cache=path.join(os.tmpdir(),'ai-bro-release-cache'),root=ROOT}={}){
-  output=checkOutput(output);cache=path.resolve(cache);root=path.resolve(root);const sourceBefore=sourceIdentity(root),electron=electronRuntime(root),pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+  output=checkOutput(output);cache=path.resolve(cache);root=path.resolve(root);const sourceBefore=sourceIdentity(root),electron=electronRuntime(root),pkg=validateRuntimePackage(root);
   fs.mkdirSync(path.dirname(output),{recursive:true});const stage=fs.mkdtempSync(path.join(path.dirname(output),'.ai-bro-release-'));
   try{
     const source=path.join(stage,'source'),product=path.join(stage,'product');fs.mkdirSync(product);
-    copyAssets(source,root);for(const file of ['build-electron-app.sh','ai-bro-icon.icns'])fs.copyFileSync(path.join(root,file),path.join(source,file));
+    copyAssets(source,path.join(root,'app'));
+    fs.copyFileSync(path.join(root,'scripts/build-electron-app.sh'),path.join(source,'build-electron-app.sh'));
+    fs.copyFileSync(path.join(root,'app/ai-bro-icon.icns'),path.join(source,'ai-bro-icon.icns'));
     // Build only our isolated source copy; the developer's native addon and
     // running application bundle must never be replaced by a release command.
     const app=path.join(product,'AI Bro.app');
@@ -91,4 +100,4 @@ async function buildRelease({output,cache=path.join(os.tmpdir(),'ai-bro-release-
 }
 function optionsFrom(argv){const result={};for(let i=0;i<argv.length;i+=2){if(!['--output','--cache'].includes(argv[i])||!argv[i+1]||argv[i+1].startsWith('--'))throw Error('Usage: node scripts/release-macos.js --output NEW_DIRECTORY [--cache CACHE_DIRECTORY]');result[argv[i].slice(2)]=argv[i+1];}return result;}
 if(require.main===module)buildRelease(optionsFrom(process.argv.slice(2))).then(result=>console.log(JSON.stringify({output:result.output,archive:result.archive,version:result.manifest.version,signature:result.manifest.signature},null,2))).catch(error=>{console.error(error.message);process.exitCode=1;});
-module.exports={checkOutput,electronRuntime,buildRelease,optionsFrom,requiredSourceInputs,sourceIdentity,verifySourceIdentity};
+module.exports={validateRuntimePackage,checkOutput,electronRuntime,buildRelease,optionsFrom,requiredSourceInputs,sourceIdentity,verifySourceIdentity};

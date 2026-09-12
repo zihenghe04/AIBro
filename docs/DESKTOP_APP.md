@@ -1,6 +1,6 @@
 # AI Bro 桌面 App
 
-项目现在只交付一个桌面应用：`AI Bro.app`（Electron）。浏览器中打开 `index.html` 仅用于轻量预览，不是另一个 App。
+项目现在只交付一个桌面应用：`AI Bro.app`（Electron）。浏览器中打开 `app/index.html` 仅用于轻量预览，不是另一个 App。
 
 Electron 壳加载项目自己的前端并自动启动同目录的 `server.py` 回环服务。解析 PDF、PPTX、DOCX、XLSX 和调用 OpenAI Responses API 都通过这个本地服务完成。工作区数据保存在用户目录 `~/Library/Application Support/ai-workstation`，应用升级不会主动删除它。
 
@@ -37,7 +37,7 @@ npm run dist
 
 ## 当前发行限制
 
-- GitHub Release 提供 Apple Silicon 预览 ZIP，`npm run release:mac` 和 CI 工作流负责打包、测试及校验；详见[安装与构建](docs/DISTRIBUTION.md)。暂不含自动更新或其他平台发行包。
+- GitHub Release 提供 Apple Silicon 预览 ZIP，`npm run release:mac` 和 CI 工作流负责打包、测试及校验；详见[安装与构建](DISTRIBUTION.md)。暂不含自动更新或其他平台发行包。
 - Release 发行包内置 Python 和 PDF 依赖。源码开发版仍需要 Python，可用 `AI_WORKSTATION_PYTHON` 指定。
 - Release 内置 PyMuPDF，支持 PDF 预览与图表提取；模型接收原件或页面图像由连接能力决定。
 - 当前构建为本地 ad-hoc 签名，没有 Apple Developer ID 公证；首次运行可能显示“无法验证开发者”。
@@ -57,7 +57,7 @@ npm run dist
 
 该集成使用官方运行时管理登录和刷新，不借用其他应用的认证文件。没有经过核实的“绑定 Codex 即可避免封号”保证；不能将运行时选择表述为防封策略。
 
-网页版与桌面版共用 `asset-manifest.json` 的资源清单；设置底部显示构建指纹，桌面启动时只复用相同指纹的本地服务。更新后需正常退出并重启现有 `AI Bro.app`，无需另建第二个 App。
+网页版与桌面版共用 `app/asset-manifest.json` 的资源清单；设置底部显示构建指纹，桌面启动时只复用相同指纹的本地服务。更新后需正常退出并重启现有 `AI Bro.app`，无需另建第二个 App。
 
 ## 对话与执行进度
 

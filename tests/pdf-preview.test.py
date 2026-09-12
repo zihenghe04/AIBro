@@ -11,7 +11,7 @@ from http_test_support import python_http_service
 
 import fitz
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = (Path(__file__).resolve().parents[1] / 'app')
 
 
 def response(origin, suffix):

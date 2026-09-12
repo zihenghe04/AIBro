@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Core = require('../workstation-core');
+const Core = require('../app/workstation-core');
 const fixture = () => ({ projects: [{ id:'research', name:'控制研究', workspace:'科研' }], tasks:[], notes:[], papers:[], links:[], trash:[], conversations:[], agentRuns:[], imports:[
   {id:'pdf-main',name:'Paper.pdf',pages:[{page:1,text:'Introduction'},{page:3,text:'Method claim'}]},
   {id:'pdf-other',name:'Other paper.pdf',pages:[{page:1,text:'Unrelated'}]},

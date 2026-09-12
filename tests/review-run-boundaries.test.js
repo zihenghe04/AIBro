@@ -2,11 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const Core = require('../workstation-core');
-const AttachmentAnalysis = require('../attachment-analysis');
-const AttachmentContext = require('../attachment-context');
-const AttachmentDelivery = require('../attachment-delivery');
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const Core = require('../app/workstation-core');
+const AttachmentAnalysis = require('../app/attachment-analysis');
+const AttachmentContext = require('../app/attachment-context');
+const AttachmentDelivery = require('../app/attachment-delivery');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 const cut = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 const empty = () => ({ projects: [{id:'research', name:'控制实验', workspace:'科研'}], tasks:[], notes:[], imports:[], papers:[], links:[], trash:[], agentRuns:[], conversations:[{id:'conversation',title:'Existing conversation',projectId:'research',workspace:'科研',messages:[],attachments:[]}], currentConversationId:'conversation', settings:{permissions:{'日常':'auto','课程':'auto','科研':'approval'}} });
 function executionContext() {
@@ -132,7 +132,7 @@ test('a valid pending plan can be approved while an unrelated request controller
 
 test('local fallback checks its actual queued actions under request and inherited space permissions',()=>{
  for (const permissionMode of ['request','legacy']) {
-  const c=executionContext();c.WorkstationPermissionPolicy=require('../permission-policy');
+  const c=executionContext();c.WorkstationPermissionPolicy=require('../app/permission-policy');
   c.state.projects[0].workspace='日常';c.state.conversations[0].workspace='日常';c.state.settings.permissions['日常']='approval';
   Object.assign(c,{classifyWorkspace:()=> '日常',actionSummary:()=>'',makeProject:()=>{},norm:v=>v});
   vm.runInContext(cut('function activeResultRecord(', '\nfunction conversationProjectIds(') + cut('function dedupeResultEntries(', '\nfunction groupedEntities(') + cut('function fallbackWorkflow(', '\nfunction actionsNeedApproval('),c);
@@ -144,11 +144,11 @@ test('local fallback checks its actual queued actions under request and inherite
 
 test('archiving a preflight-matched project cancels approval instead of creating a same-name replacement from an unbound conversation', { timeout: 4000 }, async () => {
   const c=executionContext();c.toast=()=>{};
-  const LocalProjectAgent=require('../local-project-agent');
+  const LocalProjectAgent=require('../app/local-project-agent');
   const folder={id:'verified-local',rootId:'authorized-root',name:'homepage',path:'/fixture/homepage'};
   let snapshots=0;
   const LocalProjects={snapshot:async()=>{snapshots++;return {folder,tree:[],files:[]}},ensureAccess:async()=>({roots:[{id:folder.rootId}]})};
-  Object.assign(c,{window:{LocalProjectAgent,LocalProjects,AttachmentAnalysis},LocalProjectAgent,LocalProjects,WorkstationPermissionPolicy:require('../permission-policy')});
+  Object.assign(c,{window:{LocalProjectAgent,LocalProjects,AttachmentAnalysis},LocalProjectAgent,LocalProjects,WorkstationPermissionPolicy:require('../app/permission-policy')});
   c.state.conversations[0].projectId=null;
   const run={id:'matched-pending',status:'awaiting-approval',conversationId:'conversation',projectId:null,workspace:'科研',permissionMode:'request',steps:[],localCandidates:[folder],localSearched:true,
     pendingActions:[{type:'create_project',id:'new-alias',name:c.state.projects[0].name,workspace:'科研'},{type:'link_local_project',projectId:'new-alias',candidateId:folder.id,workspace:'科研'}]};

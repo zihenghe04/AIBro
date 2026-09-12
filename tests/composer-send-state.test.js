@@ -2,11 +2,11 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const Core=require('../workstation-core');
-const AttachmentAnalysis = require('../attachment-analysis');
-const TaskContext = require('../task-context');
-const ConversationWeb = require('../conversation-web');
-const source=fs.readFileSync(require.resolve('../app.js'),'utf8');
+const Core=require('../app/workstation-core');
+const AttachmentAnalysis = require('../app/attachment-analysis');
+const TaskContext = require('../app/task-context');
+const ConversationWeb = require('../app/conversation-web');
+const source=fs.readFileSync(require.resolve('../app/app.js'),'utf8');
 const cut=(a,b)=>{const start=source.indexOf(a),end=source.indexOf(b,start);assert.ok(start>=0&&end>start,`extract ${a}`);return source.slice(start,end);};
 const clone=value=>JSON.parse(JSON.stringify(value));
 const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no});return{promise,resolve,reject};};
@@ -19,7 +19,7 @@ function harness(options={}){
  const c=vm.createContext({state,Core,ConversationWeb,fetch:options.fetch,projectIsActive:id=>!id||state.projects.some(p=>p.id===id&&!p.archived),AttachmentAnalysis,TaskContext,Research:{},$ :node,window:{ConversationModels:models,AttachmentAnalysis,TaskContext,ConversationWeb: options.web ? ConversationWeb : null},ConversationModels:models,localStorage:{getItem:()=>''},document:{createElement:()=>node('holder')},AbortController,URL,setTimeout,clearTimeout,activeRunController:null,liveRenderTimer:null,draftSaveTimer:null,
    uid:prefix=>`${prefix}-${++n}`,workspaceName:v=>['课程','科研'].includes(v)?v:'日常',classifyWorkspace:()=> '课程',currentConversation:()=>state.conversations.find(item=>item.id===state.currentConversationId),defaultModelConfiguration:()=>({provider:'api',model:'fixture',effort:''}),
    save:()=>saved.push(clone(state)),renderAll(){},renderConversation(){},renderMessage(){},toast:message=>toasts.push(message),visiblePaper:()=>true,visibleNote:()=>true,actionSummary:()=>'',actionsNeedApproval:()=>false,executeActions:()=>[],addRunStep:(run,text,status)=>run.steps.push({text,status}),
-   AttachmentContext:require('../attachment-context'),AttachmentDelivery:{prepare:async items=>{deliveries.push(Array.from(items,item=>item.id));return{blocks:[],metadata:options.metadata||[],textAttachments:[],coverage:{},stageLabel:'原件已准备'};}},
+   AttachmentContext:require('../app/attachment-context'),AttachmentDelivery:{prepare:async items=>{deliveries.push(Array.from(items,item=>item.id));return{blocks:[],metadata:options.metadata||[],textAttachments:[],coverage:{},stageLabel:'原件已准备'};}},
    AgentTransport:{requestPlan:async request=>{requests.push(request);return options.request?options.request(request):JSON.stringify({workspace:'课程',message:'Done',actions:[]});}}
  });
  node('#agentInput').value='分析课件';node('#apiBase').value='https://example.invalid/v1';node('#apiKey').value='fixture-key';

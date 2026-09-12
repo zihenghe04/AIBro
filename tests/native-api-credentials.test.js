@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const vm = require('node:vm');
-const { createApiCredentialStore, isTrustedCredentialSender, registerApiCredentialHandlers } = require('../native-api-credentials');
+const { createApiCredentialStore, isTrustedCredentialSender, registerApiCredentialHandlers } = require('../app/native-api-credentials');
 
 // Synthetic cipher only. Tests never initialize Electron or the real Keychain.
 function fakeStorage() {
@@ -284,7 +284,7 @@ test('all IPC operations enforce sender checks before opening the credential sto
 
 test('preload exposes only the fixed credential operations and passes no raw IPC capability', () => {
   const calls = []; let exposed;
-  vm.runInNewContext(fs.readFileSync(require.resolve('../preload'), 'utf8'), {
+  vm.runInNewContext(fs.readFileSync(require.resolve('../app/preload'), 'utf8'), {
     process: { platform: 'darwin' }, require: name => {
       assert.equal(name, 'electron');
       return { contextBridge: { exposeInMainWorld: (name, api) => { assert.equal(name, 'workstationDesktop'); exposed = api; } }, ipcRenderer: { invoke: (...args) => { calls.push(args); return Promise.resolve({}); } } };
@@ -316,17 +316,17 @@ test('Electron main import, store construction, status and deletion do not even 
       if (name === 'electron') return electron;
       if (name === './app-assets') return { fingerprint: () => 'synthetic' };
       if (name === './package.json') return { version: 'test' };
-      if (name === './native-ui-language') return require('../native-ui-language');
-      if (name === './native-liquid-glass') return require('../native-liquid-glass');
-      if (name === './python-runtime') return require('../python-runtime');
-      if (name === './native-api-credentials') return require('../native-api-credentials');
+      if (name === './native-ui-language') return require('../app/native-ui-language');
+      if (name === './native-liquid-glass') return require('../app/native-liquid-glass');
+      if (name === './python-runtime') return require('../app/python-runtime');
+      if (name === './native-api-credentials') return require('../app/native-api-credentials');
       return require(name);
     },
-    __dirname: path.dirname(require.resolve('../electron-main')),
+    __dirname: path.dirname(require.resolve('../app/electron-main')),
     process: { env: {}, platform: 'darwin', on() {} }, console,
     testWindow: { webContents: wc }
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../electron-main'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../app/electron-main'), 'utf8'), context);
   assert.equal(getterCalls, 0);
   vm.runInContext('mainWindow = testWindow;', context);
   const event = { sender: wc, senderFrame: frame };

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Skills = require('../skills-core.js');
+const Skills = require('../app/skills-core.js');
 
 const blank = () => ({ conversations: [{ id: 'first', title: '论文讨论' }, { id: 'second', title: '其他对话' }], tasks: [{ id: 'task-1' }] });
 const draft = () => ({ name: '每周复盘', command: '/weekly-review', description: '梳理本周进展', instructions: '检查已有任务，列出进展与下一周建议。' });

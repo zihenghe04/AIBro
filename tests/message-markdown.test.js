@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 const start = source.indexOf('function renderRichText(');
 const end = source.indexOf('\nfunction renderMessage(', start);
 assert.ok(start >= 0 && end > start, 'conversation renderer remains available');

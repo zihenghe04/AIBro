@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const Routing = require('../course-routing');
-const Core = require('../workstation-core');
+const Routing = require('../app/course-routing');
+const Core = require('../app/workstation-core');
 
 const ai = { id: 'course-ai', name: '智能系统：原理、模型与算法', workspace: '课程' };
 const algebra = { id: 'course-algebra', name: '矩阵代数', workspace: '课程' };
@@ -138,6 +138,6 @@ test('malformed optional inputs are harmless and all inputs remain unchanged', (
   freeze(state); freeze(dry); freeze(context); assert.equal(Routing.assess(state, dry, context).required, true); assert.deepEqual({ state, dry, context }, before);
 });
 test('browser UMD exposes the same pure assess API without Node or DOM dependencies', () => {
-  const sandbox = {}; vm.runInNewContext(fs.readFileSync(require.resolve('../course-routing'), 'utf8'), sandbox);
+  const sandbox = {}; vm.runInNewContext(fs.readFileSync(require.resolve('../app/course-routing'), 'utf8'), sandbox);
   assert.equal(typeof sandbox.CourseRouting.assess, 'function'); assert.equal(sandbox.CourseRouting.assess(fixture(), preview(), run()).required, true);
 });

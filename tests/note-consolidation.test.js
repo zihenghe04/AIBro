@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const NC = require('../note-consolidation');
-const Lifecycle = require('../content-lifecycle');
+const NC = require('../app/note-consolidation');
+const Lifecycle = require('../app/content-lifecycle');
 const copy = value => JSON.parse(JSON.stringify(value));
 const note = (id, content, extra = {}) => ({id,title:id,content,workspace:'课程',projectId:'course',sourceAttachmentIds:['lecture'],createdAt:10,updatedAt:20,...extra});
 const fixture = () => ({projects:[{id:'course',name:'Lecture course',workspace:'课程'}],notes:[note('main','# Human introduction\n\nShared paragraph.',{userEdited:true,revisionHistory:[{content:'Earlier text'}],aiDraft:{content:'Unaccepted proposal'}}),note('second','Shared paragraph.\n\nA different conclusion.',{kind:'summary',revisionHistory:[{content:'Earlier second text'}]})],imports:[{id:'lecture',name:'Lecture.pdf',analysis:{status:'analyzed',runId:'run',noteIds:['main','second']}}],papers:[],tasks:[],links:[],attachments:[],trash:[],conversations:[{id:'conversation',messages:[{results:[{type:'note',id:'second',projectId:'course'}]}]}]});
