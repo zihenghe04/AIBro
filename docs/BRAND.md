@@ -25,3 +25,9 @@ AI Bro 是显示品牌名，代表随时协助学习、科研与日常的知识�
 macOS 窗口外围另外接入 Electron 的原生 vibrancy，使桌面背景可以透过窗口外层。它与网页内部折射是两个不同的合成层：SVG 不采样操作系统桌面。浏览器则使用网页背景回退。此实现不宣称使用 Apple 原生 Liquid Glass API。
 
 导航和操作控件使用玻璃；正文、长表格和笔记使用稳定底色。支持减少动态效果、减少透明度、高对比与强制颜色设置。真实背景折射以支持 SVG backdrop filter 的 Chromium 为目标，其他引擎回退为透光磨砂。
+
+## 品牌使用 / Brand use
+
+代码许可不授予商标权，也不表示对衍生项目的官方认可。可以如实介绍作品源于 AI Bro；发布修改版时应清楚标明改动与维护者，避免让用户误认为是原项目官方发行。此说明不削减 AGPL 授予的代码使用权。
+
+The code license does not grant trademark rights or imply endorsement. You may accurately identify AI Bro as the source of your work. Clearly identify modified versions and their maintainers to avoid confusion with official releases. This guidance does not limit the code rights granted by the AGPL.

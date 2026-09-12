@@ -4,5 +4,10 @@
   "version": "0.6.3",
   "private": true,
   "description": "AI native personal knowledge and task workstation",
-  "main": "electron-main.js"
+  "main": "electron-main.js",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zihenghe04/AIBro.git"
+  }
 }

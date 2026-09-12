@@ -81,7 +81,8 @@
     "native-liquid-glass.js",
     "native-glass.mm",
     "build-native-glass.js",
-    "python-runtime.js"
+    "python-runtime.js",
+    "LICENSE"
   ],
   "optionalRuntime": [
     "native-glass.node",

@@ -47,13 +47,14 @@ jobs:
         run: |
           mkdir -p release-assets
           cp "$RUNNER_TEMP/ai-bro-release/"*.zip release-assets/
+          cp "$RUNNER_TEMP/ai-bro-release/LICENSE" release-assets/
           cp "$RUNNER_TEMP/ai-bro-release/release-manifest.json" release-assets/
           cp "$RUNNER_TEMP/ai-bro-release/THIRD-PARTY-NOTICES.txt" release-assets/
           cp "$RUNNER_TEMP/ai-bro-release/release-runtime-lock.json" release-assets/
           cp "$RUNNER_TEMP/ai-bro-release/dependency-sources/"*.tar.gz release-assets/
           cp release-sources/*.tar.gz release-assets/
           cd release-assets
-          shasum -a 256 *.zip *.tar.gz *.json THIRD-PARTY-NOTICES.txt > SHA256SUMS.txt
+          shasum -a 256 *.zip *.tar.gz *.json LICENSE THIRD-PARTY-NOTICES.txt > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: AI-Bro-macos-arm64-preview

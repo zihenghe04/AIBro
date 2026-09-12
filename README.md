@@ -11,7 +11,7 @@ AI 帮你读完一份课件或论文之后，工作可以继续。AI Bro 将原�
 
 > 首个公开 App Release 正在准备，当前可从源码运行。二进制下载开放后会在这里更新。
 
-**当前为 macOS 开发预览版。**发行包支持 Apple Silicon、macOS 12+；使用 ad-hoc 签名，尚未完成 Apple Developer ID 签名与公证，不含自动更新。许可证仍在确认中，当前不宣称采用某项开源许可。
+**当前为 macOS 开发预览版。**发行包支持 Apple Silicon、macOS 12+；使用 ad-hoc 签名，尚未完成 Apple Developer ID 签名与公证，不含自动更新。代码采用 AGPL-3.0 开源许可。
 
 [观看中文产品短片](https://zihenghe04.github.io/AIBro/assets/film-zh.mp4) · [Watch in English](https://zihenghe04.github.io/AIBro/assets/film-en.mp4)
 
@@ -130,7 +130,7 @@ npm run test:cloud
 
 后端测试入口为每组测试创建独立临时工作区，不需要真实资料或模型密钥。`asset-manifest.json` 是 Web、服务端与桌面构建的共同资源入口。
 
-项目许可证尚未确定；第三方依赖保留各自许可证，相关说明见[发行文档](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source)。Logo 的设计来源见[品牌文档](docs/BRAND.md)。
+AI Bro 原创代码采用 [GNU AGPL v3.0](LICENSE)（`AGPL-3.0-only`）。允许商业使用；分发及修改后的网络服务须履行相应源码提供义务。用户的文件、笔记、API Key 和其他私人数据不属于软件源码，不因此要求公开。第三方依赖保留各自许可证，相关说明见[发行文档](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source)。Logo 的设计来源见[品牌文档](docs/BRAND.md)。
 
 ## 仓库结构
 

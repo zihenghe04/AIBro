@@ -8,14 +8,16 @@ const ROOT=path.resolve(__dirname,'..');
 function requiredSourceInputs(root) {
   const manifest=validateAssets(path.join(root,'app')),generated=new Set(['native-glass.node','python-runtime-manifest.json']);
   const assets=manifest.files.filter(file=>!(manifest.optionalRuntime||[]).includes(file)||!generated.has(file)).map(file=>'app/'+file);
-  return [...new Set([...assets,'scripts/build-electron-app.sh','app/ai-bro-icon.icns','app/package.json','package.json','package-lock.json','requirements.txt',
+  return [...new Set([...assets,'scripts/build-electron-app.sh','app/ai-bro-icon.icns','app/package.json','LICENSE','package.json','package-lock.json','requirements.txt',
     'scripts/release-macos.js','scripts/release-runtime.js','scripts/release-verify.js','scripts/release-runtime-lock.json'])].sort();
 }
 function validateRuntimePackage(root) {
   const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
   const runtime=JSON.parse(fs.readFileSync(path.join(root,'app/package.json'),'utf8'));
-  for(const field of ['name','productName','version'])if(runtime[field]!==pkg[field])throw Error(`Runtime package ${field} differs from the root package.json. Update both before building.`);
+  for(const field of ['name','productName','version','license'])if(runtime[field]!==pkg[field])throw Error(`Runtime package ${field} differs from the root package.json. Update both before building.`);
   if(runtime.main!=='electron-main.js'||runtime.private!==true)throw Error('Invalid Electron runtime package metadata.');
+  if(pkg.license!=='AGPL-3.0-only')throw Error('Release license must be AGPL-3.0-only.');
+  if(fs.readFileSync(path.join(root,'LICENSE'),'utf8')!==fs.readFileSync(path.join(root,'app/LICENSE'),'utf8'))throw Error('Packaged LICENSE differs from the source LICENSE.');
   return pkg;
 }
 function hasGitCheckout(root) {
@@ -88,11 +90,12 @@ async function buildRelease({output,cache=path.join(os.tmpdir(),'ai-bro-release-
     if(assetHash!==fingerprint(assets)||runtime.treeSha256!==treeHash(path.join(resources,'python')))throw Error('Final signing changed an already fingerprinted runtime.');
     const verification=await verifyPackagedApp(app);
     const dependencies=path.join(product,'dependency-sources');fs.mkdirSync(dependencies);for(const artifact of LOCK.sources)fs.copyFileSync(download(artifact,cache),path.join(dependencies,artifact.filename));
+    fs.copyFileSync(path.join(root,'LICENSE'),path.join(product,'LICENSE'));
     fs.writeFileSync(path.join(product,'THIRD-PARTY-NOTICES.txt'),notices());fs.copyFileSync(path.join(__dirname,'release-runtime-lock.json'),path.join(product,'release-runtime-lock.json'));
     const manifest={schemaVersion:1,product:'AI Bro',version:pkg.version,platform:'darwin',arch:'arm64',minimumMacOS:electron.minimumMacOS,electron:electron.version,signature:'ad-hoc-preview',notarized:false,source:sourceBefore,assetFingerprint:assetHash,nativeGlass:fs.existsSync(path.join(assets,'native-glass.node')),runtime,verification};
     fs.writeFileSync(path.join(product,'release-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
     const zipName=`AI-Bro-${pkg.version}-macos-arm64-preview.zip`;command('/usr/bin/ditto',['-c','-k','--sequesterRsrc','--keepParent',app,path.join(product,zipName)]);
-    const published=[zipName,'release-manifest.json','release-runtime-lock.json','THIRD-PARTY-NOTICES.txt',...LOCK.sources.map(item=>'dependency-sources/'+item.filename)];
+    const published=[zipName,'LICENSE','release-manifest.json','release-runtime-lock.json','THIRD-PARTY-NOTICES.txt',...LOCK.sources.map(item=>'dependency-sources/'+item.filename)];
     fs.writeFileSync(path.join(product,'SHA256SUMS.txt'),published.map(file=>`${sha256(path.join(product,file))}  ${file}`).join('\n')+'\n');
     verifySourceIdentity(root,sourceBefore);
     fs.renameSync(product,output);return {output,archive:path.join(output,zipName),manifest};

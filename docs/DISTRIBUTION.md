@@ -64,4 +64,4 @@ The workflow creates a prerelease on a version tag, or downloadable CI artifacts
 
 ## 依赖与源码 / Dependencies and source
 
-发行包保留 Electron、CPython、PyMuPDF/MuPDF、certifi 等依赖的许可证；`THIRD-PARTY-NOTICES.txt` 与运行时 manifest 记录对应版本和来源。PyMuPDF/MuPDF 使用 AGPL／商业双许可，私有仓库不意味着免除许可义务。接收者应同时取得对应版本源代码与依赖来源信息；进一步转发、公开或商业分发前需确认适用的许可证或商业授权。
+发行包保留 Electron、CPython、PyMuPDF/MuPDF、certifi 等依赖的许可证；`THIRD-PARTY-NOTICES.txt` 与运行时 manifest 记录对应版本和来源。AI Bro 代码以 AGPL-3.0-only 发布，当前 PyMuPDF/MuPDF 依赖采用其 AGPL 许可路线。发行包包含完整许可文本；对应版本的应用源码、构建脚本及 PyMuPDF/MuPDF 源码应与二进制一同提供，第三方组件保留原许可。商业使用是允许的，仍需遵守这些条件。

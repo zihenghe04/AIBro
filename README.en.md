@@ -9,7 +9,7 @@
 
 Work can continue after AI finishes reading a handout or paper. AI Bro keeps originals, editable Markdown notes, tasks, and projects connected. Start another conversation to retrieve saved knowledge and return to its sources.
 
-**AI Bro is a macOS developer preview.** Release packages support Apple Silicon and macOS 12+. They are ad-hoc signed, without Apple Developer ID signing, notarization, or automatic updates. The project license is still being decided; no particular open-source license is claimed.
+**AI Bro is a macOS developer preview.** Release packages support Apple Silicon and macOS 12+. They are ad-hoc signed, without Apple Developer ID signing, notarization, or automatic updates. The code is open source under AGPL-3.0.
 
 [Watch the English product film](https://zihenghe04.github.io/AIBro/assets/film-en.mp4) · [观看中文短片](https://zihenghe04.github.io/AIBro/assets/film-zh.mp4)
 
@@ -131,7 +131,7 @@ npm run test:cloud
 
 The supported backend runners create isolated temporary workspaces for each test group. No personal files or real model keys are required. `asset-manifest.json` is the shared resource entry point for web, server, and desktop builds.
 
-The project license is not yet finalized. Third-party components retain their own licenses; see [distribution details](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source). The logo's design source is documented in [BRAND](docs/BRAND.md).
+AI Bro’s original code is licensed under [GNU AGPL v3.0](LICENSE) (`AGPL-3.0-only`). Commercial use is permitted, subject to the applicable source-availability obligations for distribution and modified network services. User documents, notes, API keys, and other private data are not software source code and are not required to be disclosed by this license. Third-party components retain their own licenses; see [distribution details](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source). The logo's design source is documented in [BRAND](docs/BRAND.md).
 
 ## Repository layout
 
