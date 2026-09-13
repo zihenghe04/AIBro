@@ -916,6 +916,7 @@ function renderRichText(text) {
 }
 
 function renderMessage(message, container) {
+  if (message.deletedAt) return;
   const wrapper = document.createElement('div'); wrapper.className = `message-wrap ${message.role === 'user' ? 'user-message' : 'agent-message'} ${message.live ? 'live-message' : ''}`;
   wrapper.dataset.messageId = message.id || '';
   const identity = document.createElement('div'); identity.className = 'message-identity'; identity.textContent = message.role === 'user' ? '你' : message.live ? 'AI · 生成中' : 'AI';
@@ -1005,7 +1006,7 @@ function renderMessage(message, container) {
     wrapper.appendChild(pending);
   }
   if (message.retryRunId) {
-    const retry = document.createElement('div'); retry.className = 'message-actions'; retry.innerHTML = `<button class="secondary retry-message" data-retry-run="${esc(message.retryRunId)}">↻ 重试</button><button class="secondary copy-message" data-copy-message="${esc(message.text || '')}">复制</button>`; wrapper.appendChild(retry);
+    const retry = document.createElement('div'); retry.className = 'message-actions'; retry.innerHTML = `<button class="secondary retry-message" data-retry-run="${esc(message.retryRunId)}">↻ 重试</button><button class="secondary" data-adjust-run="${esc(message.retryRunId)}" data-i18n>调整附件后重试</button><button class="secondary" data-dismiss-failure="${esc(message.id)}" data-i18n>删除失败记录</button><button class="secondary copy-message" data-copy-message="${esc(message.text || '')}">复制</button>`; wrapper.appendChild(retry);
   }
   if (message.live) { const stop = document.createElement('button'); stop.className = 'stop-run'; stop.dataset.stopRun = message.runId || ''; stop.textContent = '停止'; wrapper.appendChild(stop); }
   container.appendChild(wrapper);
@@ -1433,7 +1434,7 @@ async function mountPdfPreview(container, item, originalBlob, requestedPage = 1)
       const img = document.createElement('img'); img.alt = `${item.name || 'PDF'}，第 ${page} 页，共 ${count} 页`; img.draggable = false;
       img.onload = () => { if (version === pdfPreviewVersion && current === renderVersion) { status.hidden = true; applyZoom(); } };
       img.onerror = () => { if (version === pdfPreviewVersion && current === renderVersion) { status.textContent = '这一页暂时无法显示，请翻页重试或下载原文件。'; img.remove(); } };
-      img.src = `${base}/preview?page=${page}&scale=1.5`; sheet.appendChild(img); applyZoom();
+      img.src = `${base}/preview?page=${page}&scale=1.5&fit=1`; sheet.appendChild(img); applyZoom();
     };
     const turn = delta => { const next = Math.min(count, Math.max(1, page + delta)); if (next !== page) { page = next; renderPage(); } };
     q('[data-pdf-prev]').onclick = () => turn(-1); q('[data-pdf-next]').onclick = () => turn(1);
@@ -2075,7 +2076,7 @@ async function approveRun(runId) {
   const conversation = state.conversations.find(item => item.id === run.conversationId);
   let results;
   try { assertRunActive(run); if (window.LocalProjectAgent && window.LocalProjects) await LocalProjectAgent.revalidate(run, LocalProjects); assertRunActive(run); if (run.status !== 'awaiting-approval') return; results = executeActions(run.pendingActions || [], run); }
-  catch (error) { run.status = 'cancelled'; run.error = error.message; run.finishedAt = Date.now(); const message = conversation?.messages.find(item => item.pendingRunId === runId); if (message) { message.pendingRunId = null; message.runStatus = 'cancelled'; message.text += `\n\n未执行：${error.message}`; } save(); renderAll(); toast(error.message); return; }
+  catch (error) { run.status = 'cancelled'; run.error = error.message; if (error.attachmentId) run.attachmentError = { id: error.attachmentId, code: error.code, page: error.page || null }; run.finishedAt = Date.now(); const message = conversation?.messages.find(item => item.pendingRunId === runId); if (message) { message.pendingRunId = null; message.runStatus = 'cancelled'; message.text += `\n\n未执行：${error.message}`; } save(); renderAll(); toast(error.message); return; }
   run.steps?.filter(step => ['running', 'pending'].includes(step.status)).forEach(step => { step.status = 'done'; }); addRunStep(run, '审批已通过，执行完成', 'done'); run.status = 'completed'; run.finishedAt = Date.now(); commitAttachmentAnalysis(run);
   const message = conversation.messages.find(item => item.pendingRunId === runId); if (message) { message.pendingRunId = null; message.runStatus = 'completed'; message.results = results; message.text = `${message.text}\n\n已批准并执行，具体结果见下方。`; message.steps = run.steps; }
   state.currentConversationId = conversation.id; save(); renderAll();
@@ -2239,7 +2240,7 @@ async function sendMessage(options = {}) {
     const delivery = await AttachmentDelivery.prepare(attachmentsBefore, {
       provider, signal: attachmentSignal, getBlob: item => fileStoreGet(item.id),
       getPdfInfo: item => fetchAttachmentPart(item, 'preview-info'),
-      getPdfPage: (item, page) => fetchAttachmentPart(item, `preview?page=${page}&scale=1.5&format=jpeg`, true),
+      getPdfPage: (item, page) => fetchAttachmentPart(item, `preview?page=${page}&scale=1.5&fit=1&format=jpeg`, true),
       onProgress: text => { const last = run.steps[run.steps.length - 1]; if (last?.status === 'running') last.text = text; refreshLive(false); }
     });
     assertRunActive(run);
@@ -2255,7 +2256,7 @@ async function sendMessage(options = {}) {
     const attachmentContext = attachmentsBefore.length ? `附件清单（原件或页面图像在本条消息中；不重复附全文）：${JSON.stringify(delivery.metadata.map(meta => { const item = attachmentsBefore.find(entry => entry.id === meta.attachmentId); return { ...meta, url: item?.url || null, finalUrl: item?.finalUrl || null, fetchedAt: item?.fetchedAt || null, contentTruncated: !!item?.contentTruncated, currentProjectId: item?.projectId || null }; }))}\n${delivery.textAttachments.length ? preparedAttachments.text : '本轮未附加提取全文。'}` : '本次没有附件';
     run.attachmentCoverage = preparedAttachments.coverage;
     run.attachmentDelivery = delivery.coverage;
-    const historyEntries = conversation.messages.filter(message => !message.live).slice(-12);
+    const historyEntries = conversation.messages.filter(message => !message.live && !message.deletedAt && !message.retryRunId).slice(-12);
     let historyBudget = 16000;
     const history = historyEntries.slice().reverse().map(message => {
       const text = String(message.text || '').slice(0, Math.min(5000, historyBudget)); historyBudget -= text.length;
@@ -2343,7 +2344,7 @@ async function sendMessage(options = {}) {
     stage(run.pendingActions.length ? '完成' : '回答已完成', 'done'); run.status = 'completed'; run.finishedAt = Date.now(); commitAttachmentAnalysis(run);
     liveMessage.live = false; liveMessage.results = results; liveMessage.text = payload.message || '已完成整理。'; liveMessage.steps = run.steps; save(); renderAll(); $('#connectionState').textContent = '● 本地已就绪'; $('#connectionState').classList.remove('offline-state');
   } catch (error) {
-    run.status = error.code === 'CANCELLED' ? 'cancelled' : 'failed'; run.error = error.message; run.finishedAt = Date.now(); liveMessage.live = false; liveMessage.text = `${run.status === 'cancelled' ? `已停止本次执行：${error.message}` : `调用失败：${error.message}`}\n\n尚未执行任何动作。你可以点击“重试”，或修改设置后再次发送。`; liveMessage.retryRunId = run.id; liveMessage.steps = run.steps; save(); renderAll(); $('#connectionState').textContent = '● 本地已就绪';
+    run.status = error.code === 'CANCELLED' ? 'cancelled' : 'failed'; run.error = error.message; if (error.attachmentId) run.attachmentError = { id: error.attachmentId, code: error.code, page: error.page || null }; run.finishedAt = Date.now(); liveMessage.live = false; liveMessage.text = `${run.status === 'cancelled' ? `已停止本次执行：${error.message}` : `调用失败：${error.message}`}\n\n尚未执行任何动作。可以重试，或点击“调整附件后重试”移除有问题的附件；也可以直接在下方继续对话。`; liveMessage.retryRunId = run.id; liveMessage.steps = run.steps; save(); renderAll(); $('#connectionState').textContent = '● 本地已就绪';
   } finally {
     liveMessage.runStatus = run.status;
     if (window.AgentProgress) AgentProgress.finish(liveMessage, run.status === 'failed' ? 'failed' : run.status === 'cancelled' ? 'cancelled' : 'completed');
@@ -2352,6 +2353,59 @@ async function sendMessage(options = {}) {
     save();
     clearTimeout(liveRenderTimer); liveRenderTimer = null; activeRunController = null; sendMessage.busy = false; $('#agentSend').disabled = false; $('#agentSend').textContent = '↑'; $('#agentSend').setAttribute('aria-label', '发送'); }
 }
+
+function retryAttachmentIdsFor(run) {
+  const conversation = state.conversations.find(item => item.id === run.conversationId);
+  const sent = conversation?.messages.find(item => item.id === run.userMessageId);
+  return [...new Set(Array.isArray(sent?.retryAttachmentIds) ? sent.retryAttachmentIds : run.attachmentIds || [])];
+}
+function updateRetryAttachments(runId, ids) {
+  const run = state.agentRuns.find(item => item.id === runId);
+  const conversation = state.conversations.find(item => item.id === run?.conversationId && !item.archived && !item.deletedAt);
+  if (sendMessage.busy || !conversation || !['failed', 'cancelled'].includes(run.status)) return false;
+  const sent = conversation.messages.find(item => item.id === run.userMessageId);
+  const allowed = new Set([...(run.attachmentIds || []), ...(sent?.attachmentIds || [])]);
+  if (!Array.isArray(ids) || ids.some(id => !allowed.has(id) || !state.imports.some(item => item.id === id && !item.archived && !item.deletedAt))) return false;
+  // A retry selection changes future delivery only, never source files or
+  // the original sent-message snapshot. Other drafts remain untouched.
+  if (sent) { sent.retryAttachmentIds = [...new Set(ids)]; sent.updatedAt = Date.now(); }
+  else run.attachmentIds = [...new Set(ids)];
+  conversation.updatedAt = Date.now(); save(); return true;
+}
+function dismissFailedMessage(messageId) {
+  if (sendMessage.busy) { toast('请等待当前执行结束或先停止。'); return false; }
+  const conversation = state.conversations.find(item => item.id === state.currentConversationId && !item.deletedAt);
+  const message = conversation?.messages.find(item => item.id === messageId);
+  const run = state.agentRuns.find(item => item.id === message?.retryRunId);
+  if (!message || message.live || message.results?.length || !(run ? ['failed', 'cancelled'].includes(run.status) : ['failed', 'cancelled'].includes(message.runStatus))) return false;
+  message.deletedAt = Date.now(); message.updatedAt = message.deletedAt; conversation.updatedAt = message.deletedAt;
+  save(); renderConversation(); toast('已删除这条失败回复，原始资料和其他消息保留。'); return true;
+}
+function showRetryAttachmentEditor(runId, wrapper) {
+  if (sendMessage.busy) { toast('请等待当前执行结束或先停止。'); return; }
+  const run = state.agentRuns.find(item => item.id === runId);
+  if (!run || !wrapper || !['failed', 'cancelled'].includes(run.status)) return;
+  const previous = wrapper.querySelector('.retry-attachment-editor');
+  if (previous) { previous.remove(); return; }
+  const selected = new Set(retryAttachmentIdsFor(run));
+  const conversation = state.conversations.find(item => item.id === run.conversationId);
+  const sent = conversation?.messages.find(item => item.id === run.userMessageId);
+  const ids = [...new Set([...(sent?.attachmentIds || []), ...(run.attachmentIds || [])])];
+  const panel = document.createElement('form'); panel.className = 'retry-attachment-editor';
+  panel.innerHTML = `<strong data-i18n>选择本次重试的附件</strong><p data-i18n>取消勾选即可排除附件，不删除原件。全部取消后可仅发送原指令。</p><div class="retry-attachment-list">${ids.map(id => {
+    const item = state.imports.find(entry => entry.id === id && !entry.archived && !entry.deletedAt);
+    const snapshot = sent?.attachments?.find(entry => entry.id === id);
+    return `<label><input type="checkbox" value="${esc(id)}" ${item && selected.has(id) ? 'checked' : ''} ${item ? '' : 'disabled'}><span data-user-content>${esc(item?.name || snapshot?.name || '附件')}</span><small data-i18n>${!item ? '原件不可用 · 已排除' : run.attachmentError?.id === id ? '读取失败' : ''}</small></label>`;
+  }).join('')}</div><div class="message-actions"><button type="submit" class="primary" data-i18n>按此选择重试</button><button type="button" class="secondary" data-cancel-retry data-i18n>取消</button></div>`;
+  panel.querySelector('[data-cancel-retry]').onclick = () => panel.remove();
+  panel.onsubmit = event => {
+    event.preventDefault(); const chosen = [...panel.querySelectorAll('input:checked')].map(input => input.value);
+    if (!updateRetryAttachments(run.id, chosen)) { toast('附件或执行状态已变化，请重新打开重试选项。'); return; }
+    panel.remove(); sendMessage({ goal: run.goal, retry: true, userMessageId: run.userMessageId, requestedAt: run.requestedAt || run.startedAt, conversationId: run.conversationId, attachmentIds: chosen });
+  };
+  wrapper.appendChild(panel); panel.scrollIntoView({ block: 'nearest', behavior: 'instant' }); panel.querySelector('input:not(:disabled),button')?.focus();
+}
+
 function stopCurrentRun() { if (!sendMessage.busy) return; activeRunController?.abort(); }
 
 
@@ -2714,7 +2768,7 @@ let toastTimer = null;
 function toast(message) { let box = $('#toast'); if (!box) { box = document.createElement('div'); box.id = 'toast'; box.className = 'toast'; box.setAttribute('role', 'status'); document.body.appendChild(box); } box.textContent = message; box.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => box.classList.remove('visible'), 2300); }
 
 document.addEventListener('click', event => {
-  const target = event.target.closest('[data-open-paper],[data-paper-filter],[data-paper-source],[data-paper-project],[data-open-project],[data-open-note],[data-open-import],[data-open-task],[data-open-conversation],[data-toggle-task],[data-remove-import],[data-stage-import],[data-restore-trash],[data-purge-trash],[data-view-jump],[data-inspector],[data-approve-run],[data-reject-run],[data-search-result],[data-assign-import],[data-analyze-import],[data-retry-run],[data-stop-run],[data-copy-message],.suggestion');
+  const target = event.target.closest('[data-open-paper],[data-paper-filter],[data-paper-source],[data-paper-project],[data-open-project],[data-open-note],[data-open-import],[data-open-task],[data-open-conversation],[data-toggle-task],[data-remove-import],[data-stage-import],[data-restore-trash],[data-purge-trash],[data-view-jump],[data-inspector],[data-approve-run],[data-reject-run],[data-search-result],[data-assign-import],[data-analyze-import],[data-retry-run],[data-adjust-run],[data-dismiss-failure],[data-stop-run],[data-copy-message],.suggestion');
   if (!target) return;
   if (target.dataset.openPaper) { event.preventDefault(); openPaper(target.dataset.openPaper); }
   else if (target.dataset.paperFilter) { state.ui.paperFilter = target.dataset.paperFilter; save(); renderResearchLibrary(); }
@@ -2722,7 +2776,9 @@ document.addEventListener('click', event => {
   else if (target.dataset.paperProject) { $('#paperDialog').close(); openProject(target.dataset.paperProject); }
   else if (target.dataset.toggleTask) { event.stopPropagation(); toggleTaskStatus(target.dataset.toggleTask); }
   else if (target.dataset.stopRun !== undefined) { event.stopPropagation(); stopCurrentRun(); }
-  else if (target.dataset.retryRun) { event.stopPropagation(); const run = state.agentRuns.find(item => item.id === target.dataset.retryRun); if (run) sendMessage({ goal: run.goal, retry: true, userMessageId: run.userMessageId, requestedAt: run.requestedAt || run.startedAt, conversationId: run.conversationId, attachmentIds: run.attachmentIds || [] }); }
+  else if (target.dataset.retryRun) { event.stopPropagation(); const run = state.agentRuns.find(item => item.id === target.dataset.retryRun); if (run) sendMessage({ goal: run.goal, retry: true, userMessageId: run.userMessageId, requestedAt: run.requestedAt || run.startedAt, conversationId: run.conversationId, attachmentIds: retryAttachmentIdsFor(run) }); }
+  else if (target.dataset.adjustRun) { event.stopPropagation(); showRetryAttachmentEditor(target.dataset.adjustRun, target.closest('.message-wrap')); }
+  else if (target.dataset.dismissFailure) { event.stopPropagation(); dismissFailedMessage(target.dataset.dismissFailure); }
   else if (target.dataset.copyMessage !== undefined) { event.stopPropagation(); navigator.clipboard?.writeText(target.dataset.copyMessage).then(() => toast('已复制到剪贴板')).catch(() => toast('复制失败，请手动选择文本')); }
   else if (target.dataset.analyzeImport) { event.stopPropagation(); analyzeImports([target.dataset.analyzeImport]); }
   else if (target.dataset.assignImport) { event.stopPropagation(); openAssignDialog(target.dataset.assignImport); }

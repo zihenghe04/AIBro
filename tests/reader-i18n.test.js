@@ -36,7 +36,7 @@ test('PDF loading and changing-page status are declared UI; actual navigation an
   assert.match(h.container.innerHTML,/class="pdf-page-status"[^>]*data-i18n/);
   assert.equal(h.node('.pdf-page-status').textContent,'正在渲染第 2 页…');
   assert.equal(translate(h.node('.pdf-page-status').textContent),'Rendering page 2…');
-  const image=h.node('.pdf-sheet').children[0];assert.equal(image.src,'/__files/pdf-safe/preview?page=2&scale=1.5');assert.ok(image.alt.startsWith(item.name));
+  const image=h.node('.pdf-sheet').children[0];assert.equal(image.src,'/__files/pdf-safe/preview?page=2&scale=1.5&fit=1');assert.ok(image.alt.startsWith(item.name));
   h.node('[data-pdf-next]').onclick();assert.equal(h.node('[data-pdf-page]').value,'3');assert.equal(h.node('[data-pdf-next]').disabled,true);
   assert.equal(h.node('.pdf-page-status').textContent,'正在渲染第 3 页…');
   h.node('.pdf-sheet').children[0].onerror();assert.notEqual(translate(h.node('.pdf-page-status').textContent),h.node('.pdf-page-status').textContent);

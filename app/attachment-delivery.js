@@ -44,7 +44,7 @@
   async function adapted(callback, args, signal, item, code, label) {
     if (typeof callback !== 'function') throw new AttachmentDeliveryError(`${label}不可用，请检查附件服务配置。`, code, item);
     try { return await abortable(signal, () => callback(...args)); }
-    catch (error) { if (signal?.aborted || error?.code === 'CANCELLED' || error?.name === 'AbortError') throw cancelled(); throw new AttachmentDeliveryError(`${label}失败。原件未改为文字或省略，请重试或明确选择文字模式。`, code, item); }
+    catch (error) { if (signal?.aborted || error?.code === 'CANCELLED' || error?.name === 'AbortError') throw cancelled(); throw new AttachmentDeliveryError(`${label}失败。${string(error?.message).slice(0, 240)} 可以重试，或调整本轮附件后继续。`, code, item); }
   }
   function validateBlob(value, item, label, jpeg = false) {
     const blob = value?.blob || value;

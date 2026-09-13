@@ -902,6 +902,8 @@ class Handler(SimpleHTTPRequestHandler):
             scale = float(parameter('scale', '1.5'))
             if not math.isfinite(scale) or not 0.5 <= scale <= 2:
                 raise ValueError('预览缩放比例必须在 0.5 到 2 之间')
+            fit = parameter('fit', '0')
+            if fit not in ('0', '1'): raise ValueError('fit 参数只能为 0 或 1')
             image_format = parameter('format', 'png')
             if image_format not in ('png', 'jpeg'):
                 raise ValueError('预览格式只支持 png 或 jpeg')
@@ -923,6 +925,10 @@ class Handler(SimpleHTTPRequestHandler):
                         raise ValueError('PDF 页面尺寸无效')
                     if info:
                         self.send_json({'pageCount': document.page_count, 'width': width, 'height': height}); return
+                    # Fit the complete page into the rendering budget; never crop or
+                    # discard oversized pages from scanner/export applications.
+                    if fit == '1':
+                        scale = min(scale, math.sqrt((MAX_PREVIEW_PIXELS - 20000) / (width * height)), 16382 / width, 16382 / height)
                     pixel_width, pixel_height = math.ceil(width * scale), math.ceil(height * scale)
                     if pixel_width * pixel_height > MAX_PREVIEW_PIXELS or max(pixel_width, pixel_height) > 16384:
                         raise ValueError('PDF 页面尺寸过大，请降低缩放比例后重试')
@@ -936,7 +942,16 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.end_headers(); self.wfile.write(image)
         except (BrokenPipeError, ConnectionResetError): pass
-        except Exception as exc: self.send_json({'error': f'无法预览 PDF：{exc}'}, 400)
+        except Exception as exc:
+            # Native renderer exceptions can contain the private storage path.
+            # Expose actionable document errors, never raw filesystem details.
+            detail = str(exc)
+            safe = {'页码必须是从 1 开始的整数', '预览缩放比例必须在 0.5 到 2 之间', 'fit 参数只能为 0 或 1',
+                    '预览格式只支持 png 或 jpeg', '该附件不是 PDF 文件', '该 PDF 已加密，请先上传解密后的文件',
+                    'PDF 没有可预览的页面', 'PDF 页面尺寸无效', 'PDF 页面尺寸过大，请降低缩放比例后重试'}
+            if detail not in safe and not re.fullmatch(r'(page|scale|fit|format) 参数只能指定一次', detail):
+                detail = '文件可能损坏或尚未完整下载，请重新添加完整的 PDF 原件'
+            self.send_json({'error': f'无法预览 PDF：{detail}'}, 400)
     def do_fetch(self):
         if not self.valid_auth_origin(mutation=True):
             self.send_json({'error': '仅允许当前工作站下载链接资料。', 'code': 'INVALID_ORIGIN'}, 403); return
