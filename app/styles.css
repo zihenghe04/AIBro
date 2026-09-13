@@ -473,3 +473,6 @@ dialog.content-delete-dialog{width:min(520px,calc(100vw - 32px));max-width:none;
 .retry-attachment-list input{width:16px;height:16px;flex:none;accent-color:var(--accent)}
 .retry-attachment-list span{min-width:0;overflow-wrap:anywhere;flex:1}
 .retry-attachment-list small{color:var(--muted)}
+
+.draft-review-card{margin:16px 0;padding:16px;border:1px solid var(--border,#8885);border-radius:14px;background:var(--panel,#8881)}
+.draft-review-card p{font-size:13px;opacity:.8}.draft-review-card pre{max-height:260px;overflow:auto;white-space:pre-wrap;font:inherit}.draft-review-card button{margin:10px 8px 0 0}

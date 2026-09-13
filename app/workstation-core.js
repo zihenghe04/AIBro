@@ -153,7 +153,7 @@
     function applyNoteProposal(item, proposal, sources) {
       const content = typeof proposal.content === 'string' ? proposal.content : String(item.content || '');
       const title = typeof proposal.title === 'string' ? proposal.title : String(item.title || '');
-      if (item.userEdited || context.protectNoteUpdates === true) {
+      if (item.userEdited || context.protectNoteUpdates === true || item.aiDraft) {
         // An incremental analysis proposes a separate draft. Human wording and
         // its title remain authoritative until the user edits and saves it.
         if (content === String(item.content || '') && (context.protectNoteUpdates !== true || title === String(item.title || ''))) return 'matched';
@@ -344,17 +344,18 @@
           else {
             if (type === 'append_note') {
               if (typeof action.content !== 'string' || !action.content.trim()) throw new Error('追加笔记必须提供非空的新增 Markdown 正文');
-              const body = String(item.content || ''), addition = action.content;
-              // The full approved body stays local. Retry an already appended
-              // section without duplicating it; never append to an AI draft.
+              const approved = String(item.content || ''), addition = action.content;
+              const alreadyApproved = approved === addition || approved.endsWith('\n\n' + addition);
+              const body = alreadyApproved ? approved : typeof item.aiDraft?.content === 'string' ? item.aiDraft.content : approved;
               patch.content = body === addition || body.endsWith('\n\n' + addition)
                 ? body : body ? body + '\n\n' + addition : addition;
-              if (patch.content !== body && item.aiDraft && (item.aiDraft.content !== patch.content || (item.aiDraft.title || item.title || '') !== (item.title || ''))) {
-                throw new Error('这篇笔记已有另一份待采纳的 AI 草稿，请先处理该草稿后再追加新内容；原正文与草稿均已保留');
+              if (!alreadyApproved && item.aiDraft) {
+                patch.title = item.aiDraft.title || item.title;
+                if (patch.content !== body) item.aiDraftHistory = [...(item.aiDraftHistory || []), { ...clone(item.aiDraft), savedAt: now, reason: 'extended' }];
               }
             }
             const sources = getSources(action);
-            const mergedSources = [...new Set([...(item.sourceAttachmentIds || []), ...sources])];
+            const mergedSources = [...new Set([...(item.sourceAttachmentIds || []), ...(item.aiDraft?.sourceAttachmentIds || []), ...sources])];
             operation = applyNoteProposal(item, patch, mergedSources);
             item.sourceAttachmentIds = mergedSources;
             if (typeof patch.kind === 'string') item.kind = patch.kind;

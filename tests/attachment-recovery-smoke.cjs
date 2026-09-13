@@ -68,8 +68,21 @@ async function run(){
  assert.equal(await evaluate('state.agentRuns.at(-1).attachmentIds.length'),5);
  const fullInput=await evaluate('JSON.stringify(qaCalls.at(-1))');assert.match(fullInput,/全量核对请求：true/);assert.match(fullInput,/Original checklist.pdf/);assert.match(fullInput,/Supplement three.pdf/);
  assert.equal(await evaluate(`document.querySelector('#messageList').textContent.includes('本轮提供原件 · 5 份')`),true);
+ // Draft decisions are local, durable and do not call the model.
+ await evaluate(`state.notes.push({id:'review-note',title:'Synthetic review',workspace:'日常',content:'Approved text',sourceAttachmentIds:[],aiDraft:{content:'Saved draft, full text',createdAt:1,sourceAttachmentIds:[]}});currentConversation().messages.push({id:'draft-result',role:'agent',text:'Draft created',at:Date.now(),results:[{type:'note',id:'review-note',operation:'drafted'}]});renderAll();true`);
+ assert.equal(await evaluate(`!!document.querySelector('.draft-review-card')`),true);
+ await wait(500);await evaluate(`document.querySelector('.draft-review-card').scrollIntoView({block:'end',behavior:'instant'});true`);await wait(100);fs.writeFileSync(path.join(TEMP,'draft-review.png'),(await win.webContents.capturePage()).toPNG());
+ const callsBefore=await evaluate('qaCalls.length');
+ await evaluate(`sendMessage({goal:'采纳'});true`);await until(()=>evaluate(`!sendMessage.busy&&!state.notes.find(n=>n.id==='review-note').aiDraft`),'direct draft adoption');
+ assert.equal(await evaluate('qaCalls.length'),callsBefore);assert.equal(await evaluate(`state.notes.find(n=>n.id==='review-note').content`),'Saved draft, full text');
+ assert.equal(await evaluate(`state.notes.find(n=>n.id==='review-note').revisionHistory.at(-1).content`),'Approved text');
+ // The agent can request a record and then use its complete stored content.
+ await evaluate(`window.qaKnowledgeCalls=0;AgentTransport.requestPlan=async options=>{qaKnowledgeCalls++;if(qaKnowledgeCalls===1)return JSON.stringify({knowledgeRequests:[{type:'read',id:'review-note'}],actions:[]});if(!JSON.stringify(options.input).includes('Saved draft, full text'))throw Error('Missing requested evidence');return JSON.stringify({workspace:'日常',message:'Read exact saved note',actions:[]});};true`);
+ await evaluate(`sendMessage({goal:'Read the saved note'});true`);await until(()=>evaluate('qaKnowledgeCalls===2&&!sendMessage.busy'),'on-demand knowledge reading');
+ assert.equal(await evaluate('state.agentRuns.at(-1).status'),'completed');
+ await evaluate('flushWorkspace();true');await until(()=>evaluate('!serverSaveInFlight&&!serverSaveQueued'),'draft persisted');
  assert.deepEqual(forbidden,[]);
- console.log(JSON.stringify({passed:true,checks:['real drag upload','oversized PDF rendered','corrupt attachment recoverable','retry excludes only selected attachment','draft preserved','failure deletion persists after reload','original files retained','supplemental turn sends 2 original plus 3 new files with the original goal','no external requests'],screenshots:TEMP}));
+ console.log(JSON.stringify({passed:true,checks:['real drag upload','oversized PDF rendered','corrupt attachment recoverable','retry excludes only selected attachment','draft preserved','failure deletion persists after reload','original files retained','supplemental turn sends 2 original plus 3 new files with the original goal','full review rereads originals','saved draft adopted without model call','on-demand knowledge read round trip','no external requests'],screenshots:TEMP}));
 }
 function finish(code){clearTimeout(deadline);win?.destroy();server?.kill();app.exit(code)}
 run().then(()=>finish(0)).catch(e=>{console.error(e.stack);finish(1)});
