@@ -46,8 +46,24 @@ async function run(){
  assert.equal(await evaluate('state.imports.length'),2);assert.equal(await evaluate('currentConversation().messages.filter(x=>x.role==="user").length'),1);
  await evaluate(`state.ui.theme='dark';applyUiPreferences();renderAll();true`);
  fs.writeFileSync(path.join(TEMP,'recovery-dark.png'),(await win.webContents.capturePage()).toPNG());
+
+ // A new supplementary turn must retain the failed task, not just its latest words.
+ await evaluate(`state.conversations.push({id:'followup',title:'Supplemental files',workspace:'auto',permissionMode:'smart',modelConfig:{provider:'openai-auth',model:'synthetic-model'},messages:[],attachments:[],draftAttachmentIds:[],draft:''});openConversation('followup');window.qaCalls=[];ConversationModels.resolve=async config=>config;AgentTransport.requestPlan=async options=>{qaCalls.push(options.input);if(qaCalls.length===1)throw new Error('Synthetic temporary connection failure');return JSON.stringify({workspace:'日常',message:'Synthetic response',actions:[]})};true`);
+ async function dropNames(names){await evaluate(`(()=>{const d=new DataTransfer();for(const name of ${JSON.stringify(names)})d.items.add(new File([Uint8Array.from(atob('${pdf}'),c=>c.charCodeAt(0))],name,{type:'application/pdf'}));$('#agent').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:d}));})()`);await until(()=>evaluate('!importMaterials.busy&&currentConversation().draftAttachmentIds.length==='+names.length),'supplemental upload');}
+ await dropNames(['Original checklist.pdf','Original evidence.pdf']);
+ await evaluate(`sendMessage({goal:'ORIGINAL REQUIREMENT: compare all submitted evidence against the complete checklist, identify gaps, then save one consolidated note.'});true`);
+ await until(()=>evaluate('qaCalls.length===1&&!sendMessage.busy'),'temporary failure');
+ const originalIds=await evaluate('currentConversation().messages[0].attachmentIds');
+ await dropNames(['Supplement one.pdf','Supplement two.pdf','Supplement three.pdf']);
+ await evaluate(`sendMessage({goal:'附加了'});true`);
+ await until(()=>evaluate('qaCalls.length===2&&!sendMessage.busy'),'supplemented task');
+ const continued=await evaluate('state.agentRuns.at(-1)');assert.equal(continued.status,'completed');assert.equal(continued.attachmentIds.length,5);
+ for(const id of originalIds)assert.ok(continued.attachmentIds.includes(id));
+ const modelInput=await evaluate('JSON.stringify(qaCalls.at(-1))');assert.match(modelInput,/ORIGINAL REQUIREMENT/);assert.match(modelInput,/identify gaps/);assert.match(modelInput,/Supplement three.pdf/);assert.match(modelInput,/Original evidence.pdf/);assert.doesNotMatch(modelInput,/Broken synthetic/);
+ await evaluate('flushWorkspace();true');await until(()=>evaluate('!serverSaveInFlight&&!serverSaveQueued&&!state._pendingLocalSave'),'continuation persistence');
+ assert.equal(continued.conversationContext.carriedAttachmentIds.length,2);
  assert.deepEqual(forbidden,[]);
- console.log(JSON.stringify({passed:true,checks:['real drag upload','oversized PDF rendered','corrupt attachment recoverable','retry excludes only selected attachment','draft preserved','failure deletion persists after reload','original files retained','no external requests'],screenshots:TEMP}));
+ console.log(JSON.stringify({passed:true,checks:['real drag upload','oversized PDF rendered','corrupt attachment recoverable','retry excludes only selected attachment','draft preserved','failure deletion persists after reload','original files retained','supplemental turn sends 2 original plus 3 new files with the original goal','no external requests'],screenshots:TEMP}));
 }
 function finish(code){clearTimeout(deadline);win?.destroy();server?.kill();app.exit(code)}
 run().then(()=>finish(0)).catch(e=>{console.error(e.stack);finish(1)});

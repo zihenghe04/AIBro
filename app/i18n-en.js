@@ -35,6 +35,8 @@
   "页码": "Page number",
   "恢复适合宽度": "Fit to width",
   "PDF 页面；使用左右方向键翻页": "PDF pages; use the left and right arrow keys to turn pages",
+  "已暂停续接 · 点击恢复": "Carry-over paused · resume",
+  "补充时自动续接 · 点击暂停": "Include pending files with additions · pause",
   "调整附件后重试": "Adjust attachments and retry",
   "删除失败记录": "Delete failed reply",
   "选择本次重试的附件": "Choose attachments for this retry",

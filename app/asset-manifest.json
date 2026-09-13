@@ -61,7 +61,8 @@
     "i18n.css",
     "d3.min.js",
     "native-glass-ui.js",
-    "native-glass-ui.css"
+    "native-glass-ui.css",
+    "conversation-continuity.js"
   ],
   "runtime": [
     "package.json",
