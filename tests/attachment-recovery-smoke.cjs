@@ -62,6 +62,12 @@ async function run(){
  const modelInput=await evaluate('JSON.stringify(qaCalls.at(-1))');assert.match(modelInput,/ORIGINAL REQUIREMENT/);assert.match(modelInput,/identify gaps/);assert.match(modelInput,/Supplement three.pdf/);assert.match(modelInput,/Original evidence.pdf/);assert.doesNotMatch(modelInput,/Broken synthetic/);
  await evaluate('flushWorkspace();true');await until(()=>evaluate('!serverSaveInFlight&&!serverSaveQueued&&!state._pendingLocalSave'),'continuation persistence');
  assert.equal(continued.conversationContext.carriedAttachmentIds.length,2);
+ // Full review must reread successful originals rather than relying on retrieved snippets.
+ await evaluate(`sendMessage({goal:'请核对全部材料'});true`);
+ await until(()=>evaluate('qaCalls.length===3&&!sendMessage.busy'),'full review');
+ assert.equal(await evaluate('state.agentRuns.at(-1).attachmentIds.length'),5);
+ const fullInput=await evaluate('JSON.stringify(qaCalls.at(-1))');assert.match(fullInput,/全量核对请求：true/);assert.match(fullInput,/Original checklist.pdf/);assert.match(fullInput,/Supplement three.pdf/);
+ assert.equal(await evaluate(`document.querySelector('#messageList').textContent.includes('本轮提供原件 · 5 份')`),true);
  assert.deepEqual(forbidden,[]);
  console.log(JSON.stringify({passed:true,checks:['real drag upload','oversized PDF rendered','corrupt attachment recoverable','retry excludes only selected attachment','draft preserved','failure deletion persists after reload','original files retained','supplemental turn sends 2 original plus 3 new files with the original goal','no external requests'],screenshots:TEMP}));
 }
