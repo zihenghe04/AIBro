@@ -43,6 +43,10 @@ with tempfile.TemporaryDirectory(prefix='workstation-pdf-test-') as temporary:
     with fitz.open() as document:
         document.new_page(width=3000, height=3000)
         (files / 'large-page').write_bytes(document.tobytes())
+    with fitz.open() as document:
+        page = document.new_page(width=2014, height=2896)
+        page.draw_rect(fitz.Rect(0, 0, 2014, 2896), color=(0.1, 0.4, 0.8), fill=(0.1, 0.4, 0.8))
+        (files / 'scanner-export').write_bytes(document.tobytes())
     before = {file.name: hashlib.sha256(file.read_bytes()).digest() for file in files.iterdir()}
 
     with python_http_service(ROOT / 'server.py', cwd=data,
@@ -112,9 +116,23 @@ with tempfile.TemporaryDirectory(prefix='workstation-pdf-test-') as temporary:
             for action in ('preview-info', 'preview', 'preview?format=jpeg'):
                 status, _, body = response(origin, f'/__files/{identifier}/{action}')
                 assert status == expected_status, (identifier, action, status, body)
+                assert str(data).encode() not in body, 'Errors must not expose the local workspace path'
         for suffix in ('', '&format=jpeg'):
             assert response(origin, '/__files/large-page/preview?scale=2' + suffix)[0] == 400
             assert response(origin, '/__files/large-page/preview?scale=0.5' + suffix)[0] == 200
+        for identifier in ('large-page', 'scanner-export'):
+            status, _, body = response(origin, f'/__files/{identifier}/preview?scale=1.5&fit=1&format=jpeg')
+            assert status == 200, body
+            image = fitz.Pixmap(body)
+            assert image.width * image.height <= 8_000_000
+            assert max(image.width, image.height) <= 16384
+            if identifier == 'scanner-export':
+                assert abs(image.width / image.height - 2014 / 2896) < 0.002
+                for x, y in ((5, 5), (image.width - 6, image.height - 6)):
+                    red, green, blue = image.pixel(x, y)
+                    assert blue > green > red, 'Both page corners must remain visible'
+        for query in ('?fit=2', '?fit=1&fit=0', '?fit='):
+            assert response(origin, '/__files/test-pdf/preview' + query)[0] == 400
         assert response(origin, '/__files/test-pdf')[2] == source_bytes
     after = {file.name: hashlib.sha256(file.read_bytes()).digest() for file in files.iterdir()}
     assert before == after, 'Previewing must preserve every original file and metadata byte'

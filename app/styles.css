@@ -463,3 +463,13 @@ dialog.content-delete-dialog{width:min(520px,calc(100vw - 32px));max-width:none;
 .content-delete-dialog .dialog-actions button{min-height:36px;padding:8px 14px;border-radius:8px}
 .unavailable-source{display:inline-flex;align-items:center;max-width:100%;gap:5px;padding:6px 9px;border:1px dashed var(--line);border-radius:7px;color:var(--muted);font-size:11px;line-height:1.6;overflow-wrap:anywhere;cursor:default}
 @media(max-width:520px){dialog.content-delete-dialog{padding:20px;border-radius:14px}.content-delete-dialog h2{font-size:16px}.content-delete-list{max-height:36dvh}.content-delete-dialog .dialog-actions button{flex:1}.trash-row{flex-wrap:wrap}.trash-row>span:nth-child(2){min-width:calc(100% - 56px)}}
+
+/* Recovery stays beside its failed turn and never replaces the current draft. */
+.message-actions{flex-wrap:wrap}
+.retry-attachment-editor{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel);max-width:720px;min-width:0}
+.retry-attachment-editor>p{font-size:12px;color:var(--muted);line-height:1.7;margin:8px 0 14px}
+.retry-attachment-list{display:grid;gap:8px;max-height:260px;overflow:auto}
+.retry-attachment-list label{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.retry-attachment-list input{width:16px;height:16px;flex:none;accent-color:var(--accent)}
+.retry-attachment-list span{min-width:0;overflow-wrap:anywhere;flex:1}
+.retry-attachment-list small{color:var(--muted)}
