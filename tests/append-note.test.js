@@ -42,10 +42,13 @@ test('retries do not duplicate accepted additions, draft content, draft timestam
   }
 });
 
-test('a different pending draft blocks append atomically, and fresh additions use the latest complete approved body',()=>{
+test('new supplemental content extends a pending draft while preserving approved text and the prior proposal',()=>{
   const state=fixture();state.notes[0].aiDraft={title:'Pending',content:'UNACCEPTED draft text',createdAt:50};
   const before=copy(state);
-  assert.throws(()=>Core.applyPlan(state,[action()],{now:100,protectNoteUpdates:true}),/已有另一份待采纳/);
+  const extended=Core.applyPlan(state,[action()],{now:100,protectNoteUpdates:true}).state.notes[0];
+  assert.equal(extended.content,state.notes[0].content);
+  assert.equal(extended.aiDraft.content,'UNACCEPTED draft text\n\n'+addition);
+  assert.equal(extended.aiDraftHistory[0].content,'UNACCEPTED draft text');
   assert.deepEqual(state,before);
   delete state.notes[0].aiDraft;
   state.notes[0].content+='\n\nA human edit since the model started.';
