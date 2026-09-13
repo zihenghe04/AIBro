@@ -32,6 +32,8 @@
   "1 个来源不可用": "1 source unavailable",
   "已关联 1 篇分析笔记；可打开核对与补充。": "1 analysis note linked. Open it to review and add context.",
   "已关联 1 篇论文分析；可打开核对与补充。": "1 paper analysis linked. Open it to review and add context.",
+  "检索结果为部分摘录，不代表已读取全部原件。": "Retrieved excerpts are partial and do not mean all original files were read.",
+  "这些原件已加入本轮模型请求；是否完成核对需查看逐份结果。": "These originals were included in this model request. Check per-file results for review completion.",
   "页码": "Page number",
   "恢复适合宽度": "Fit to width",
   "PDF 页面；使用左右方向键翻页": "PDF pages; use the left and right arrow keys to turn pages",
@@ -1151,6 +1153,8 @@
   "最后同步：从未同步": "Last sync: Never",
   "最后同步：未记录": "Last sync: Not recorded"
 }, patterns: [
+  { "source": "^检索摘录 · (\\d+) 条 · (\\d+) 项资料$", "replacement": "Retrieved excerpts · $1 excerpts · $2 records" },
+  { "source": "^本轮提供原件 · (\\d+) 份$", "replacement": "Originals included this turn · $1 files" },
   {
     "source": "^(\\d+) 份资料待 AI 分析$",
     "replacement": "$1 sources ready for AI analysis"
