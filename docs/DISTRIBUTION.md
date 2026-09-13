@@ -2,13 +2,13 @@
 
 AI Bro 提供两条路径，使用同一份版本代码和资源清单。
 
-> [下载 v0.6.3 / Download v0.6.3](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.3)：Apple Silicon macOS 预览版。安装包、对应源码与 SHA-256 校验文件均在同一 Release。
+> [下载 v0.6.4 / Download v0.6.4](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.4)：Apple Silicon macOS 预览版。安装包、对应源码与 SHA-256 校验文件均在同一 Release。
 
 ## 1. 下载 App / Download the app
 
 从 [GitHub Releases](https://github.com/zihenghe04/AIBro/releases) 下载当前版本的 `AI-Bro-<version>-macos-arm64-preview.dmg`。公开仓库中的 Release 与源码均可直接访问。
 
-1. 下载 DMG 与对应的 SHA-256 校验文件。v0.6.3 的补充 DMG 使用 `SHA256SUMS-DMG.txt`，运行 `shasum -a 256 -c SHA256SUMS-DMG.txt` 核对。ZIP 仍可作为备用下载。
+1. 下载 DMG 与对应的 SHA-256 校验文件。v0.6.4 使用 `SHA256SUMS.txt`；运行 `shasum -a 256 AI-Bro-0.6.4-macos-arm64-preview.dmg`，与清单中同名文件的校验值核对。ZIP 仍可作为备用下载。
 2. 打开 DMG，将 `AI Bro.app` 拖到“应用程序”，正常退出旧版本后替换。应用升级保留已有工作区。
 3. 在设置中连接兼容 API。OpenAI 账号连接另外需要本机安装官方 Codex CLI；本版本不内置 Codex CLI。
 
