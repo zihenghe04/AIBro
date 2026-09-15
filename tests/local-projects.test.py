@@ -202,6 +202,12 @@ with tempfile.TemporaryDirectory(prefix='workstation-local-projects-') as tempor
         http_candidate = next(item for item in json.loads(body)['candidates'] if item['path'] == str(site))
         status, body = request(origin, '/__local/snapshot', 'POST', {'candidateId': http_candidate['id']})
         assert status == 200 and 'do-not-disclose' not in body.decode(), body[:200]
+        for endpoint in ('/__local/files', '/__local/read'):
+            payload={'candidateId':http_candidate['id'],'path':'README.md' if endpoint.endswith('read') else ''}
+            assert request(origin,endpoint,'POST',payload,source='https://attacker.invalid')[0]==403
+            assert request(origin,endpoint,'POST',payload,source=None)[0]==403
+            assert request(origin,endpoint,'POST',payload)[0]==200
+        assert request(origin,'/__local/read','POST',{'candidateId':http_candidate['id'],'path':'../outside/README.md'})[0]==403
         for path in ('/local_projects.py', '/local-roots.json', '/__local/files/README.md', '/__local/roots/%2e%2e', '/__local/roots.json'):
             assert request(origin, path)[0] == 404, path
         assert request(origin, '/__local/snapshot', 'POST', {'candidateId': '../outside'})[0] == 400
@@ -209,6 +215,7 @@ with tempfile.TemporaryDirectory(prefix='workstation-local-projects-') as tempor
         assert request(origin, '/__local/roots/' + http_root['root']['id'], 'DELETE', source=None)[0] == 403
         assert request(origin, '/__local/roots/' + http_root['root']['id'], 'DELETE')[0] == 200
         assert request(origin, '/__local/snapshot', 'POST', {'candidateId': http_candidate['id']})[0] == 403
+        assert request(origin, '/__local/read', 'POST', {'candidateId': http_candidate['id'], 'path': 'README.md'})[0] == 403
         assert (site / 'README.md').exists()
         status, body = request(origin, '/__local/roots', 'POST', {'preset': 'common-projects'})
         assert status == 200 and len(json.loads(body)['roots']) == 2, body

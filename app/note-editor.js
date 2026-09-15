@@ -14,7 +14,7 @@
     return frontmatter && /^\s*[\w\u3400-\u9fff][\w\u3400-\u9fff .-]*\s*:/m.test(frontmatter[1]) ? source.slice(frontmatter[0].length) : source;
   }
   const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-  const version = note => JSON.stringify([note.title, note.content, note.updatedAt, note.createdAt, note.projectId, note.workspace, note.sourceAttachmentIds, note.revisionHistory, note.userEditedAt, note.aiDraft, note.folderPath]);
+  const version = note => JSON.stringify([note.title, note.content, note.updatedAt, note.createdAt, note.projectId, note.workspace, note.sourceAttachmentIds, note.sourceNoteIds, note.revisionHistory, note.userEditedAt, note.aiDraft, note.folderPath, note.wikiSourceLinks]);
   function normalizeFolder(value) {
     const path = text(value).trim().replace(/\\/g, '/');
     if (path.length > 500) throw new Error('保存目录最多 500 个字符。');
@@ -54,7 +54,11 @@
     history.push({ title: text(note.title), content: text(note.content), ...(Object.hasOwn(note, 'folderPath') ? { folderPath: note.folderPath } : {}), updatedAt: note.updatedAt || note.createdAt || null, savedAt: now, userEdited: note.userEdited === true });
     const after = { ...note, title, content: session.content, userEdited: true, userEditedAt: now, updatedAt: now, revisionHistory: history };
     if (folderEdited) after.folderPath = folderPath;
-    if (applyingAiDraft) delete after.aiDraft;
+    if (applyingAiDraft) {
+      for(const field of ['sourceNoteIds','sourceAttachmentIds'])if(Array.isArray(note.aiDraft[field])){history.at(-1)[field]=clone(note[field]||[]);after[field]=[...new Set([...(note[field]||[]),...note.aiDraft[field]])];}
+      if(note.aiDraft.wikiSourceLinks){history.at(-1).wikiSourceLinks=clone(note.wikiSourceLinks||{});after.wikiSourceLinks={...(note.wikiSourceLinks||{}),...note.aiDraft.wikiSourceLinks};}
+      delete after.aiDraft;
+    }
     return { changed: true, note, before, after };
   }
   function createController(hooks, environment = root) {
@@ -116,7 +120,7 @@
         // Never roll back another writer's changes while a save is in flight.
         const current = (hooks.getState().notes || []).find(item => item.id === noteId);
         if (current && !current.archived && !current.deletedAt && version(current) === version(change.after)) {
-          for (const key of ['title', 'content', 'folderPath', 'userEdited', 'userEditedAt', 'updatedAt', 'revisionHistory', 'aiDraft']) {
+          for (const key of ['title', 'content', 'folderPath', 'wikiSourceLinks', 'sourceNoteIds', 'sourceAttachmentIds', 'userEdited', 'userEditedAt', 'updatedAt', 'revisionHistory', 'aiDraft']) {
             if (Object.hasOwn(change.before, key)) current[key] = clone(change.before[key]); else delete current[key];
           }
         }
@@ -230,7 +234,7 @@
       if (typeof renderMarkdown === 'function') ui.previewBody.innerHTML = renderMarkdown(visibleBody);
       else { const pre = node('pre', '', visibleBody || '这篇笔记还没有正文。'); ui.previewBody.replaceChildren(pre); }
       renderOutline();
-      ui.count.textContent = `${Array.from(session.content).length.toLocaleString()} 字符${session.appliedAiDraft ? ' · 已载入 AI 草稿' : ''}`;
+      ui.count.textContent = `${Array.from(session.content).length.toLocaleString()} 字符${session.appliedAiDraft ? ' · 已载入草稿' : ''}`;
     }
     function setMode(value) {
       mode = value === 'edit' ? 'edit' : value === 'preview' ? 'preview' : 'read';
@@ -239,7 +243,7 @@
       ui.preview.setAttribute('aria-pressed', String(mode !== 'edit'));
       ui.titleLabel.hidden = mode !== 'edit'; ui.folderLabel.hidden = mode !== 'edit'; ui.sourceLabel.hidden = mode !== 'edit';
       ui.save.hidden = ui.cancel.hidden = mode === 'read';
-      ui.edit.textContent = mode === 'edit' ? '编辑中' : '编辑';
+      ui.edit.textContent = mode === 'edit' ? '源码编辑中' : '源码';
       renderPreview();
     }
     function refreshMetadata() {
@@ -296,7 +300,7 @@
         } catch (error) {
           const current = (hooks.getState().notes || []).find(item => item.id === id);
           if (current && !current.archived && !current.deletedAt && version(current) === version(change.after)) {
-            for (const key of ['title', 'content', 'folderPath', 'userEdited', 'userEditedAt', 'updatedAt', 'revisionHistory', 'aiDraft']) {
+            for (const key of ['title', 'content', 'folderPath', 'wikiSourceLinks', 'sourceNoteIds', 'sourceAttachmentIds', 'userEdited', 'userEditedAt', 'updatedAt', 'revisionHistory', 'aiDraft']) {
               if (Object.hasOwn(change.before, key)) current[key] = clone(change.before[key]); else delete current[key];
             }
           }
@@ -343,7 +347,7 @@
       surface = node('section', 'note-document'); surface.setAttribute('aria-label', 'Markdown 笔记文档');
       const toolbar = node('div', 'note-document-toolbar'); toolbar.setAttribute('role', 'toolbar'); toolbar.setAttribute('aria-label', '笔记阅读与编辑');
       ui = {};
-      ui.edit = button('编辑', () => { setMode('edit'); ui.source.focus(); }); ui.edit.dataset.noteAction = 'edit';
+      ui.edit = button('源码', () => { setMode('edit'); ui.source.focus(); }); ui.edit.dataset.noteAction = 'edit';
       ui.preview = button('预览', () => { remember(); setMode(isDirty() || mode !== 'read' ? 'preview' : 'read'); }); ui.preview.dataset.noteAction = 'preview';
       ui.count = node('span', 'note-document-count');
       ui.save = button('保存', () => { void saveDocument(); }, 'note-document-primary'); ui.save.dataset.noteAction = 'save'; ui.save.title = '保存（⌘S / Ctrl+S）';
@@ -362,7 +366,7 @@
       const body = node('div', 'note-document-body');
       ui.sourceLabel = node('label', 'note-document-source'); ui.source = node('textarea'); ui.source.value = session.content; ui.source.maxLength = 1000000; ui.source.spellcheck = false; ui.source.setAttribute('aria-label', 'Markdown 正文'); ui.sourceLabel.append(node('span', 'note-document-pane-label', 'Markdown'), ui.source);
       const previewPane = node('div', 'note-document-preview-pane'); previewPane.append(node('span', 'note-document-pane-label', '实时预览')); ui.previewBody = node('article', 'note-document-preview'); previewPane.append(ui.previewBody); body.append(ui.sourceLabel, previewPane);
-      ui.ai = node('details', 'note-document-ai'); ui.ai.append(node('summary', '', 'AI 有待合并草稿'), node('p', '', '先放入编辑器检查，明确保存后才会替换正文。'));
+      ui.ai = node('details', 'note-document-ai'); ui.ai.append(node('summary', '', note.aiDraft?.origin==='manual-wiki-merge'?'有待审阅的合并草稿':'AI 有待合并草稿'), node('p', '', '先放入编辑器检查，明确保存后才会替换正文。'));
       ui.aiBody = node('pre');
       ui.applyAi = button('放入编辑器', () => {
         if (saving || !session) return;
@@ -373,7 +377,7 @@
           if (isDirty()) throw new Error('请先保存或取消当前修改，再载入 AI 草稿。');
           session.appliedAiDraft = JSON.stringify(latest.aiDraft); session.retainedDraft = false;
           ui.title.value = latest.aiDraft.title || ui.title.value; ui.source.value = latest.aiDraft.content; remember(); setMode('edit');
-          report('已放入 AI 草稿。请检查并修改，点击保存后才写入笔记。'); ui.source.focus();
+          report('已放入草稿。请检查并修改，点击保存后才写入笔记。'); ui.source.focus();
         } catch (error) { report(error.message); }
       }); ui.applyAi.dataset.noteAction = 'apply-ai'; ui.ai.append(ui.aiBody, ui.applyAi);
       ui.history = node('details', 'note-document-history'); ui.historySummary = node('summary'); ui.historyItems = node('div'); ui.history.append(ui.historySummary, node('p', '', '只读快照，保留最近 20 次修改前的版本。'), ui.historyItems);

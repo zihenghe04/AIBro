@@ -1,4 +1,4 @@
-name: macOS release preview
+name: Native macOS release preview
 on:
   push:
     tags: ['v*']
@@ -58,10 +58,10 @@ jobs:
           git archive --format=tar.gz --prefix="ai-bro-$VERSION/" -o "release-sources/AI-Bro-$VERSION-source.tar.gz" HEAD
       - name: Test
         run: |
-          npm run native:build
+          npm run test:native
           npm test
           npm run test:cloud
-      - name: Build Apple Silicon application with Python runtime
+      - name: Build native SwiftUI application with pinned Python runtime
         run: npm run release:mac -- --output "$RUNNER_TEMP/ai-bro-release" --cache "$RUNNER_TEMP/ai-bro-downloads"
       - name: Assemble release assets
         shell: bash

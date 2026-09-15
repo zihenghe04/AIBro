@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import math
 
 COLLECTIONS = ('projects', 'tasks', 'notes', 'imports', 'papers', 'conversations', 'links', 'attachments', 'trash', 'skills')
-DEVICE_FIELDS = frozenset(('localFolder', 'localPath', 'rootPath', 'rootId', 'path', 'absolutePath', 'permissionMode', 'permissions', 'approvalPolicy', 'sandboxMode', 'draft', 'draftAttachmentIds'))
+DEVICE_FIELDS = frozenset(('localFolder', 'localPath', 'rootPath', 'rootId', 'path', 'absolutePath', 'permissionMode', 'permissions', 'approvalPolicy', 'sandboxMode', 'draft', 'draftAttachmentIds','draftFileReferences'))
 MISSING = object()
 
 

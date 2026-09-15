@@ -49,7 +49,7 @@
   function reusable(item, url) {
     return active(item) && item.status !== 'parse-error' && (item.fileStored || String(item.content || '').trim()) && [item.url, item.finalUrl].some(value => sourceURL(value) === url);
   }
-  async function acquire({ goal, imports = [], attachments = [], signal, fetch: fetcher, assertActive = () => {}, onSource = () => {}, stage = () => {}, permissionMode, confirmRead }) {
+  async function acquire({ goal, imports = [], attachments = [], signal, fetch: fetcher, assertActive = () => {}, onSource = () => {}, stage = () => {}, permissionMode, confirmRead, onTool = () => {} }) {
     const urls = links(goal);
     const check = () => { if (signal?.aborted) throw cancelled(); assertActive(); };
     check();
@@ -62,6 +62,9 @@
     const items = [];
     for (const url of urls) {
       check();
+      const activity={kind:'tool',id:'web-read:'+url,name:'web_read',url,text:url};
+      onTool({...activity,status:'running'});
+      try {
       let item = [...attachments, ...imports].find(candidate => reusable(candidate, url));
       let created = false;
       if (item) stage(`复用已保存的资料：${item.name}`, 'done');
@@ -87,6 +90,8 @@
       await onSource(item, created); check();
       if (!items.some(entry => entry.id === item.id)) items.push(item);
       if (created) stage(`已保存原件：${item.name}`, 'done');
+      onTool({...activity,status:'completed',text:item.name||url});
+      }catch(error){onTool({...activity,status:error.code==='CANCELLED'||signal?.aborted?'cancelled':'failed',text:error.message});throw error;}
     }
     return items;
   }

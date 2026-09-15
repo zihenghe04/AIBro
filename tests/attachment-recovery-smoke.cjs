@@ -81,8 +81,20 @@ async function run(){
  await evaluate(`sendMessage({goal:'Read the saved note'});true`);await until(()=>evaluate('qaKnowledgeCalls===2&&!sendMessage.busy'),'on-demand knowledge reading');
  assert.equal(await evaluate('state.agentRuns.at(-1).status'),'completed');
  await evaluate('flushWorkspace();true');await until(()=>evaluate('!serverSaveInFlight&&!serverSaveQueued'),'draft persisted');
+ // Indexed RAG across a large synthetic library, with a real renderer and mocked model.
+ await evaluate(`state.projects.push({id:'rag-project',name:'Synthetic literature',workspace:'科研'});state.notes.push(...Array.from({length:150},(_,i)=>({id:'rag-'+i,projectId:'rag-project',workspace:'科研',title:'Study '+i,content:i===149?'zirconium late evidence':'ordinary baseline results'})));currentConversation().projectId='rag-project';currentConversation().workspace='科研';window.qaRagCalls=0;AgentTransport.requestPlan=async options=>{qaRagCalls++;if(qaRagCalls===1){if(!JSON.stringify(options.input).includes('local-bm25'))throw Error('Index context missing');return JSON.stringify({knowledgeRequests:[{type:'search',query:'zirconium'}],actions:[]});}if(!JSON.stringify(options.input).includes('zirconium late evidence'))throw Error('Late passage missing');return JSON.stringify({workspace:'科研',message:'Located the saved evidence.',actions:[]});};sendMessage({goal:'Locate evidence in the saved library'});true`);
+ await until(()=>evaluate('qaRagCalls===2&&!sendMessage.busy'),'indexed RAG round trip');
+ assert.equal(await evaluate('state.agentRuns.at(-1).status'),'completed');
+ assert.equal(await evaluate('state.agentRuns.at(-1).retrievalCoverage.eligibleRecords'),150);
+ assert.equal(await evaluate('state.agentRuns.at(-1).knowledgeSearches.length'),1);
+ assert.equal(await evaluate(`currentConversation().messages.at(-1).retrievedSources.some(e=>e.id==='rag-149')`),true);
+ await wait(500);await evaluate(`document.querySelector('#messageList').lastElementChild.scrollIntoView({block:'end',behavior:'instant'});true`);await wait(100);
+ fs.writeFileSync(path.join(TEMP,'indexed-rag.png'),(await win.webContents.capturePage()).toPNG());
+ await evaluate('flushWorkspace();true');await until(()=>evaluate('!serverSaveInFlight&&!serverSaveQueued'),'indexed RAG persistence');
+ await win.reload();await until(()=>evaluate('typeof storageHydrated!=="undefined"&&storageHydrated'),'index reload');
+ assert.equal(await evaluate(`ContextRetrieval.searchIndex(state,{projectId:'rag-project',query:'zirconium'}).entries[0].recordId`),'rag-149');
  assert.deepEqual(forbidden,[]);
- console.log(JSON.stringify({passed:true,checks:['real drag upload','oversized PDF rendered','corrupt attachment recoverable','retry excludes only selected attachment','draft preserved','failure deletion persists after reload','original files retained','supplemental turn sends 2 original plus 3 new files with the original goal','full review rereads originals','saved draft adopted without model call','on-demand knowledge read round trip','no external requests'],screenshots:TEMP}));
+ console.log(JSON.stringify({passed:true,checks:['real drag upload','oversized PDF rendered','corrupt attachment recoverable','retry excludes only selected attachment','draft preserved','failure deletion persists after reload','original files retained','supplemental turn sends 2 original plus 3 new files with the original goal','full review rereads originals','saved draft adopted without model call','on-demand knowledge read round trip','150 record indexed RAG round trip','derived index rebuilt after reload','no external requests'],screenshots:TEMP}));
 }
 function finish(code){clearTimeout(deadline);win?.destroy();server?.kill();app.exit(code)}
 run().then(()=>finish(0)).catch(e=>{console.error(e.stack);finish(1)});

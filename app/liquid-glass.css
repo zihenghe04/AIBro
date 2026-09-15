@@ -10,7 +10,7 @@ body.liquid-glass[data-view] {
   --line:rgba(255,255,255,.075);--line-strong:rgba(255,255,255,.14);--rim:rgba(255,255,255,.09);
   --surface-wash:linear-gradient(155deg,#ffffff04,transparent 56%);
   --ambient:radial-gradient(ellipse at -8% 5%,#ffffff08,transparent 43%),radial-gradient(ellipse at 110% 105%,#00000012,transparent 42%);
-  --lg-reflection:rgba(255,255,255,.055);--lg-rim:rgba(255,255,255,.12);--lg-rim-muted:rgba(255,255,255,.035);
+  --lg-reflection:rgba(255,255,255,.10);--lg-rim:rgba(255,255,255,.24);--lg-rim-muted:rgba(255,255,255,.035);
   --lg-edge-shadow:rgba(0,0,0,.3);--lg-nav:rgba(36,36,36,.53);--lg-control:rgba(62,62,62,.43);--lg-popup:rgba(40,40,40,.91);
   --lg-highlight:rgba(255,255,255,.035);--lg-lens:rgba(255,255,255,.015);--lg-content:#202022;--lg-sheet:#252527;
   --lg-select:linear-gradient(130deg,#d7d7d725,#a5a5a518);--lg-inset:rgba(0,0,0,.16);
@@ -93,21 +93,21 @@ body.liquid-glass[data-view] .composer {
   border:1px solid var(--line-strong);border-radius:25px;
   background:radial-gradient(350px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),var(--lg-highlight),transparent 72%),linear-gradient(155deg,var(--lg-reflection),transparent 11% 80%,var(--lg-lens)),var(--lg-control);
   backdrop-filter:blur(32px) saturate(1.02);-webkit-backdrop-filter:blur(32px) saturate(1.02);
-  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 3px #00000012,0 10px 26px -12px var(--lg-edge-shadow);
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 3px #00000012,0 14px 32px -14px var(--lg-edge-shadow);
   transition:box-shadow 220ms ease,border-color 220ms ease;
 }
 body.liquid-glass[data-view] .composer::after {
-  content:'';position:absolute;inset:0;pointer-events:none;opacity:.32;border-radius:inherit;padding:1px;
+  content:'';position:absolute;inset:0;pointer-events:none;opacity:.65;border-radius:inherit;padding:1px;
   background:radial-gradient(240px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),var(--lg-rim),transparent 75%),linear-gradient(145deg,var(--lg-rim),transparent 30% 70%,var(--lg-rim-muted));
   -webkit-mask:linear-gradient(#ffffff 0 0) content-box,linear-gradient(#ffffff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
 }
 body.liquid-glass[data-view] .composer:focus-within {
   border-color:color-mix(in srgb,var(--accent) 43%,var(--line-strong));
-  box-shadow:inset 0 1px 0 var(--lg-rim),0 0 0 2px var(--accent-soft),0 10px 26px -12px var(--lg-edge-shadow);
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 0 0 2px var(--accent-soft),0 14px 32px -14px var(--lg-edge-shadow);
 }
 /* The SVG map spatially remaps only pixels BEHIND this element. Unlike filter:
    url(...), backdrop-filter never warps the textarea, attachments, or controls.
-   The center uses a 9px background frost; only the rim preserves sharp bending.
+   The center uses a 14px background frost; only the rim preserves sharp bending.
    A translucent center veil supports foreground contrast without sealing edges. */
 body.liquid-glass[data-view] .conversation-pane[data-glass-chat=true] .message-list {
   margin-bottom:calc(-1 * var(--lg-composer-height,0px));
@@ -116,20 +116,20 @@ body.liquid-glass[data-view] .conversation-pane[data-glass-chat=true] .message-l
   /* A scroll-edge veil separates small foreground controls from dense text.
      Content remains fully visible above the floating composer, then softly
      dissolves as it enters the lens instead of showing sharp side-edge glyphs. */
-  mask-image:linear-gradient(to bottom,#000000 0,#000000 calc(100% - var(--lg-composer-height,0px) - 12px),#00000099 calc(100% - var(--lg-composer-height,0px) + 12px),#00000033 calc(100% - var(--lg-composer-height,0px) + 40px),#00000033 100%);
+  mask-image:linear-gradient(to bottom,#000000 0,#000000 calc(100% - var(--lg-composer-height,0px) - 12px),#00000099 calc(100% - var(--lg-composer-height,0px) + 12px),transparent calc(100% - var(--lg-composer-height,0px) + 32px),transparent 100%);
 }
 body.liquid-glass[data-view] .conversation-pane[data-glass-chat=true] .composer {z-index:2}
 body.liquid-glass[data-view] .composer[data-glass-refracting=true] {
-  --lg-center-veil:#25252770;--lg-active-center-veil:#222224b8;
+  --lg-center-veil:#25252780;--lg-active-center-veil:#222224c0;
   background:linear-gradient(180deg,transparent,var(--lg-center-veil) 22px calc(100% - 22px),transparent),radial-gradient(310px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),#ffffff05,transparent 70%),linear-gradient(170deg,#ffffff0c,#20202208 24% 78%,transparent),#30303248;
   backdrop-filter:var(--lg-refraction-filter) saturate(1.02);-webkit-backdrop-filter:var(--lg-refraction-filter) saturate(1.02);
-  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 2px #00000010,0 10px 26px -12px var(--lg-edge-shadow);
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 2px #00000010,0 14px 32px -14px var(--lg-edge-shadow);
 }
 body.liquid-glass[data-view].light-mode .composer[data-glass-refracting=true] {
-  --lg-center-veil:#ffffff70;--lg-active-center-veil:#ffffffb0;
+  --lg-center-veil:#ffffff80;--lg-active-center-veil:#ffffffc0;
   background:linear-gradient(180deg,transparent,var(--lg-center-veil) 22px calc(100% - 22px),transparent),radial-gradient(310px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),#ffffff24,transparent 70%),linear-gradient(170deg,#ffffff38,#f7f7f512 22% 80%,transparent),#ffffff2e;
 }
-body.liquid-glass[data-view] .composer[data-glass-refracting=true]:focus-within {border-color:color-mix(in srgb,var(--accent) 43%,var(--line-strong));box-shadow:inset 0 1px 0 var(--lg-rim),0 0 0 2px var(--accent-soft),0 10px 26px -12px var(--lg-edge-shadow)}
+body.liquid-glass[data-view] .composer[data-glass-refracting=true]:focus-within {border-color:color-mix(in srgb,var(--accent) 43%,var(--line-strong));box-shadow:inset 0 1px 0 var(--lg-rim),0 0 0 2px var(--accent-soft),0 14px 32px -14px var(--lg-edge-shadow)}
 body.liquid-glass[data-view] .composer[data-glass-refracting=true]:focus-within,body.liquid-glass[data-view].light-mode .composer[data-glass-refracting=true]:focus-within {--lg-center-veil:var(--lg-active-center-veil)}
 /* Resting controls are thin fills on glass: no nested backdrop filtering. */
 body.liquid-glass[data-view] .sidebar .nav-item,body.liquid-glass[data-view] .new-task,body.liquid-glass[data-view] .sidebar-theme-control {border-radius:13px}

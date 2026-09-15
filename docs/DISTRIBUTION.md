@@ -1,26 +1,20 @@
 # 安装与构建 / Install and build
 
-AI Bro 提供两条路径，使用同一份版本代码和资源清单。
+## 下载原生 Mac App
 
-> [下载 v0.6.5 / Download v0.6.5](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.5)：Apple Silicon macOS 预览版。安装包、对应源码与 SHA-256 校验文件均在同一 Release。
+[AI Bro 0.7.0](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0) · Apple Silicon · macOS 14+。原生 Liquid Glass 需要 macOS 26，较早版本使用兼容材质。
 
-## 1. 下载 App / Download the app
+1. 从 Release 下载 DMG 和 `SHA256SUMS.txt`，用 `shasum -a 256 AI-Bro-0.7.0-macos-arm64-preview.dmg` 核对同名校验值。
+2. 正常退出旧版，将 DMG 内的 AI Bro 拖到 Applications。已有工作区保留；更新前建议备份。
+3. 在设置中配置兼容 API，或连接已安装的官方 Codex CLI 账号。ChatGPT 订阅不等于 API / embedding 额度。
 
-从 [GitHub Releases](https://github.com/zihenghe04/AIBro/releases) 下载当前版本的 `AI-Bro-<version>-macos-arm64-preview.dmg`。公开仓库中的 Release 与源码均可直接访问。
+内置 Python、PDF 运行时，无需为运行 App 安装 Node.js、Homebrew 或 Python。当前是 ad-hoc 签名预览包，尚未 Apple 公证；首次打开可能需要在系统“隐私与安全性”中允许该应用。不要关闭系统整体安全保护。
 
-1. 下载 DMG 与对应的 SHA-256 校验文件。v0.6.5 使用 `SHA256SUMS.txt`；运行 `shasum -a 256 AI-Bro-0.6.5-macos-arm64-preview.dmg`，与清单中同名文件的校验值核对。ZIP 仍可作为备用下载。
-2. 打开 DMG，将 `AI Bro.app` 拖到“应用程序”，正常退出旧版本后替换。应用升级保留已有工作区。
-3. 在设置中连接兼容 API。OpenAI 账号连接另外需要本机安装官方 Codex CLI；本版本不内置 Codex CLI。
+Download the DMG from the public release, verify its SHA-256, quit the old app, and drag AI Bro to Applications. Your workspace is retained. The preview is ad-hoc signed, not Apple-notarized. Intel, Windows and Linux installers are not provided.
 
-当前发行包支持 **Apple Silicon（M 系列）Mac、macOS 12+**；原生 Liquid Glass 需要 macOS 26。Intel、Windows、Linux 发行包暂未提供。发行包内置 Python 与 PDF 运行时，不必先安装 Node.js、Python 或 Homebrew。
+## 从源码构建
 
-预览包使用 ad-hoc 签名，**尚未获得 Apple Developer ID 签名与公证**。下载后可能被 Gatekeeper 拦截；确认下载来源和校验值后，按 macOS“系统设置 → 隐私与安全性”显示的提示允许本次打开。不要关闭系统整体安全保护。公开商用分发前仍需完成正式签名、公证和依赖许可审核。
-
-Download the Apple Silicon DMG from the public [Releases page](https://github.com/zihenghe04/AIBro/releases). Open it and drag `AI Bro.app` to Applications after quitting the older copy. Python and PDF dependencies are included. Node.js and Homebrew are not required to run the release app. A compatible API connection is configured in Settings; account sign-in additionally requires an installed official Codex CLI. The preview is ad-hoc signed, not notarized, and may require an explicit per-app approval in macOS Privacy & Security. Native glass requires macOS 26; other supported versions use the web material.
-
-## 2. 从源代码构建 / Build from source
-
-需要 macOS、Node.js 24（发行构建推荐）、Python 3.10+。原生玻璃编译另外需要 macOS 26 SDK 和 Node-API 头文件；缺少时，开发构建使用 CSS 材质。
+需要 Apple Silicon Mac、macOS 26 SDK / Xcode 26 Command Line Tools、Node.js 24、Python 3.12。编译目标为 macOS 14。原生导航和控件使用 SwiftUI / AppKit，文件与文档工具使用 WKWebView。
 
 ```sh
 git clone https://github.com/zihenghe04/AIBro.git
@@ -29,39 +23,23 @@ npm ci
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-AI_WORKSTATION_PYTHON="$PWD/.venv/bin/python" npm start
+npm test
+npm run test:native
+npm run release:mac -- --output "$PWD/release/native-0.7.0"
 ```
 
-构建本地开发 App（仍依赖你配置的 Python）：
+发行脚本要求已提交且无跟踪文件改动的 Git 工作区，以及不存在的新输出目录。它下载 SHA-256 锁定的独立 Python 与 PDF 依赖，编译原生 App，检查签名、无系统 Python 的启动、PDF 预览和资源隔离，再生成 ZIP / DMG。`--cache <目录>` 可复用校验通过的下载。不会替换正在运行的应用。
 
-```sh
-npm run app
-```
+`npm run start:native` 用于开发预览；旧 Electron 开发入口暂时保留，但不再是发行包。打包脚本为 `scripts/release-native.js`，锁文件为 `scripts/release-runtime-lock.json`。
 
-构建含独立 Python 的 Apple Silicon 发行包：
+## 发布与源码一致性
 
-```sh
-npm run release:mac -- --output "$PWD/release/preview"
-```
+公开仓库 `zihenghe04/AIBro` 的标签 `v<version>` 必须与两个 package.json 一致。CI 在 macOS 26 上检查测试并生成原生预发布；手动运行只产生构建附件。`release-manifest.json` 记录对应 Git 提交、源文件摘要、App 摘要与运行时信息。源码归档从同一提交生成。
 
-输出目录必须不存在，防止覆盖已有产物。脚本不替换正在运行的 App。下载运行时的 URL、版本与 SHA-256 固定在 `scripts/release-runtime-lock.json`；第三方许可证与依赖信息随包保留。第一次构建需要联网，后续可通过 `--cache <目录>` 复用校验通过的下载。
+开发仓库的私有历史不应作为发布分支直接推送；在公开仓库独立提交经检查的源码，不包含本机工作区、密钥、个人资料、录制缓存或未跟踪实验文件。
 
-Use the commands above to build from source. `npm run app` creates a developer bundle; `npm run release:mac` creates the portable arm64 distribution. The release builder rejects an existing output directory and verifies all locked runtime downloads.
+## 依赖与许可
 
-## 持续发布 / Release automation
+AI Bro 采用 AGPL-3.0-only。发行包保留 CPython、PyMuPDF / MuPDF、certifi 等依赖许可，随版本提供对应依赖源码和 `THIRD-PARTY-NOTICES.txt`。商业使用需继续遵守相应许可。用户的工作区内容不属于应用源码分发范围。
 
-`.github/workflows/release.yml` 在 `macos-26` 的 arm64 runner 上安装锁定依赖、执行测试、编译原生组件，再构建 App、完整源码包和 SHA-256 清单。推送与 `package.json` 一致的 `v<version>` 标签会创建预发布版本；手动运行只生成 Actions 构建产物。
-
-```sh
-# 先修改版本、完成检查并提交代码，再发布标签。
-git tag vX.Y.Z
-git push origin vX.Y.Z
-```
-
-不会更改仓库可见性，不含自动更新。演示视频由独立录制流程产生，人工检查后作为同版本 Release 附件上传。发布者应核对源码包与打包 manifest 指向同一提交。
-
-The workflow creates a prerelease on a version tag, or downloadable CI artifacts on a manual run. It never changes repository visibility. Demo films are separate, privacy-reviewed release assets. The application does not yet auto-update.
-
-## 依赖与源码 / Dependencies and source
-
-发行包保留 Electron、CPython、PyMuPDF/MuPDF、certifi 等依赖的许可证；`THIRD-PARTY-NOTICES.txt` 与运行时 manifest 记录对应版本和来源。AI Bro 代码以 AGPL-3.0-only 发布，当前 PyMuPDF/MuPDF 依赖采用其 AGPL 许可路线。发行包包含完整许可文本；对应版本的应用源码、构建脚本及 PyMuPDF/MuPDF 源码应与二进制一同提供，第三方组件保留原许可。商业使用是允许的，仍需遵守这些条件。
+模型服务及可选自托管同步各自需要配置；应用没有后台静默自动更新。演示素材是隔离示例，不打包到用户数据目录。

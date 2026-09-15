@@ -6,7 +6,7 @@
  function collect(state,conversation){
   const messages=list(conversation?.messages).filter(m=>m.role==='user'&&!m.deletedAt);
   const sentIds=[...new Set(messages.flatMap(m=>[...list(m.attachmentIds),...list(m.attachments).map(a=>a.id)]))];
-  const excluded=new Set();
+  const excluded=new Set(list(conversation?.excludedFileReferenceKeys).flatMap(value=>{try{const pair=JSON.parse(value);return pair[0]==='import'?[pair[1]]:[];}catch{return [];}}));
   for(const m of messages)if(Array.isArray(m.retryAttachmentIds))for(const id of list(m.attachmentIds))if(!m.retryAttachmentIds.includes(id))excluded.add(id);
   const runs=list(state.agentRuns).filter(r=>r.conversationId===conversation?.id&&!r.deletedAt);
   const read=new Set(runs.filter(r=>r.status==='completed').flatMap(r=>list(r.attachmentIds)));

@@ -17,8 +17,8 @@ COLLECTIONS = ('projects', 'tasks', 'notes', 'imports', 'papers', 'conversations
 COMMON = set('id title name description workspace projectId project folderId folderPath createdAt updatedAt archived deletedAt tags sourceAttachmentIds sourceAttachmentId sourceConversationId agentRunId'.split())
 FIELDS = {
  'projects': COMMON | set('status dueAt deadline completedAt color icon'.split()),
- 'tasks': COMMON | set('status priority startAt dueAt completedAt checklist sourceNoteIds'.split()),
- 'notes': COMMON | set('content kind paperId userEdited userEditedAt revisionHistory aiDraft sourceNoteIds relatedNoteIds mergedNoteIds consolidatedSections'.split()),
+ 'tasks': COMMON | set('status priority startAt dueAt completedAt checklist sourceNoteIds dependsOn'.split()),
+ 'notes': COMMON | set('content kind paperId userEdited userEditedAt revisionHistory aiDraft sourceNoteIds relatedNoteIds mergedNoteIds consolidatedSections projectMemoryType memoryDate memoryRunIds managedIndex wikiFileBacked wikiCategory wikiMigratedAt wikiImportHash wikiOriginalName wikiImportBatch'.split()),
  'imports': COMMON | set('originalName content pages parser mimeType size url warning error blobHash analysis importOrigin'.split()),
  'papers': COMMON | set('noteId authors year venue doi arxivId url sourceUrl canonicalKey metadata paperType structured userEdits confidence reviewed reviewedAt relations'.split()),
  'conversations': COMMON | set('attachments skillId modelOverride'.split()),
@@ -140,6 +140,8 @@ class SyncStore:
                 if not isinstance(identifier,str) or not re.fullmatch(r'\.cloud-undo-[A-Za-z0-9_-]+',identifier):
                     raise ValueError('无效的附件事务标识。')
                 self._put(db,'filetx:'+identifier,True)
+            # File-backed stores attach local mappings during publication.
+            self._save_snapshot(db, snapshot)
     def snapshot_at(self, revision):
         with self.db() as db:
             current=self._get(db,'snapshot')
@@ -208,6 +210,7 @@ class SyncStore:
                 self._enqueue(db,kind,identifier,value,deleted,version,int(bool(conflict)))
             self._save_snapshot(db,snapshot)
             if before_commit: before_commit(snapshot)
+            self._save_snapshot(db,snapshot)
         return snapshot
     def pending(self, limit=100):
         with self.db() as db:

@@ -97,7 +97,7 @@
     for (const channel of ['R', 'G']) { const fn = create(`feFunc${channel}`); fn.setAttribute('type', 'linear'); fn.setAttribute('slope', String(255 / 254)); fn.setAttribute('intercept', String(-1 / 254)); calibration.append(fn); }
     displacement.setAttribute('in', 'SourceGraphic'); displacement.setAttribute('in2', 'lens-map'); displacement.setAttribute('xChannelSelector', 'R'); displacement.setAttribute('yChannelSelector', 'G'); displacement.setAttribute('result', 'refracted');
     softness.setAttribute('in', 'refracted'); softness.setAttribute('stdDeviation', '.35'); softness.setAttribute('result', 'clear-glass');
-    frost.setAttribute('in', 'refracted'); frost.setAttribute('stdDeviation', '9'); frost.setAttribute('edgeMode', 'duplicate'); frost.setAttribute('result', 'frosted-glass');
+    frost.setAttribute('in', 'refracted'); frost.setAttribute('stdDeviation', '14'); frost.setAttribute('edgeMode', 'duplicate'); frost.setAttribute('result', 'frosted-glass');
     rimMask.setAttribute('in', 'lens-map-raw'); rimMask.setAttribute('type', 'matrix'); rimMask.setAttribute('values', '0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 1 0 0'); rimMask.setAttribute('result', 'rim-mask');
     rimLayer.setAttribute('in', 'clear-glass'); rimLayer.setAttribute('in2', 'rim-mask'); rimLayer.setAttribute('operator', 'in'); rimLayer.setAttribute('result', 'clear-rim');
     centerLayer.setAttribute('in', 'frosted-glass'); centerLayer.setAttribute('in2', 'rim-mask'); centerLayer.setAttribute('operator', 'out'); centerLayer.setAttribute('result', 'frosted-center');
@@ -107,7 +107,7 @@
     composite.setAttribute('k1', '0'); composite.setAttribute('k2', '1'); composite.setAttribute('k3', '1'); composite.setAttribute('k4', '0');
     filter.append(mapImage, calibration, displacement, softness, frost, rimMask, rimLayer, centerLayer, composite); defs.append(filter); svg.append(defs); body.append(svg);
     let timer = null, destroyed = false, cached = '', running = false, nativeActive = false;
-    const enabled = () => !destroyed && !nativeActive && !media.transparency.matches && !media.contrast.matches && !document.hidden;
+    const enabled = () => !destroyed && !media.transparency.matches && !media.contrast.matches && !document.hidden;
     function deactivate() { element.removeAttribute('data-glass-refracting'); element.style.removeProperty('--lg-refraction-filter'); }
     function update() {
       timer = null;

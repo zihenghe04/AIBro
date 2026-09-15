@@ -1,0 +1,177 @@
+/* Native preview only. Stable reading surfaces; translucent chrome above content. */
+html body.aibro-native[data-view],html body.aibro-native[data-view].light-mode {--accent:#087f70;--accent-soft:#087f7012;--green:#087f70;--orange:#aa7616;--red:#c25766;--text:#20382e;--muted:#59756a;--faint:#839c90;--bg:#f5faf8;--canvas:#f8fcfa;--panel:#ffffff;--panel-raised:#fff;--panel-hover:#ebf8f2;--glass:#fbfffded;--line:#30382d12;--line-strong:#30382d24;--surface-wash:linear-gradient(125deg,#fff8,transparent);--shadow-card:0 5px 18px #181f1805;--shadow-canvas:none;--shadow-button:0 2px 5px #181f1807;--rim:#ffffffbd;padding:0!important;background:var(--bg)!important;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden!important;height:100dvh!important;}
+html body.aibro-native[data-view]:not(.light-mode){--accent:#65d7bb;--accent-soft:#65d7bb14;--green:#65d7bb;--orange:#e7be59;--red:#f39ca3;--text:#eef1f0;--muted:#b4bfbb;--faint:#839c90;--bg:#1b1e20;--canvas:#1d2022;--panel:#25292b;--panel-raised:#2b3032;--panel-hover:#303937;--glass:#25292bed;--line:#e1e8d812;--line-strong:#e1e8d827;--surface-wash:linear-gradient(125deg,#ffffff03,transparent);--rim:#ffffff18;--shadow-card:0 8px 24px #00000010;}
+body.aibro-native #sidebar,body.aibro-native .topbar,body.aibro-native #conversationNavigator,body.aibro-native #onboardingLayer {display:none!important}
+body.aibro-native>.main {display:flex!important;width:100%!important;height:100dvh!important;min-width:0;margin:0!important;border:0!important;border-radius:0!important;background:var(--canvas)!important;box-shadow:none!important}
+body.aibro-native .chat-shell,body.aibro-native .chat-grid{grid-template-columns:minmax(0,1fr)!important}
+body.aibro-native #agent{height:100dvh!important}
+body.aibro-native .view:not(.agent-view){max-width:1400px;padding:30px 36px;margin:0 auto;width:100%}
+body.aibro-native .conversation-pane{border-radius:0!important;background:var(--canvas)!important}
+body.aibro-native .reading-pane {width:100%!important;flex-basis:auto!important;margin:0!important;min-width:0;border:0;border-radius:0!important;background:var(--canvas);height:100dvh;box-shadow:none;animation:native-reader-in .28s cubic-bezier(.22,.75,.25,1)}
+body.aibro-native.reading-open:not(.reading-expanded){display:grid!important;grid-template-columns:minmax(320px,1fr) var(--workspace-reader-width)!important;gap:8px;background:var(--bg)!important}
+body.aibro-native.reading-open:not(.reading-expanded)>.main{display:flex!important}
+body.aibro-native.reading-expanded{display:block!important}body.aibro-native.reading-expanded>.main{display:none!important}
+body.aibro-native #readingExpand{display:inline-grid!important}
+body.aibro-native #readingBack{display:none!important}
+body.aibro-native .workspace-separator{width:8px;z-index:30;touch-action:none;padding:0;border:0;border-radius:0;background:transparent}
+body.aibro-native .workspace-separator:after{top:50%;bottom:auto;left:2px;width:4px;height:40px;transform:translateY(-50%);background:var(--faint);opacity:.4;border-radius:4px;box-shadow:none;transition:background .14s,opacity .14s,height .14s}
+body.aibro-native .workspace-separator:hover:after,body.aibro-native.workspace-resizing .workspace-separator:focus:after{height:56px;background:var(--accent);opacity:.85;box-shadow:none}
+body.aibro-native .workspace-separator[tabindex]:focus-visible{outline:none;box-shadow:none}
+body.aibro-native .workspace-separator:focus-visible:after{background:var(--accent);opacity:1;outline:2px solid var(--accent);outline-offset:2px}
+body.aibro-native.workspace-resizing *{transition:none!important;animation:none!important;user-select:none!important}
+body.aibro-native .page-heading h1{font-size:30px;letter-spacing:-.04em;line-height:1.25}
+body.aibro-native .page-heading p{font-size:13px;line-height:1.8}
+body.aibro-native :is(.panel,.planning-card,.metric,.overview-card,.project-metric,.result-card,.entity-card){border:1px solid var(--line);border-radius:18px;background:var(--panel);box-shadow:var(--shadow-card)}
+body.aibro-native :is(button,.source-link,.entity-row,.tree-node,.result-card){transition:background .16s,border-color .16s,box-shadow .16s,transform .16s;}
+body.aibro-native button:active:not(:disabled){transform:scale(.98)}
+body.aibro-native button:focus-visible,body.aibro-native [tabindex]:not(.workspace-separator):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+body.aibro-native :is(.primary,.send-btn){background:var(--accent)!important;color:var(--canvas)!important;border-color:transparent!important;box-shadow:0 4px 12px var(--accent-soft)}
+body.aibro-native .entity-row{border-radius:12px;padding:14px 12px}
+body.aibro-native .entity-row:hover{background:var(--panel-hover);box-shadow:0 4px 12px #203b2a08}
+body.aibro-native :is(.secondary,.text-action,.reading-control){border-radius:10px;}
+body.aibro-native :is(.reading-toolbar,.reading-tabs,.note-editor-toolbar){background:var(--glass);backdrop-filter:blur(24px) saturate(1.12);-webkit-backdrop-filter:blur(24px) saturate(1.12);border-color:var(--line)}
+body.aibro-native .reading-toolbar{height:54px;padding:10px 16px}
+body.aibro-native .reading-tabs{gap:6px;padding:8px 10px}
+body.aibro-native .reading-tab{border-radius:10px;border:1px solid transparent;min-width:0}
+body.aibro-native .reading-tab.active{border-color:var(--line-strong);background:var(--panel);box-shadow:0 2px 5px #203b2a08}
+body.aibro-native .reading-tab.active:after{display:none}
+body.aibro-native #previewContent{font-size:14px!important;line-height:1.95!important;color:var(--text)}
+body.aibro-native .note-reading :is(h1,h2,h3){letter-spacing:-.03em;line-height:1.5;margin-top:1.6em}
+body.aibro-native .note-reading blockquote{border-left:3px solid var(--accent);padding:10px 16px;border-radius:0 10px 10px 0;background:var(--accent-soft)}
+body.aibro-native .note-reading table{border-radius:10px;overflow:hidden;border-color:var(--line)}
+body.aibro-native :is(input,textarea,select){border-color:var(--line-strong);border-radius:10px;background:var(--panel);color:var(--text);font:inherit}
+body.aibro-native :is(input,textarea,select):focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);outline:none}
+body.aibro-native .chat-message{line-height:1.85;font-size:14px}
+body.aibro-native .chat-message.user{background:var(--panel-hover);border:1px solid var(--line);border-radius:20px 20px 6px 20px;box-shadow:none}
+body.aibro-native .chat-composer{background:var(--panel)!important;border:1px solid var(--line-strong)!important;border-radius:24px!important;box-shadow:0 8px 30px #153a2510!important;backdrop-filter:none!important;filter:none!important}
+body.aibro-native .chat-composer:focus-within{border-color:var(--accent)!important;box-shadow:0 8px 28px var(--accent-soft)!important}
+body.aibro-native .chat-composer:before,body.aibro-native .chat-composer:after{display:none!important}
+body.aibro-native dialog:not(#previewDialog){background:var(--canvas);color:var(--text);border:1px solid var(--line-strong);border-radius:24px;box-shadow:0 28px 90px #10251e30;max-height:calc(100dvh - 36px);overflow:auto;transition:opacity .2s ease,transform .25s cubic-bezier(.2,.8,.2,1),display .25s allow-discrete,overlay .25s allow-discrete;opacity:0;transform:translateY(12px) scale(.97)}
+body.aibro-native dialog[open]:not(#previewDialog){opacity:1;transform:translateY(0) scale(1)}
+@starting-style{body.aibro-native dialog[open]:not(#previewDialog){opacity:0;transform:translateY(12px) scale(.97)}}
+body.aibro-native dialog:not(#previewDialog)::backdrop{background:#10251b38;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);transition:opacity .2s,display .2s allow-discrete,overlay .2s allow-discrete}
+body.aibro-native .dialog-header{padding-bottom:18px;border-bottom:1px solid var(--line)}
+body.aibro-native .dialog-actions{padding-top:16px;gap:10px}
+body.aibro-native .toast{background:var(--glass);color:var(--text);border:1px solid var(--line-strong);border-radius:14px;box-shadow:0 8px 24px #14352622;backdrop-filter:blur(24px)}
+@keyframes native-reader-in{from{opacity:0}to{opacity:1}}
+body.aibro-native.native-background-render *,body.aibro-native.native-background-render *:before,body.aibro-native.native-background-render *:after{animation:none!important;transition:none!important}
+/* A docked document is not a second floating dialog entrance. */
+body.aibro-native .reading-pane #previewDialog[open]{animation:none;transform:none;opacity:1}
+@media(max-width:660px){body.aibro-native.reading-open{display:block!important}body.aibro-native.reading-open>.main{display:none!important}body.aibro-native #readingBack{display:inline-grid!important}body.aibro-native #readingExpand{display:none!important}body.aibro-native .view:not(.agent-view){padding:22px}}
+@media(prefers-reduced-motion:reduce){body.aibro-native *,body.aibro-native *:before,body.aibro-native *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(prefers-reduced-transparency:reduce){body.aibro-native .reading-toolbar,body.aibro-native .reading-tabs{background:var(--canvas);backdrop-filter:none}}
+
+body.aibro-native:not(.reading-open){display:block!important}
+body.aibro-native.reading-open:not(.reading-expanded)>.main{grid-column:1;grid-row:1}
+body.aibro-native.reading-open:not(.reading-expanded)>.reading-pane{grid-column:2;grid-row:1}
+
+/* Appearance is owned by the native toolbar, avoiding two conflicting themes. */
+body.aibro-native #readerThemeBtn{display:none!important}
+/* Small fixed choices stay visible; other lists use the shared selection popover. */
+body.aibro-native .native-choice-source{display:none!important}
+body.aibro-native .native-choices{display:flex;gap:10px;margin:10px 0 22px;min-width:0}
+body.aibro-native .native-choices button{display:flex;align-items:center;gap:12px;flex:1;min-width:0;text-align:left;white-space:normal;padding:17px;border-radius:17px;border:1px solid var(--line-strong);background:var(--panel);color:var(--text);box-shadow:0 3px 10px #193b2205;transition:background .2s,border-color .2s,box-shadow .2s,transform .15s}
+body.aibro-native .native-choices button:hover:not(:disabled){background:var(--panel-hover);border-color:var(--accent);transform:translateY(-1px)}
+body.aibro-native .native-choices button[aria-checked=true]{border-color:var(--accent);background:linear-gradient(130deg,var(--accent-soft),transparent),var(--panel);box-shadow:inset 0 1px var(--rim),0 5px 16px var(--accent-soft)}
+body.aibro-native .native-choice-icon{width:38px;height:38px;flex-shrink:0;display:grid;place-items:center;border-radius:12px;background:var(--accent-soft);color:var(--accent);font-size:22px}
+body.aibro-native .native-choice-copy{display:flex;flex-direction:column;gap:7px;flex:1;min-width:0}
+body.aibro-native .native-choice-copy strong{font-size:13px;font-weight:600;line-height:1.4}
+body.aibro-native .native-choice-copy small{font-size:11px;color:var(--muted);line-height:1.6}
+body.aibro-native .native-choice-check{width:17px;height:17px;display:grid;place-items:center;flex-shrink:0;border:1px solid var(--line-strong);border-radius:50%;font-size:10px;color:transparent;transition:background .18s,color .18s}
+body.aibro-native [aria-checked=true]>.native-choice-check{background:var(--accent);border-color:var(--accent);color:var(--canvas)}
+body.aibro-native .native-segments{padding:4px;border-radius:14px;background:var(--accent-soft);gap:4px;flex-wrap:wrap}
+body.aibro-native .native-segments button{padding:10px;border-radius:10px;border-color:transparent;background:transparent;box-shadow:none}
+body.aibro-native .native-segments button[aria-checked=true]{border-color:var(--line-strong);background:var(--panel);box-shadow:0 2px 6px #193b2210}
+body.aibro-native .native-segments .native-choice-check{display:none}
+body.aibro-native .native-choices button:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:740px){body.aibro-native .native-connection-cards{flex-direction:column}}
+@media(prefers-reduced-motion:reduce){body.aibro-native .native-choices button,body.aibro-native .native-choice-check{transition:none!important;transform:none!important}}
+/* Shared response timing across embedded pages and controls. */
+body.aibro-native button:not(:disabled):hover{border-color:var(--accent);filter:brightness(1.025)}
+body.aibro-native :is(.icon-btn,.secondary,.attach-btn,.composer-context,.composer-model,.reading-control):hover:not(:disabled){background:var(--panel-hover);box-shadow:0 3px 10px var(--accent-soft)}
+body.aibro-native .inspector-content:not(.hidden){animation:native-page-reveal .2s ease-out}
+/* Page entrances are applied once per direct content group below. */
+body.aibro-native :is(.tab,.inspector-tab,.reading-tab,.segmented button){transition:color .16s,background .16s,box-shadow .16s,border-color .16s}
+body.aibro-native summary{transition:color .16s,background .16s;border-radius:9px}
+body.aibro-native summary:hover{color:var(--accent);background:var(--accent-soft)}
+@keyframes native-page-reveal{from{opacity:.35;translate:0 5px}to{opacity:1;translate:0 0}}
+@media(prefers-reduced-motion:reduce){body.aibro-native .view.active-view,body.aibro-native .view.active-view *,body.aibro-native .inspector-content{animation:none!important;transition:none!important}}
+/* Stagger only on navigation, never on message/token or saved-data refresh. */
+body.aibro-native.native-enter .view.active-view:not(.agent-view)>*{animation:native-page-reveal .22s both cubic-bezier(.2,.75,.25,1)}
+body.aibro-native.native-enter .view.active-view:not(.agent-view)>:nth-child(2){animation-delay:35ms}
+body.aibro-native.native-enter .view.active-view:not(.agent-view)>:nth-child(3){animation-delay:65ms}
+body.aibro-native.native-enter .view.active-view:not(.agent-view)>:nth-child(n+4){animation-delay:90ms}
+@media(prefers-reduced-motion:reduce){body.aibro-native.native-enter .view.active-view>*{animation:none!important}}
+/* Selection system: segmented short choices, searchable top-layer lists. */
+body.aibro-native .native-choices[hidden],body.aibro-native .native-select-trigger[hidden],body.aibro-native .native-select-panel [hidden]{display:none!important}
+body.aibro-native .settings-grid>.card{container-type:inline-size}
+@container(max-width:540px){body.aibro-native .native-connection-cards{flex-direction:column}}
+body.aibro-native .permission-row>.native-choices{margin:0;flex:0 0 auto;max-width:60%;gap:3px}
+body.aibro-native .permission-row>.native-choices button{font-size:12px;padding:9px;white-space:nowrap}
+body.aibro-native .native-choices button:active:not(:disabled){transform:scale(.975)}
+body.aibro-native .native-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;min-width:0;min-height:40px;padding:10px 13px;border-radius:12px;border:1px solid var(--line-strong);background:var(--panel);color:var(--text);text-align:left;font:inherit;font-size:13px;box-shadow:inset 0 1px var(--rim),0 2px 5px #14352605;transition:background .14s,border-color .14s,box-shadow .14s,transform .12s}
+body.aibro-native .native-select-trigger>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.aibro-native .native-select-trigger:hover:not(:disabled),body.aibro-native .native-select-trigger[aria-expanded=true]{border-color:var(--accent);background:var(--panel-hover);box-shadow:0 0 0 3px var(--accent-soft)}
+body.aibro-native .native-select-trigger:active:not(:disabled){transform:scale(.985)}
+body.aibro-native .native-select-trigger:disabled{opacity:.5;cursor:not-allowed}
+body.aibro-native .native-select-chevron{color:var(--muted);font-size:18px;line-height:1;transition:transform .16s}
+body.aibro-native .native-select-trigger[aria-expanded=true] .native-select-chevron{transform:rotate(180deg)}
+body.aibro-native .native-select-panel{position:fixed;inset:auto;margin:0;box-sizing:border-box;padding:7px;display:flex;flex-direction:column;gap:5px;z-index:100000;overflow:hidden;border-radius:17px;border:1px solid var(--line-strong);background:var(--panel);color:var(--text);box-shadow:inset 0 1px var(--rim),0 16px 42px #132b2426,0 3px 9px #132b2412;animation:native-choice-open .16s cubic-bezier(.18,.8,.25,1);transform-origin:top center;font-size:13px}
+body.aibro-native .native-select-panel::backdrop{background:transparent}
+body.aibro-native .native-select-panel>input{width:100%;box-sizing:border-box;min-height:36px;padding:8px 10px;border-radius:10px;margin:0;background:var(--accent-soft);font-size:12px;flex-shrink:0}
+body.aibro-native .native-select-options{overflow:auto;min-height:0;overscroll-behavior:contain;padding:2px}
+body.aibro-native .native-select-options>button{display:flex;align-items:center;gap:9px;text-align:left;width:100%;padding:10px;border:0;border-radius:10px;box-shadow:none;background:transparent;color:var(--text);font:inherit;white-space:normal;transition:background .12s,transform .1s}
+body.aibro-native .native-select-options>button:hover:not(:disabled),body.aibro-native .native-select-options>button:focus-visible{background:var(--accent-soft);outline:none}
+body.aibro-native .native-select-options>button[aria-selected=true]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+body.aibro-native .native-select-options>button:active:not(:disabled){transform:scale(.98)}
+body.aibro-native .native-select-options>button:disabled{opacity:.4;cursor:not-allowed}
+body.aibro-native .native-select-caption{font-size:10px;color:var(--muted);font-weight:600;padding:7px 10px;letter-spacing:.02em}
+body.aibro-native .native-option-check{margin-left:auto;flex-shrink:0;width:15px}
+body.aibro-native .native-option-dot{display:none;width:7px;height:7px;flex-shrink:0;border-radius:50%;background:var(--muted)}
+body.aibro-native .native-option-dot:is([data-value=todo],[data-value=in_progress],[data-value=done],[data-value=blocked],[data-value=low],[data-value=medium],[data-value=high]){display:block}
+body.aibro-native .native-option-dot:is([data-value=done],[data-value=low]){background:var(--green)}
+body.aibro-native .native-option-dot:is([data-value=in_progress],[data-value=medium]){background:var(--orange)}
+body.aibro-native .native-option-dot:is([data-value=blocked],[data-value=high]){background:var(--red)}
+body.aibro-native .native-select-empty{font-size:12px;color:var(--muted);padding:12px;text-align:center}
+body.aibro-native .collection-toolbar .native-select-trigger{width:auto;max-width:220px}
+@keyframes native-choice-open{from{opacity:0;transform:translateY(-4px) scale(.985)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){body.aibro-native .native-select-panel{animation:none}body.aibro-native .native-select-trigger,body.aibro-native .native-select-options>button,body.aibro-native .native-select-chevron{transition:none;transform:none!important}}
+/* Actual AppKit material sits below the web foreground, on an opaque app-owned backdrop. */
+html.appkit-web-glass,html.appkit-web-glass body.aibro-native[data-view],html.appkit-web-glass body.aibro-native[data-view].light-mode{background:transparent!important}
+html.appkit-web-glass body.aibro-native :is(.main,#agent,.chat-shell,.chat-grid,.conversation-pane,.reading-pane){background:transparent!important}
+html.appkit-web-glass body.aibro-native #messageList{background:transparent;border-radius:0}
+html.appkit-web-glass body.aibro-native .view:not(.agent-view){background:var(--canvas)}
+html.appkit-web-glass body.aibro-native #previewDialog{background:var(--canvas)!important}
+html.appkit-web-glass body.aibro-native [data-appkit-glass]{background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;border:1px solid var(--line-strong)}
+html.appkit-web-glass body.aibro-native [data-appkit-glass]::before,html.appkit-web-glass body.aibro-native [data-appkit-glass]::after{display:none!important}
+/* Docked reader chrome forms one surface. AppKit owns the material, so do not
+   outline each HTML row on top of it. Only the content boundary needs a rule. */
+body.aibro-native .reading-pane :is(.reading-toolbar,.reading-tabs){border:0!important;border-radius:0!important;box-shadow:none!important}
+body.aibro-native .reading-pane .reading-toolbar{background:var(--glass);padding-bottom:4px}
+body.aibro-native .reading-pane .reading-tabs{padding:6px 14px 12px;border-bottom:1px solid var(--line)!important;background:var(--glass)}
+body.aibro-native .reading-pane .reading-tab{border:0;border-radius:10px}
+body.aibro-native .reading-pane .reading-tab.active{border:0;box-shadow:0 1px 3px #162e2110}
+html.appkit-web-glass body.aibro-native #composer :is(.composer-main,.composer-footer,textarea){background:transparent!important}
+html.appkit-web-glass body.aibro-native dialog[data-appkit-glass]>form{background:transparent!important}
+html.appkit-web-glass body.aibro-native dialog[data-appkit-glass] :is(.dialog-header,.dialog-actions){background:transparent!important;backdrop-filter:none!important}
+html.appkit-web-glass body.aibro-native dialog[data-appkit-glass] :is(.task-summary,.planning-form-grid,input,textarea){background:var(--panel)}
+/* Keep the modal's foreground separate from the underlying web page: the native
+   material samples only the app-owned backdrop, never another layer of text. */
+html.appkit-web-glass body.aibro-native:has(dialog[open][data-appkit-glass]) :is(.main,.reading-pane,.workspace-separator){visibility:hidden}
+html.appkit-web-glass body.aibro-native dialog[open][data-appkit-glass]{visibility:visible}
+html.appkit-web-glass body.aibro-native dialog[data-appkit-glass]::backdrop{background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html.appkit-web-glass body.aibro-native dialog[data-appkit-glass] .planning-form-grid{background:transparent}
+html.appkit-web-glass body.aibro-native #composer textarea{border:0!important;outline:0!important;box-shadow:none!important}
+
+/* Reader chrome is compact; the document itself owns one continuous scroll area. */
+body.aibro-native .reading-pane #previewDialog>form{padding:18px 20px 0;min-height:100%}
+body.aibro-native .reading-pane .dialog-header{position:static;margin-bottom:8px;padding-bottom:0}
+body.aibro-native .reading-pane #previewContent{margin-top:12px;padding-bottom:20px}
+body.aibro-native .reading-pane .note-document-toolbar{position:static;margin-bottom:10px;padding:6px 0;box-shadow:none}
+body.aibro-native .reading-pane .note-document-preview{width:100%;margin:0}
+body.aibro-native .reading-pane .note-document-preview>:first-child{margin-top:0}
+body.aibro-native .reading-pane .note-document-outline{margin:0 0 14px}
+body.aibro-native .reading-pane #previewTitle[data-native-duplicate-title]{display:none}
+
+/* Native material belongs to one modal; hide any other open dialog underneath. */
+html.appkit-web-glass body.aibro-native:has(dialog[open][data-appkit-glass]) dialog[open]:not([data-appkit-glass]){visibility:hidden}

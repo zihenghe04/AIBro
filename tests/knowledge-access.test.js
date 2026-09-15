@@ -6,3 +6,13 @@ test('model can search then read evidence before returning a plan; no writes dur
 test('cancellation and repeated requests do not silently complete',async()=>{const controller=new AbortController();controller.abort();await assert.rejects(K.continuePlan('{}',{signal:controller.signal}),{code:'CANCELLED'});const p=JSON.stringify({knowledgeRequests:[{type:'list'}]});await assert.rejects(K.continuePlan(p,{execute:async()=>({entries:[]}),ask:async()=>p}),/重复/);});
 
 test('fenced tool requests are executed instead of treated as a completed answer',async()=>{let calls=0;const out=await K.continuePlan('```json\n'+JSON.stringify({knowledgeRequests:[{type:'list'}],actions:[]})+'\n```',{execute:async()=>{calls++;return {entries:[]}},ask:async()=>JSON.stringify({message:'done',actions:[]})});assert.equal(calls,1);assert.match(out,/done/);});
+
+test('unreadable Wiki cache is excluded from search, initial context and explicit file reads', async () => {
+  const F = require('../app/file-context'), C = require('../app/context-retrieval');
+  const s = {projects:[{id:'p'}], notes:[{id:'broken',projectId:'p',title:'experiment',content:'STALE_EVIDENCE',wikiFileError:'missing Markdown'}]};
+  assert.deepEqual(K.records(s,{projectId:'p'}),[]);
+  assert.deepEqual(F.search(s,''),[]);
+  assert.doesNotMatch(C.buildContext(s,{projectId:'p',query:'experiment'}).text,/STALE_EVIDENCE/);
+  await assert.rejects(K.execute(s,{projectId:'p',explicitReferences:[{type:'note',id:'broken'}]},{type:'read',id:'broken'}));
+  await assert.rejects(F.libraryRef(s,'note','broken'));
+});

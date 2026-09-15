@@ -83,7 +83,7 @@
       if (pendingAccess) return pendingAccess.promise;
       mount(); epoch++; targetId = null; selected = preview = null;
       if (!dialog.open) returnFocus = doc.activeElement;
-      dialog.dataset.accessOnly = 'true'; heading.textContent = '允许查找本机项目？'; subtitle.textContent = '只在下面列出的目录内查找并只读源文件。对话分析时，会将需要的代码片段提供给当前选择的模型；本机原件不会被修改或移动。';
+      dialog.dataset.accessOnly = 'true'; heading.textContent = '允许查找本机项目？'; subtitle.textContent = '只在下面列出的目录内查找并只读源文件。对话分析时，会将需要的代码片段提供给当前选择的模型；浏览不会修改或移动原件；后续文件修改提案需要逐项确认保存。';
       previewBox.hidden = true; renderScopes(); scopeDetails.open = true; report('选择允许后，当前对话会继续查找项目。取消则不读取本机项目内容。');
       let resolve; const promise = new Promise(done => { resolve = done; });
       pendingAccess = { promise, resolve, signal: options.signal, abort: () => finishAccess(false) };
@@ -169,7 +169,7 @@
       treeBox.replaceChildren();
       const appendNodes = (parent, node) => [...node.children.values()].sort((a,b)=>Number(b.directory)-Number(a.directory)||a.name.localeCompare(b.name)).forEach(child => {
         if (child.directory) { const details = element('details', 'local-projects-directory'); details.open = true; details.append(element('summary', '', child.name)); appendNodes(details, child); parent.append(details); }
-        else { const row = button(child.name, 'local-projects-file', () => showFile(child.path, fileMap)); row.title = child.path; row.dataset.filePath = child.path; parent.append(row); }
+        else { const row = button(child.name, 'local-projects-file', () => showFile(child.path, fileMap)); row.title = child.path; row.dataset.filePath = child.path;const owner=projectForFolder(hooks.getState(),preview.folder);if(owner)row.dataset.fileRef=JSON.stringify({type:'local',projectId:owner.id,candidateId:preview.folder.id,path:child.path}); parent.append(row); }
       }); appendNodes(treeBox, nodes);
       if (!preview.tree?.length) treeBox.append(element('p', 'local-projects-muted', '该目录没有可列出的源文件。'));
       const first = list(preview.files)[0]; showFile(first?.path || '', fileMap);

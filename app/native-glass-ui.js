@@ -6,7 +6,7 @@
   else root.NativeGlassUI = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
   'use strict';
-  const SELECTORS = '#sidebar, #conversationNavigator, .topbar, #composer, .reading-toolbar, .reading-tabs';
+  const SELECTORS = '#sidebar, #conversationNavigator';
   const HOSTS = SELECTORS + ', .main, .reading-pane';
   const QUERIES = ['(prefers-reduced-transparency: reduce)', '(forced-colors: active)', '(prefers-contrast: more)'];
   const LAYOUT_CLASSES = ['sidebar-collapsed', 'reading-open', 'reading-expanded', 'inspector-open', 'workspace-resizing', 'light-mode'];
@@ -39,9 +39,7 @@
     const compact = viewport.width <= 760;
     add('sidebar', ['#sidebar'], compact ? 18 : 23, compact ? { left: 5, right: 3, top: 6, bottom: 6 } : { left: 8, right: 5, top: 8, bottom: 8 });
     add('navigator', ['#conversationNavigator'], 20);
-    add('topbar', ['.topbar'], 16);
-    if (document.body.dataset.view === 'agent') add('composer', ['#composer'], compact ? 20 : 25);
-    add('reader-header', ['.reading-toolbar', '.reading-tabs'], 16);
+    // Desktop material belongs to navigation. In-content controls refract DOM backdrops.
     return { regions, elements };
   }
   function shellPath(regions, width, height) {

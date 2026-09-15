@@ -93,6 +93,7 @@
         detail.append(region);
       };
       section('执行步骤', array(run.steps).filter(Boolean).map(step => typeof step === 'string' ? step : `${({ done: '已完成', running: '进行中', error: '失败', failed: '失败', pending: '等待' }[step.status] || text(step.status) || '已记录')} · ${text(step.text || step.label || step.title)}`), '这次执行没有记录步骤。');
+      const toolCard=root.ToolScheduler?.card(run);if(toolCard)detail.append(toolCard);
       if (run.error) section('错误信息', [text(run.error)], '', 'run-history-error');
       const types = { project: '项目', task: '任务', note: '知识', import: '资料', paper: '论文' };
       section(`执行结果 · ${array(run.results).filter(Boolean).length} 项`, array(run.results).filter(Boolean).map(result => typeof result === 'string' ? result : `${types[result.type] || '结果'} · ${text(result.text || result.title || result.name || result.id) || '已记录'}`), run.status === 'awaiting-approval' ? '尚未执行。请回到原对话查看待审批计划。' : '没有写入结果记录。');

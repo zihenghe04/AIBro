@@ -130,3 +130,37 @@ test('project directories, duplicate drops and unsupported surfaces preserve the
 test('conversation overlay promises pending materials rather than automatic AI analysis',()=>{
   const h=harness();h.document.fire('dragover',{target:h.message,dataTransfer:h.transfer()});assert.equal(h.$('#conversationDropOverlay').dataset.dropTarget,'conversation');assert.match(h.$('#conversationDropOverlay').textContent,/待发送材料/);assert.match(h.$('#conversationDropOverlay').textContent,/随下一条指令/);
 });
+test('native host reserves no web sidebar and keeps both reading panes usable',()=>{
+  for(const width of [680,800,1024,1440]){
+    const result=Layout.fitLayout(context({width,nativeShell:true,readingOpen:true}),{reader:9999});
+    assert.equal(result.sidebar,0);assert.equal(result.navigator,0);assert.ok(result.main>=320);assert.ok(result.reader>=320);
+    assert.equal(result.reader+result.main+8,width);assert.deepEqual(result.handles,{sidebar:false,navigator:false,reader:true});
+  }
+  assert.equal(Layout.fitLayout(context({width:640,nativeShell:true,readingOpen:true})).fullReader,true);
+  assert.equal(Layout.fitLayout(context({width:1400,nativeShell:true,readingOpen:true,readingExpanded:true})).main,0);
+});
+test('native reader resize hit area sits entirely in the gutter and keeps drag semantics',()=>{
+ const h=harness({width:1200});h.document.body.classList.add('aibro-native','reading-open');h.api.refresh();
+ const handle=h.$('#resize-reader'),reader=h.$('#readingPane');
+ assert.equal(parseFloat(handle.style.left)+8,reader.getBoundingClientRect().left);
+ const start=h.api.snapshot().layout.reader;
+ handle.fire('pointerdown',{clientX:800,pointerId:9});h.win.fire('pointermove',{clientX:740,pointerId:9});h.win.fire('pointerup',{pointerId:9});
+ assert.equal(h.state.ui.panelWidths.reader,start+60);assert.equal(h.saves.length,1);
+ assert.equal(parseFloat(handle.style.left)+8,reader.getBoundingClientRect().left);
+});
+test('pane animation end realigns the separator after a transform without a resize event',()=>{
+ const h=harness();h.document.body.classList.add('aibro-native','reading-open');const reader=h.$('#readingPane');let x=800;
+ reader.rect=()=>({left:x,right:x+400,top:0,width:400,height:800});reader.matches=s=>s.includes('.reading-pane');h.api.refresh();
+ assert.equal(h.$('#resize-reader').style.left,'792px');x=786;
+ h.document.fire('animationend',{target:reader});assert.equal(h.$('#resize-reader').style.left,'778px');
+});
+
+test('native project retains navigator and content room when the reader is open or dragged',()=>{
+ const preferences={reader:1200};
+ for(const width of [680,800,888,1000,1200,1600]){
+  const result=Layout.fitLayout(context({view:'project',width,nativeShell:true,readingOpen:true}),preferences);
+  assert.ok(result.main>=Math.min(560,width-328));assert.ok(result.reader>=320);
+  assert.equal(result.reader+result.main+8,width);
+ }
+ assert.equal(preferences.reader,1200,'temporary fitting must not overwrite saved reader preference');
+});

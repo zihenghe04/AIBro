@@ -49,11 +49,15 @@ def crash_worker(directory, stage, existing):
     if stage == 'before-commit':
         real_connect = sqlite3.connect
         class ExitBeforeCommit(sqlite3.Connection):
-            def commit(self): os._exit(CRASH_EXIT)
+            def commit(self):
+                # Wiki reconciliation now reads the cache before publication.
+                # Crash only at the commit which follows actual file staging.
+                if list(Path(directory).glob('.cloud-undo-*')): os._exit(CRASH_EXIT)
+                return super().commit()
         def connect(*args, **kwargs): return real_connect(*args, **kwargs, factory=ExitBeforeCommit)
         sqlite3.connect = connect
-        # sqlite3 is shared with sync_store; no workspace read occurs between
-        # installing this hook and the remote application's transaction.
+        # sqlite3 is shared with sync_store; readonly preflight commits may occur
+        # before the remote file publication transaction.
     elif stage == 'after-commit':
         def finish(quarantine, committed):
             assert committed

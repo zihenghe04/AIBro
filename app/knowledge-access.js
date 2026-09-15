@@ -1,7 +1,7 @@
 /* Read-only, paged access to the workspace. No external embedding service. */
 (function(root,factory){const api=factory(typeof module==='object'&&module.exports?require('./context-retrieval'):root.ContextRetrieval);if(typeof module==='object'&&module.exports)module.exports=api;else root.KnowledgeAccess=api;})(globalThis,function(Retrieval){
  'use strict';
- const active=x=>x&&!x.deleted&&!x.deletedAt&&!x.archived&&!x.archivedAt&&!['deleted','archived'].includes(x.status);
+ const active=x=>x&&!x.wikiFileError&&!x.deleted&&!x.deletedAt&&!x.archived&&!x.archivedAt&&!['deleted','archived'].includes(x.status);
  const list=x=>Array.isArray(x)?x:[];
  const kinds={note:'notes',paper:'papers',import:'imports'};
  const body=(r,type)=>type==='paper'?JSON.stringify({sections:r.structured||r.sections||{},edits:r.userEdits||{},content:r.content||r.summary||''}):list(r.pages).length?r.pages.map(p=>`[page ${p.page||p.pageNumber||'?'}]\n${p.text||p.content||''}`).join('\n'):String(r.content||r.text||r.extractedText||r.summary||'');
@@ -9,17 +9,21 @@
   const projects=new Set(list(state.projects).filter(active).map(p=>p.id));
   return Object.entries(kinds).flatMap(([type,key])=>list(state[key]).filter(r=>active(r)&&(!r.projectId||projects.has(r.projectId))&&(!scope.projectId||r.projectId===scope.projectId)&&(!scope.workspace||scope.workspace==='auto'||r.workspace===scope.workspace||list(state.projects).some(p=>p.id===r.projectId&&p.workspace===scope.workspace))).map(record=>({type,record})));
  }
- const identity=({type,record:r})=>({type,id:r.id,title:r.title||r.name||r.originalName||'',projectId:r.projectId||null,sourceAttachmentIds:r.sourceAttachmentIds||[],pendingDraft:!!r.aiDraft,updatedAt:r.updatedAt||null});
+ const identity=({type,record:r})=>({type,id:r.id,title:r.title||r.name||r.originalName||'',projectId:r.projectId||null,sourceAttachmentIds:r.sourceAttachmentIds||[],pendingDraft:!!r.aiDraft,kind:r.kind||null,sourceNoteIds:r.sourceNoteIds||[],updatedAt:r.updatedAt||null});
  function pageNumber(value,fallback){const n=value===undefined?fallback:Number(value);if(!Number.isSafeInteger(n)||n<0)throw Error('Invalid knowledge cursor');return n;}
  async function execute(state,scope,request,{readPage}={}){
+  if(request.type==='memory_read'){const M=typeof module==='object'&&module.exports?require('./project-memory'):globalThis.ProjectMemory;return {type:'memory_read',...M.context(state,scope.projectId,{offset:pageNumber(request.offset,0)})};}
+  if(request.type==='wiki_list'){const Wiki=typeof module==='object'&&module.exports?require('./research-wiki.js'):globalThis.ResearchWiki;return {type:'wiki_list',...Wiki.catalog(state,scope,pageNumber(request.offset,0))};}
+  if(request.type==='neighbors')return {type:'neighbors',...Retrieval.neighbors(state,scope,request)};
   const candidates=records(state,scope);const offset=pageNumber(request.offset,0);
-  if(['list','search'].includes(request.type)){
-   const terms=Retrieval.tokens(request.query||'');
-   const matches=candidates.map(item=>{const text=(identity(item).title+'\n'+body(item.record,item.type)).normalize('NFKC').toLocaleLowerCase();return {item,score:terms.reduce((n,t)=>n+(text.includes(t)?1:0),0)};}).filter(x=>request.type==='list'||x.score>0).sort((a,b)=>b.score-a.score||String(a.item.record.id).localeCompare(String(b.item.record.id)));
-   const selected=matches.slice(offset,offset+20);
-   return {type:request.type,total:matches.length,offset,nextOffset:offset+selected.length<matches.length?offset+selected.length:null,entries:selected.map(({item})=>identity(item)),contentRead:false};
+  if(request.type==='search'){
+   const result=Retrieval.searchIndex(state,{...scope,allowedTaskIds:[],query:request.query||'',offset});
+   return {type:'search',strategy:'local-bm25',total:result.coverage.totalChunks,offset,nextOffset:result.coverage.nextOffset,coverage:result.coverage,
+    entries:result.entries.map(e=>({type:e.type,id:e.recordId,chunkId:e.id,title:e.title,projectId:e.projectId,sourceAttachmentIds:e.sourceAttachmentIds,page:e.page,segment:e.segment,chunkOffset:e.offset,chunkEnd:e.end,heading:e.heading,version:e.version,excerpt:e.text,score:e.score})),contentRead:false};
   }
-  const found=candidates.find(x=>x.type===(request.recordType||'note')&&x.record.id===request.id);
+  if(request.type==='list') return {type:'list',...Retrieval.listIndex(state,{...scope,allowedTaskIds:[],query:request.query||'',offset}),contentRead:false};
+  const explicitlySelected=list(scope?.explicitReferences).some(r=>r.type===(request.recordType||'note')&&r.id===request.id);
+  const found=(explicitlySelected?records(state,{}):candidates).find(x=>x.type===(request.recordType||'note')&&x.record.id===request.id);
   if(!found)throw Error('资料不存在或不在当前工作区范围内');
   if(request.type==='read_page'){
    if(found.type!=='import'||!readPage)throw Error('仅已保存的 PDF 原件支持按页读取');
@@ -28,10 +32,12 @@
    return {...identity(found),page,...output};
   }
   if(request.type!=='read')throw Error('Unsupported knowledge request');
-  const content=body(found.record,found.type),text=content.slice(offset,offset+12000);
-  return {...identity(found),offset,text,totalChars:content.length,nextOffset:offset+text.length<content.length?offset+text.length:null,originalRead:false,hint:!content&&found.type==='import'?'No text index. Use read_page for original PDF pages.':null};
+  if(request.variant&&request.variant!=='draft')throw Error('未知的读取版本');
+  if(request.variant==='draft'&&(found.type!=='note'||typeof found.record.aiDraft?.content!=='string'))throw Error('没有可读取的笔记草稿');
+  const content=request.variant==='draft'?found.record.aiDraft.content:body(found.record,found.type),text=content.slice(offset,offset+12000);
+  return {...identity(found),variant:request.variant||'current',offset,text,totalChars:content.length,nextOffset:offset+text.length<content.length?offset+text.length:null,originalRead:false,hint:!content&&found.type==='import'?'No text index. Use read_page for original PDF pages.':null};
  }
- async function continuePlan(initial,{ask,execute:onExecute,signal,onResult}){
+ async function continuePlan(initial,{ask,execute:onExecute,signal,onResult,batch}){
   let output=initial,summary='',last='',repeats=0;const ledger=[];
   while(true){
    if(signal?.aborted)throw Object.assign(Error('已停止知识库读取'),{code:'CANCELLED'});
@@ -41,10 +47,13 @@
    const signature=JSON.stringify(plan.knowledgeRequests);repeats=signature===last?repeats+1:0;last=signature;
    if(repeats>=2)throw Error('模型重复请求相同资料而未推进。已保留执行记录，可继续对话。');
    const results=[];const blocks=[];
-   for(const request of plan.knowledgeRequests){
+   const read = async request => {
     if(signal?.aborted)throw Object.assign(Error('已停止知识库读取'),{code:'CANCELLED'});
-    let result;try{result=await onExecute(request);}catch(error){if(error.code==='CANCELLED')throw error;result={error:error.message};}
-    const {blocks:images=[],...entry}=result;blocks.push(...images);results.push({request,result:entry});
+    try{return await onExecute(request);}catch(error){if(error.code==='CANCELLED')throw error;return {error:error.message};}
+   };
+   const values=batch?await batch(plan.knowledgeRequests):await (async()=>{const out=[];for(const req of plan.knowledgeRequests)out.push(await read(req));return out;})();
+   for(let i=0;i<plan.knowledgeRequests.length;i++){
+    const request=plan.knowledgeRequests[i],{blocks:images=[],...entry}=values[i];blocks.push(...images);results.push({request,result:entry});
     ledger.push({type:request.type,id:entry.id||null,page:entry.page||null,offset:entry.offset??null,error:entry.error||null});onResult?.(request,entry);
    }
    summary=typeof plan.workingSummary==='string'?plan.workingSummary.slice(0,20000):summary;

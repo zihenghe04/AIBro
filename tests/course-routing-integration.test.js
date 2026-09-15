@@ -34,6 +34,7 @@ test('course routing checks still run for legacy destructive mixed plans', () =>
   const { state, run, context } = fixture('legacy');
   state.trash = [];
   state.tasks.push({ id: 'obsolete', title: '旧测试任务', workspace: '课程' });
+  require('../app/task-context').readCatalog(state,{id:'test-conversation',workspace:'课程'},{query:'旧测试任务'},run);
   run.pendingActions.push({ type: 'delete_task', taskId: 'obsolete' });
   assert.equal(context.actionsNeedApproval(run), true);
   assert.equal(run.routingReview.required, true);

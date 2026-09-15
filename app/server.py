@@ -10,6 +10,13 @@ from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 from codex_bridge import BridgeError, CodexBridge
 from local_projects import LocalProjectError, LocalProjects
+from local_file_edits import LocalFileEdits
+from local_commands import LocalCommands
+from file_reveal import reveal_file
+from wiki_migration import WikiMigration
+from wiki_bundle import WikiBundle
+from wiki_vault import WikiVault, WikiVaultError
+from project_jobs import ProjectJobs
 from sync_store import SyncStore, all_imports, DIGEST
 from sync_merge import merge_local_snapshot, MergeConflict
 from cloud_sync import CloudSync, CloudSyncError
@@ -94,15 +101,25 @@ class TrashPurgeError(ValueError):
 class WorkspaceStore:
     def __init__(self, directory):
         self.directory, self.path = Path(directory), Path(directory) / 'workspace.json'
+        self._thread_lock = threading.RLock()
+        self._lock_state = threading.local()
+        self.wiki = WikiVault(directory)
         self.sync = SyncStore(directory)
         if any(self.directory.glob('.cloud-undo-*')): self.recover_cloud_files()
     @contextmanager
     def lock(self):
-        self.directory.mkdir(parents=True, exist_ok=True)
-        with (self.directory / '.workspace.lock').open('a') as handle:
-            fcntl.flock(handle, fcntl.LOCK_EX)
-            try: yield
-            finally: fcntl.flock(handle, fcntl.LOCK_UN)
+        with self._thread_lock:
+            if getattr(self._lock_state, 'held', False):
+                yield
+                return
+            self.directory.mkdir(parents=True, exist_ok=True)
+            with (self.directory / '.workspace.lock').open('a') as handle:
+                fcntl.flock(handle, fcntl.LOCK_EX)
+                self._lock_state.held = True
+                try: yield
+                finally:
+                    self._lock_state.held = False
+                    fcntl.flock(handle, fcntl.LOCK_UN)
     @staticmethod
     def atomic_write(path, data):
         path.parent.mkdir(parents=True, exist_ok=True); descriptor, temporary = tempfile.mkstemp(prefix='.write-', dir=path.parent)
@@ -111,9 +128,63 @@ class WorkspaceStore:
             os.replace(temporary, path)
         finally:
             if os.path.exists(temporary): os.unlink(temporary)
-    def load(self):
+    def _load_cached(self):
         snapshot = self.sync.snapshot()
         return snapshot if snapshot is not None else json.loads(self.path.read_text()) if self.path.exists() else {}
+    def load(self):
+        with self.lock():
+            current = self._load_cached()
+            try:
+                self.wiki.recover(current)
+                if not current.get('_wikiEnabled'): return current
+                updated, changed, errors = self.wiki.reconcile(current)
+            except (WikiVaultError, OSError, ValueError) as exc:
+                return {**current, '_wikiError': str(exc)}
+            if changed:
+                updated['_revision'] = int(current.get('_revision', 0)) + 1
+                updated['_savedAt'] = int(time.time() * 1000)
+                self.sync.capture(updated, before_commit=self._mirror)
+            if errors:
+                updated['_wikiErrors'] = errors
+                by_id = {e['id']: e['message'] for e in errors}
+                for note in self.wiki.notes(updated):
+                    if note['id'] in by_id: note['wikiFileError'] = by_id[note['id']]
+            return updated
+    def enable_wiki(self):
+        with self.lock():
+            current = self.load()
+            if current.get('_wikiError'): raise WikiVaultError(current['_wikiError'])
+            payload = json.loads(json.dumps(current))
+            for key in ('projects', 'tasks', 'notes', 'imports', 'conversations', 'trash', 'agentRuns'): payload.setdefault(key, [])
+            payload['_wikiEnabled'] = True
+            return self.save(payload, enable_wiki=True)
+    def restore_wiki_file(self, identifier):
+        with self.lock():
+            previous = self._load_cached(); self.wiki.recover(previous)
+            note = next((n for n in self.wiki.notes(previous) if n.get('id') == identifier), None)
+            entry = previous.get('_wikiFiles', {}).get(identifier)
+            if not note or not entry: raise WikiVaultError('Wiki 条目不存在')
+            raw = self.wiki.read(entry['path'], missing=True)
+            if raw is not None:
+                try:
+                    self.wiki.decode(raw, identifier)
+                except WikiVaultError: pass
+                else: raise WikiVaultError('文件仍可读取，请刷新并审阅外部修改，无需恢复缓存')
+                recovery = self.directory/'recovery'/('wiki-'+str(identifier)+'-'+self.wiki.digest(raw)+'.md')
+                if recovery.is_symlink() or recovery.parent.is_symlink(): raise WikiVaultError('恢复目录不可用')
+                self.atomic_write(recovery, raw)
+            payload = json.loads(json.dumps(previous))
+            # Force a journaled repair from the cached approved version. The
+            # original invalid bytes remain in the recovery directory.
+            basis = json.loads(json.dumps(previous))
+            basis['_wikiFiles'][identifier]['hash'] = self.wiki.digest(raw) if raw is not None else None
+            payload['_revision'] = int(previous.get('_revision', 0)) + 1
+            def publish(snapshot):
+                self.wiki.publish(basis, snapshot, force_ids=(identifier,)); self._mirror(snapshot)
+            try: self.sync.capture(payload, before_commit=publish)
+            finally:
+                self.wiki.recover(self._load_cached())
+            return {'ok': True}
     def _mirror(self, snapshot):
         self.atomic_write(self.path, json.dumps(snapshot, ensure_ascii=False, separators=(',', ':')).encode())
     def _backup_legacy(self):
@@ -179,9 +250,12 @@ class WorkspaceStore:
         # File undo is journaled before replacement; the matching commit marker
         # lives in the same SQLite transaction as the snapshot and sync cursor.
         self._recover_cloud_files_locked()
+        previous = self.load()
+        if previous.get('_wikiError'): raise WikiVaultError(previous['_wikiError'])
         undo=[]; quarantine=None; committed=False; cleanup_warning=None
         def publish_files(snapshot):
             nonlocal quarantine
+            self.wiki.publish(previous, snapshot)
             hashes={}
             for item in all_imports(snapshot):
                 if not item.get('blobHash'): continue
@@ -222,6 +296,7 @@ class WorkspaceStore:
             result=apply(publish_files); committed=True
         except Exception:
             if quarantine is not None: self._finish_cloud_files(quarantine,False)
+            self.wiki.recover(self._load_cached())
             raise
         finally:
             if committed and quarantine is not None:
@@ -229,6 +304,7 @@ class WorkspaceStore:
                 except (OSError,ValueError): cleanup_warning='知识库已同步，本机暂存备份将在下次启动时清理。'
         # These are regenerable projections, never the canonical transaction.
         if cleanup_warning: result['warning']=cleanup_warning
+        self.wiki.recover(self._load_cached())
         try:
             if result['changed']:
                 self.materialize_papers(result['snapshot']); self._mirror(result['snapshot'])
@@ -524,12 +600,15 @@ class WorkspaceStore:
                 metadata['createdAt'] = int(path.stat().st_mtime * 1000)
             items.append(metadata)
         return {'items': sorted(items, key=lambda item: item['createdAt'], reverse=True), 'limits': {'snapshots': MAX_RECOVERY_SNAPSHOTS, 'snapshotBytes': MAX_RECOVERY_SNAPSHOT_BYTES, 'totalBytes': MAX_RECOVERY_TOTAL_BYTES}}
-    def save(self, payload):
+    def save(self, payload, enable_wiki=False):
         if not isinstance(payload, dict): raise ValueError('工作站数据格式无效')
         for key in ('projects', 'tasks', 'notes', 'imports', 'conversations', 'trash', 'agentRuns'):
             if not isinstance(payload.get(key), list): raise ValueError(f'工作站数据缺少有效的 {key}')
         with self.lock():
             current, revision = self.load(), 0
+            if current.get('_wikiError'):
+                recovery = self.preserve_conflict(payload, current.get('_revision', 0))
+                raise ConflictError(current['_wikiError'], current.get('_revision', 0), recovery)
             revision = int(current.get('_revision', 0))
             merged = False
             if int(payload.get('_revision', 0)) != revision:
@@ -543,7 +622,21 @@ class WorkspaceStore:
             self.migrate_files(payload); self.materialize_papers(payload); payload.pop('_apiKey', None); payload.pop('_pendingLocalSave', None); payload['_revision'] = revision + 1; payload['_savedAt'] = int(time.time() * 1000)
             if self.path.exists(): self.atomic_write(self.directory / 'workspace.previous.json', self.path.read_bytes())
             self._backup_legacy()
-            self.sync.capture(payload, before_commit=self._mirror)
+            payload['_wikiEnabled'] = bool(current.get('_wikiEnabled') or enable_wiki)
+            payload.pop('_wikiError', None)
+            payload.pop('_wikiErrors', None)
+            for note in self.wiki.notes(payload): note.pop('wikiFileError', None)
+            def publish(snapshot):
+                self.wiki.publish(current, snapshot)
+                self._mirror(snapshot)
+            try:
+                self.sync.capture(payload, before_commit=publish)
+            except Exception:
+                self.wiki.recover(self._load_cached())
+                try: self._mirror(self._load_cached())
+                except OSError: pass
+                raise
+            self.wiki.recover(self._load_cached())
             return {'ok': True, 'revision': payload['_revision'], 'savedAt': payload['_savedAt'], **({'mergedSnapshot': self.load()} if merged else {})}
     @staticmethod
     def _purge_references(payload, candidates):
@@ -589,6 +682,7 @@ class WorkspaceStore:
             before = self.path.read_bytes()
             current = self.load()
             current_revision = int(current.get('_revision', 0))
+            wiki_previous = json.loads(json.dumps(current))
             if revision != current_revision:
                 raise ConflictError('另一窗口已更新工作站，请先同步再永久删除。', current_revision)
             trash = current.get('trash')
@@ -635,6 +729,7 @@ class WorkspaceStore:
             cleanup_warning = None
             def publish_snapshot(snapshot):
                 nonlocal workspace_written
+                self.wiki.publish(wiki_previous, snapshot)
                 self.atomic_write(self.path, json.dumps(snapshot, ensure_ascii=False, separators=(',', ':')).encode())
                 workspace_written = True
             try:
@@ -657,6 +752,8 @@ class WorkspaceStore:
                 committed = True
             except Exception:
                 rollback_errors = []
+                try: self.wiki.recover(self._load_cached())
+                except (OSError, ValueError): rollback_errors.append('Wiki Markdown')
                 for name in reversed(moved):
                     try:
                         # A concurrent import must not be overwritten while
@@ -678,6 +775,7 @@ class WorkspaceStore:
                     raise TrashPurgeError('永久删除未提交，部分文件的恢复遇到冲突；副本仍保留在本地暂存目录，请勿再次永久清理。', 503)
                 raise
             finally:
+                if committed: self.wiki.recover(self._load_cached())
                 if committed and quarantine_fd is not None:
                     for name in moved:
                         try: os.unlink(name, dir_fd=quarantine_fd)
@@ -692,9 +790,13 @@ class WorkspaceStore:
             if cleanup_warning: result['cleanupWarning'] = cleanup_warning
             return result
 
+SERVICE_INSTANCE = secrets.token_hex(16)
 STORE = WorkspaceStore(DATA_DIR)
+PROJECT_JOBS = ProjectJobs(STORE, SERVICE_INSTANCE)
 CODEX_BRIDGE = CodexBridge(DATA_DIR)
 LOCAL_PROJECTS = LocalProjects(DATA_DIR)
+LOCAL_FILE_EDITS = LocalFileEdits(LOCAL_PROJECTS)
+LOCAL_COMMANDS = LocalCommands(LOCAL_PROJECTS)
 _CLOUD = None
 _CLOUD_LOCK = threading.Lock()
 def cloud_service():
@@ -794,13 +896,20 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(LOCAL_PROJECTS.roots()); return
             if self.command == 'DELETE' and path.startswith('/__local/roots/'):
                 self.send_json(LOCAL_PROJECTS.disconnect(path.removeprefix('/__local/roots/'))); return
-            if self.command != 'POST' or path not in ('/__local/roots', '/__local/search', '/__local/snapshot'):
+            if self.command != 'POST' or path not in ('/__local/roots', '/__local/search', '/__local/snapshot', '/__local/files', '/__local/read', '/__local/reveal', *('/__local/commands/'+action for action in ('propose','get','start','deny','cancel','forget')), *('/__local/edits/'+action for action in ('propose','get','apply','undo','dismiss'))):
                 self.send_json({'error': '找不到本机目录接口。'}, 404); return
-            payload = json.loads(self.read_body(16384) or b'{}')
+            payload = json.loads(self.read_body(25_000_000 if path == '/__local/edits/propose' else 16384) or b'{}')
             if not isinstance(payload, dict): raise LocalProjectError('本机目录请求格式无效。')
             if path == '/__local/roots':
                 result = LOCAL_PROJECTS.connect_preset(payload['preset']) if 'preset' in payload else LOCAL_PROJECTS.connect(payload.get('path'))
+            elif path == '/__local/commands/propose': result = LOCAL_COMMANDS.propose(payload)
+            elif path.startswith('/__local/commands/'): result = LOCAL_COMMANDS.access(payload.get('id'),path.rsplit('/',1)[-1],remember=payload.get('remember') is True,automatic=payload.get('automatic') is True)
+            elif path == '/__local/reveal': result = reveal_file(LOCAL_PROJECTS, STORE, payload)
+            elif path == '/__local/edits/propose': result = LOCAL_FILE_EDITS.propose(payload)
+            elif path.startswith('/__local/edits/'): result = LOCAL_FILE_EDITS.access(payload.get('id'),path.rsplit('/',1)[-1])
             elif path == '/__local/search': result = LOCAL_PROJECTS.search(payload.get('query', ''), payload.get('limit', 20))
+            elif path == '/__local/files': result = LOCAL_PROJECTS.browse_files(payload.get('candidateId'), payload.get('path', ''), payload.get('offset', 0))
+            elif path == '/__local/read': result = LOCAL_PROJECTS.read_file(payload.get('candidateId'), payload.get('path'), payload.get('offset', 0), payload.get('version'))
             else: result = LOCAL_PROJECTS.snapshot(payload.get('candidateId'))
             self.send_json(result)
         except LocalProjectError as error:
@@ -1183,12 +1292,18 @@ class Handler(SimpleHTTPRequestHandler):
             if watcher: watcher.join(0.3)
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
-        if path == '/__health': self.send_json({'app': 'ai-workstation', 'version': VERSION, 'assetFingerprint': ASSET_FINGERPRINT, 'port': self.server.server_port})
+        if path == '/__health': self.send_json({'app': 'ai-workstation', 'version': VERSION, 'assetFingerprint': ASSET_FINGERPRINT, 'port': self.server.server_port, 'instanceId': SERVICE_INSTANCE})
         elif path.startswith('/__cloud/'): self.do_cloud(path)
         elif path.startswith('/__local/'): self.do_local(path)
         elif path in ('/__auth/status', '/__auth/models'): self.do_auth(path.rsplit('/', 1)[1])
         elif path == '/__recovery': self.do_recovery_get()
         elif path.startswith('/__recovery/'): self.do_recovery_get(urllib.parse.unquote(path.removeprefix('/__recovery/')))
+        elif path == '/__wiki/migration':
+            try:self.send_json(WikiMigration(STORE).preview())
+            except Exception as exc:self.send_json({'error':str(exc)},400)
+        elif path == '/__project/jobs':
+            try: self.send_json({'jobs':PROJECT_JOBS.list()})
+            except Exception as exc:self.send_json({'error':str(exc)},400)
         elif path == '/__state':
             try: self.send_json(STORE.load())
             except Exception as exc: self.send_json({'error': str(exc)}, 500)
@@ -1223,6 +1338,35 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.valid_origin(): self.send_json({'error': '不允许来自其他网站的写入请求'}, 403); return
         path = urllib.parse.urlsplit(self.path).path
         if path == '/__state': self.do_state_post()
+        elif path.startswith('/__project/jobs/'):
+            try:
+                body=json.loads(self.read_body() or b'{}');action=path.rsplit('/',1)[-1]
+                if action=='upsert': result=PROJECT_JOBS.upsert(body)
+                elif action=='claim': result=PROJECT_JOBS.claim(body.get('id'))
+                elif action=='check': result=PROJECT_JOBS.check(body.get('id'),body.get('token'))
+                elif action=='finish': result=PROJECT_JOBS.finish(body.get('id'),body.get('token'),body.get('runId'),body.get('error'))
+                else: result=PROJECT_JOBS.change(body.get('id'),action)
+                self.send_json(result)
+            except Exception as exc:self.send_json({'error':str(exc)},400)
+        elif path == '/__wiki/bundle-preview':
+            try:self.send_json(WikiBundle(STORE).preview(json.loads(self.read_body() or b'{}').get('ids')))
+            except Exception as exc:self.send_json({'error':str(exc)},400)
+        elif path == '/__wiki/bundle':
+            try:
+                raw=WikiBundle(STORE).build(json.loads(self.read_body() or b'{}'))
+                self.send_response(200);self.send_header('Content-Type','application/zip');self.send_header('Content-Disposition','attachment; filename="research-wiki.zip"');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
+            except Exception as exc:self.send_json({'error':str(exc)},400)
+        elif path in ('/__wiki/migrate','/__wiki/import-markdown'):
+            try:
+                body=json.loads(self.read_body(110*1024*1024) or b'{}');migration=WikiMigration(STORE)
+                self.send_json(migration.adopt(body) if path.endswith('/migrate') else migration.import_markdown(body))
+            except Exception as exc:self.send_json({'error':str(exc)},400)
+        elif path == '/__wiki/enable':
+            try: self.send_json(STORE.enable_wiki())
+            except Exception as exc: self.send_json({'error': str(exc)}, 400)
+        elif path == '/__wiki/restore':
+            try: self.send_json(STORE.restore_wiki_file(json.loads(self.read_body() or b'{}').get('id')))
+            except Exception as exc: self.send_json({'error': str(exc)}, 400)
         elif path == '/__parse': self.do_parse()
         elif path == '/__fetch': self.do_fetch()
         elif path.startswith('/__papers/'):
@@ -1257,5 +1401,14 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     http_server = LoopbackHTTPServer(('127.0.0.1', PORT), Handler)
     PORT = http_server.server_port
+    if os.environ.get('AI_WORKSTATION_PARENT_PIPE') == '1':
+        # The native owner retains the write end. EOF also covers abrupt app
+        # exit, when applicationWillTerminate cannot run. CLI servers opt out.
+        def owner_lifetime():
+            try:
+                while os.read(0, 1): pass
+            finally: http_server.shutdown()
+        threading.Thread(target=owner_lifetime,daemon=True).start()
     print(f'AI Workstation {VERSION}: http://127.0.0.1:{PORT}', flush=True)
-    http_server.serve_forever()
+    try: http_server.serve_forever()
+    finally: http_server.server_close()

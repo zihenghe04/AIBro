@@ -1,7 +1,7 @@
 {
   "name": "ai-bro",
   "productName": "AI Bro",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "private": true,
   "description": "AI native personal knowledge and task workstation",
   "main": "app/electron-main.js",
@@ -14,12 +14,15 @@
     "predist": "node app/build-native-glass.js --optional",
     "assets:check": "node app/app-assets.js",
     "test:server": "python3 scripts/run-server-tests.py",
-    "test": "node --test tests/*.test.js && npm run test:server && npm run assets:check",
+    "test": "node --test tests/*.test.js tests/*.test.cjs && npm run test:server && npm run assets:check",
     "test:cloud": "python3 cloud/run-tests.py",
     "native:build": "node app/build-native-glass.js",
-    "release:mac": "node scripts/release-macos.js",
+    "release:mac": "node scripts/release-native.js",
     "demo:record": "electron scripts/record-demo.cjs",
-    "demo:render": "python3 scripts/render-demo.py"
+    "demo:render": "python3 scripts/render-demo.py",
+    "test:native": "./scripts/test-native-localization.sh && ./scripts/test-native-desktop.sh && ./scripts/test-native-agenda.sh",
+    "start:native": "./scripts/run-native-preview.sh",
+    "build:native": "./scripts/run-native-preview.sh --build-only"
   },
   "devDependencies": {
     "electron": "39.8.10",

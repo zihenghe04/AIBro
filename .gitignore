@@ -50,3 +50,9 @@ coverage/
 !/launch/dist/
 !/launch/dist/assets/film-zh.mp4
 !/launch/dist/assets/film-en.mp4
+
+!/launch/dist/assets/features/*.mp4
+
+!/launch/dist/assets/recordings/*.mp4
+
+!/launch/dist/assets/recordings/zh/*.mp4

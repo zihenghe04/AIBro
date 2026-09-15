@@ -1,150 +1,92 @@
-<p align="center"><img src="app/ai-bro-icon.png" width="96" height="96" alt="AI Bro" /></p>
+<p align="center"><img src="app/ai-bro-icon.png" width="88" height="88" alt="AI Bro" /></p>
 <h1 align="center">AI Bro</h1>
-<p align="center"><strong>Your companion for knowledge and action</strong></p>
-<p align="center">Conversations, source material, your understanding, and next steps—in one workspace.</p>
+<p align="center"><strong>Turn a conversation into work you can continue.</strong></p>
+<p align="center">Reviewable files. Durable projects. Ideas with a next step.</p>
 <p align="center"><a href="README.md">简体中文</a> · English</p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases">Get the Mac app</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en">Product & film</a> · <a href="#quick-start">Quick start</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0">Get the Mac app</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en#film">Watch the demo</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
-![A course project with an editable main note](launch/dist/assets/read-edit-en.jpg)
+![Updating a task in the English AI Bro workspace](launch/dist/assets/recordings/project-en.gif)
 
-Work can continue after AI finishes reading a handout or paper. AI Bro keeps originals, editable Markdown notes, tasks, and projects connected. Start another conversation to retrieve saved knowledge and return to its sources.
+AI Bro is a local-first AI workspace for Mac. Bring conversations, files, projects, research knowledge and schedules together. Start with a lecture, a paper or a passing thought; ask AI to help, inspect the sources and changes, and keep the result for your next session.
 
-**AI Bro is a macOS developer preview.** Release packages support Apple Silicon and macOS 12+. They are ad-hoc signed, without Apple Developer ID signing, notarization, or automatic updates. The code is open source under AGPL-3.0.
+Native SwiftUI / AppKit navigation, charts and calendars sit alongside a resizable document reader. On macOS 26, the app uses system Liquid Glass. Daily, Courses and Research keep different kinds of work organized, with files and conversations attached to long-running projects.
 
-[Watch the English product film](https://zihenghe04.github.io/AIBro/assets/film-en.mp4) · [观看中文短片](https://zihenghe04.github.io/AIBro/assets/film-zh.mp4)
+## Built around your work
 
-Screenshots and films use isolated example workspaces, with no personal data. Films show real app interactions and saves with scripted model responses, edited for presentation.
+- **Learning:** organize slides and timetables, study alongside the source, and turn a review plan into scheduled tasks.
+- **Research:** connect papers with methods, experiments and questions. Build a Wiki of evidence, failed attempts and review feedback.
+- **Everyday projects:** capture an idea, shape it into a plan, and update existing tasks as the details change.
 
-> [v0.6.5 for macOS is available](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.5), with an Apple Silicon DMG, corresponding source, and checksums. It adds local draft acceptance and on-demand knowledge reads while preserving supplemental-material continuity. Chinese / English product films are available in [v0.6.3](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.3).
+## Product features
 
+The animation above is a recording of the English app with example data. Explore the [English workflow guide](https://zihenghe04.github.io/AIBro/?lang=en#workspace) or watch the task demonstration on the website.
 
-## From a source to your next step
+### Files you can build on.
 
-> Organize this handout in its course project. Keep the original, create a main note, and suggest useful study tasks.
+Keep the source beside the conversation. See what actually changed. Drop a file or @ reference it. Describe the change, inspect the diff, switch between source and preview, then save or undo.
 
-1. **Ask AI:** drop in files or paste a link, describe the work, and follow reading and execution progress.
-2. **Inspect the result:** open the linked project, original, note, or task to check content and ownership.
-3. **Make it yours:** read the original beside your note, edit Markdown, and save your own understanding.
-4. **Keep going:** retrieve the material in a new chat, or update an existing task with a follow-up deadline.
+### Keep the source beside the work.
 
-Files dropped directly into a project are initially marked as awaiting AI analysis. Storage, renaming, and text indexing do not count as analysis. AI changes to manually edited notes are kept as drafts for review.
+Read a document without losing your place in the project. Move through sources and notes in the project tree while the reader stays alongside your work. Resize the panes to give the current task the room it needs.
 
-## What you can do
+### Projects that pick up where you left off.
 
-| Capability | How it helps |
-| --- | --- |
-| **Conversations and intake** | Send files with your instructions; organize by content and context, with confirmation when course ownership is unclear. |
-| **Persistent knowledge** | Keep originals, notes, tasks, and sources connected; retrieve project knowledge across conversations. |
-| **Editable main notes** | Use reading tabs, PDF page navigation, Markdown editing and export; merge related notes while retaining human edits and revision history. |
-| **Papers and research** | Save structured analyses; deduplicate and update by DOI, arXiv, or URL; distinguish explicit citations, shared tags, and project relationships. |
-| **Tasks and progress** | Create, update, complete, and move tasks, dates, and checklists; explore 7/30-day D3 trends and open the records behind a day. |
-| **Models and Skills** | Use local official Codex sign-in or a compatible API; choose models and reasoning per chat, reuse Skills, and configure a separate prompt-refinement model. |
-| **Local project connections** | Find projects within approved folders, inspect them read-only, and retain the association for future conversations. |
-| **Optional self-hosted sync** | Sync supported knowledge, tasks, chats, and managed originals to your own server, with visible status and conflict resolution. |
+Plans, tasks, conversations and outputs share one home. Organize work into a project. Use boards, dependencies and timelines to choose the next step, with project plans and daily logs available to future chats.
 
-Switch between Chinese and English, light and dark appearances, and resizable panes. A guided introduction can be skipped or replayed. macOS 26 supports native system glass; other environments retain a readable fallback. See [appearance and accessibility](docs/APPEARANCE.md).
+### Reading becomes research memory.
 
-<details>
-<summary>More actual interfaces: knowledge Q&A, research, and progress</summary>
+Keep the methods, failed attempts and unanswered questions—not just the papers. Browse a real Markdown directory inside Research. Connect concepts, methods, experiments and review feedback, follow sources and backlinks, then review proposed updates.
 
-**Retrieve saved knowledge in a new conversation.**
+### Catch the thought. Make sense of it later.
 
-![Knowledge Q&A with expanded sources](launch/dist/assets/knowledge-reuse-en.jpg)
+An idea does not have to arrive fully organized. Write a line, add a link, image or file. Select a group later for AI organization, connections or a small experiment. Keep the original observations.
 
-**Keep a paper library and explore its relationships.**
+### Give the next step a time.
 
-![Paper library and relationship network](launch/dist/assets/research-library-en.jpg)
+Keep classes, meetings and project tasks in view. Import an ICS timetable, open a date, and set recurrence and reminders. Review a proposed event from a capture or conversation before saving it.
 
-**Return from a trend to actual tasks and sources.**
+### Keep a trail of the work.
 
-![Activity trends and records for a selected day](launch/dist/assets/overview-en.jpg)
+The process matters as much as the answer. Return to a run’s goal, activity and results through execution history. Inspect and restore supported deleted items from the trash when something needs to come back.
 
-</details>
+### Change the model. Keep your workspace.
 
-## Quick start
+Choose the capabilities that fit the task. Connect a compatible custom API or local Codex sign-in, then select a model and reasoning effort per chat. Keep your projects, notes and files in the same place.
 
-### Option 1: Download the app
+### Give the agent context to work with
 
-1. Download `AI-Bro-<version>-macos-arm64-preview.dmg` and its checksum file from [Releases](https://github.com/zihenghe04/AIBro/releases).
-2. Verify the checksum, open the DMG, and drag `AI Bro.app` to Applications. Quit the previous app before replacing it; the workspace is retained.
-3. Connect a model in Settings, then follow the introduction or try a sample document.
+- **Source-linked retrieval:** local BM25 indexing, optional vector retrieval and reranking, with chapter and neighboring-passage reads.
+- **Inspectable execution:** activity records for file tools, search, page reads, terminal commands and research agents; review key operations in the approval bar.
+- **Reusable workflows:** Skills for repeated work, with project plans, long-term memory and daily logs available to later chats and scheduled jobs.
+- **Organized conversations:** project chats stay with the project. Use folders, renaming, moving, archiving and recovery for other conversations.
 
-Release packages include Python and PDF runtimes. **Running the app does not require a separate Node.js, Python, or Homebrew installation.** macOS may require per-app approval in Privacy & Security for this preview; see [installation and distribution](docs/DISTRIBUTION.md). Intel, Windows, and Linux release packages are not currently provided.
+## Get started
 
-### Option 2: Run from source
+1. Download the Mac app from [GitHub Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0) and follow the [installation guide](docs/DISTRIBUTION.md).
+2. Connect a compatible API or local official Codex CLI sign-in, then select a model.
+3. Drop in a file, paste a link or `@` reference saved material. Describe the result you want.
+4. Inspect the source, preview and changes in the reader. Keep the notes, files and next steps in a project.
 
-Requires macOS, Node.js 22+ (24 recommended for release builds), and Python 3.10+. PDF rendering and figure extraction use PyMuPDF.
+> Try: “Summarize this paper’s method and experiments, keep the evidence links, and write a research note with questions worth testing.”
+
+## Saved locally. Connected by choice.
+
+Projects, chats, notes and managed files are stored on your Mac. Choose your model provider and authorized folders, or deploy your own sync service to continue across personal devices. When using a remote model, the relevant request content is sent to your configured provider.
+
+## Development and documentation
 
 ```sh
 git clone https://github.com/zihenghe04/AIBro.git
 cd AIBro
 npm ci
 python3 -m venv .venv
-source .venv/bin/activate
+. .venv/bin/activate
 python -m pip install -r requirements.txt
-AI_WORKSTATION_PYTHON="$PWD/.venv/bin/python" npm start
+npm run start:native
 ```
 
-Source launches use your local workspace by default. Quit any installed copy first. For isolated development and testing, follow [CONTRIBUTING](CONTRIBUTING.md).
+See [installation and building](docs/DISTRIBUTION.md) for toolchain requirements and release verification.
 
-```sh
-# Developer app: still uses your configured local Python
-npm run app
+[Changelog](CHANGELOG.md) · [Desktop and data](docs/DESKTOP_APP.md) · [Retrieval](docs/KNOWLEDGE_RETRIEVAL.md) · [Self-hosted sync](docs/CLOUD_SYNC.md) · [Contributing](CONTRIBUTING.md)
 
-# Distribution with a bundled runtime; output directory must not exist
-npm run release:mac -- --output "$PWD/release/preview"
-```
-
-### Connect a model
-
-- **Compatible API:** enter the endpoint, model, and key in Settings, then select Save settings. A successful connection test does not mean the credentials have been saved.
-- **Account sign-in:** install the official Codex CLI separately; it is not bundled. Available models, reasoning options, files, and tools depend on the connection.
-- Provider charges may apply. AI Bro does not include unlimited context, free model credits, or a service-availability guarantee.
-
-## Data, permissions, and current limits
-
-- **Local first:** SQLite is the canonical store, with a readable JSON mirror. Model calls send relevant content to your selected provider; retrieving web sources also contacts their hosts.
-- **Device-local credentials:** desktop API keys use system encryption and are excluded from workspace snapshots and sync. Browser credentials are configured separately. macOS may request Keychain authorization.
-- **Bounded access:** local projects support discovery, read-only inspection, and persistent associations. Arbitrary source edits and terminal commands are not supported; approval modes do not add those capabilities.
-- **Finite file and context budgets:** originals, page images, or text are delivered according to the connection. File sizes, image budgets, and model context limits still apply.
-- **Sync is not backup:** optional self-hosted sync propagates supported changes and deletions. End-to-end encryption, selective project sync, and real-time team collaboration are not included. Model keys and local folder grants do not sync.
-
-Upgrades preserve the earlier AI Workstation app identity and data locations. See [desktop documentation](docs/DESKTOP_APP.md) for directories, backups, recovery, and deletion behavior, and [cloud sync](docs/CLOUD_SYNC.md) for scope, device revocation, and server-readable data.
-
-## Documentation and development
-
-| Guide | Covers |
-| --- | --- |
-| [Installation and distribution](docs/DISTRIBUTION.md) | Downloads, first launch, builds, versions, and checksums |
-| [Desktop guide](docs/DESKTOP_APP.md) | Storage, model settings, backups, and recovery |
-| [Self-hosted sync](docs/CLOUD_SYNC.md) / [Server deployment](cloud/README.md) | Synced content, conflicts, accounts, and operations |
-| [Appearance and accessibility](docs/APPEARANCE.md) | Themes, native glass, fallbacks, and implementation notes |
-| [Release notes](docs/RELEASE_NOTES.md) | Published changes and current limitations |
-| [Contributing](CONTRIBUTING.md) | Development, tests, reports, and pull requests |
-
-With the Python virtual environment activated:
-
-```sh
-npm test
-npm run test:cloud
-```
-
-The supported backend runners create isolated temporary workspaces for each test group. No personal files or real model keys are required. `asset-manifest.json` is the shared resource entry point for web, server, and desktop builds.
-
-AI Bro’s original code is licensed under [GNU AGPL v3.0](LICENSE) (`AGPL-3.0-only`). Commercial use is permitted, subject to the applicable source-availability obligations for distribution and modified network services. User documents, notes, API keys, and other private data are not software source code and are not required to be disclosed by this license. Third-party components retain their own licenses; see [distribution details](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source). The logo's design source is documented in [BRAND](docs/BRAND.md).
-
-## Repository layout
-
-Application code, engineering tools, and the product site are kept separate. Run the commands above from the repository root.
-
-```text
-AIBro/
-├── app/          # Electron, UI, local backend & runtime assets
-├── scripts/      # Start, build, release & demo tooling
-├── tests/        # Unit, integration & UI regression tests
-├── docs/         # Usage, distribution, architecture & branding
-├── cloud/        # Self-hosted sync deployment
-├── demo/         # Fictional demo fixtures
-├── launch/       # Bilingual product website
-└── .github/      # CI & GitHub Pages workflows
-```
+Licensed under [AGPL-3.0](LICENSE). Third-party dependencies retain their licenses. User files, notes and credentials are not part of the application source distribution.

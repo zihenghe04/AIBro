@@ -8,6 +8,16 @@
   const defaults = width => ({ sidebar: width <= 980 ? 174 : width <= 1250 ? 190 : 210, navigator: width <= 760 ? 180 : width <= 980 ? 190 : width <= 1250 ? 215 : 248, reader: clamp(width * .43, 390, 780) });
   function fitLayout(context, preferred = {}) {
     const width = Math.max(320, Number(context.width) || 1024), margin = context.readingOpen ? 24 : 16;
+    if (context.nativeShell) {
+      const fullReader = !!context.readingOpen && (context.readingExpanded || width <= 660);
+      const readerVisible = !!context.readingOpen && !fullReader;
+      // A project has its own file navigator; reserve room for both it and content.
+      const mainMinimum = context.view === 'project' ? Math.min(560, width - 328) : 320;
+      const maximum = Math.max(320, width - mainMinimum - 8);
+      const reader = fullReader ? width : readerVisible ? clamp(preferred.reader ?? width * .48, 320, maximum) : 0;
+      return { width, fullReader, sidebar:0, navigator:0, reader, main:fullReader ? 0 : width-reader-(readerVisible ? 8:0),
+        handles:{sidebar:false,navigator:false,reader:readerVisible}, bounds:{sidebar:[0,0],navigator:[0,0],reader:[320,maximum]}, defaults:defaults(width) };
+    }
     const base = defaults(width), fullReader = !!context.readingOpen && (context.readingExpanded || width <= 1000);
     const sidebarFixed = context.sidebarCollapsed || width <= 760;
     const navigatorVisible = context.view === 'agent' && !context.readingOpen && width > 570 && !(context.inspectorOpen && width <= 1250);
@@ -52,7 +62,7 @@
     const on = (target, event, handler, options) => { target?.addEventListener(event, handler, options); listeners.push(() => target?.removeEventListener?.(event, handler, options)); };
     const el = (tag, className, text) => { const node = document.createElement(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
     const context = () => ({ width: win.innerWidth || document.documentElement?.clientWidth || 1024, view: body.dataset.view,
-      sidebarCollapsed: body.classList.contains('sidebar-collapsed'), readingOpen: body.classList.contains('reading-open'), readingExpanded: body.classList.contains('reading-expanded'), inspectorOpen: body.classList.contains('inspector-open') });
+      nativeShell: body.classList.contains('aibro-native'), sidebarCollapsed: body.classList.contains('sidebar-collapsed'), readingOpen: body.classList.contains('reading-open'), readingExpanded: body.classList.contains('reading-expanded'), inspectorOpen: body.classList.contains('inspector-open') });
     const preferences = () => ({ ...(hooks.getState()?.ui?.panelWidths || {}), ...(previewWidths || {}) });
     function persist(name, value) {
       const state = hooks.getState(); state.ui ||= {}; const widths = { ...(state.ui.panelWidths || {}) };
@@ -93,7 +103,7 @@
         const bounds = layout.bounds[name];
         handle.setAttribute('aria-valuemin', String(Math.round(bounds[0]))); handle.setAttribute('aria-valuemax', String(Math.round(bounds[1]))); handle.setAttribute('aria-valuenow', String(Math.round(layout[name])));
         handle.setAttribute('aria-valuetext', `${names[name]}宽度 ${Math.round(layout[name])} 像素`);
-        if (!handle.hidden) { handle.style.left = `${(name === 'reader' ? rect.left : rect.right) - 4}px`; handle.style.top = `${Math.max(8, rect.top)}px`; handle.style.height = `${Math.max(0, rect.height - (rect.top < 8 ? 8 - rect.top : 0))}px`; }
+        if (!handle.hidden) { const inset = name === 'reader' && body.classList.contains('aibro-native') ? 8 : 4; handle.style.left = `${(name === 'reader' ? rect.left : rect.right) - inset}px`; handle.style.top = `${Math.max(8, rect.top)}px`; handle.style.height = `${Math.max(0, rect.height - (rect.top < 8 ? 8 - rect.top : 0))}px`; }
       }
       const tabs = q('#readingTabs'), activeTab = tabs?.querySelector('[aria-selected="true"]')?.parentElement;
       if (activeTab && tabs.clientWidth > 0) {
@@ -146,6 +156,8 @@
     on(win, 'blur', () => { finishDrag(false); hideDrop(); });
     on(document, 'keydown', event => { if (event.key === 'Escape') { if (drag) { event.preventDefault(); finishDrag(false); } hideDrop(); } });
     on(win, 'resize', () => { finishDrag(false); schedule(); hideDrop(); });
+    // CSS transforms do not trigger ResizeObserver; align the handle again when pane entry ends.
+    on(document, 'animationend', event => { if (event.target?.matches?.('.reading-pane,.sidebar,.conversation-navigator')) schedule(); }, true);
 
     const overlay = el('div', 'workspace-drop-overlay'); overlay.id = 'conversationDropOverlay'; overlay.hidden = true;
     const dropCard = el('div', 'workspace-drop-card'); const dropMark = el('span', 'workspace-drop-mark', '↓'); dropMark.setAttribute('aria-hidden', 'true');
