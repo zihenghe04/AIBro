@@ -1,7 +1,7 @@
 (function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;else root.WorkstationTrash=api;}(typeof globalThis!=='undefined'?globalThis:this,function(root){
   'use strict';
   const MAX_BATCH=2000;
-  const types={project:'项目',conversation:'对话',task:'任务',note:'知识',paper:'论文',import:'资料',content:'内容'};
+  const types={conversationFolder:'对话文件夹',project:'项目',conversation:'对话',task:'任务',note:'知识',paper:'论文',import:'资料',content:'内容'};
   function createController(hooks,environment=root){
     const doc=environment.document,selected=new Set();let confirmation;
     const node=(tag,cls,text)=>{const e=doc.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};

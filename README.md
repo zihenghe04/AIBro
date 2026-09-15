@@ -1,149 +1,108 @@
-<p align="center"><img src="app/ai-bro-icon.png" width="96" height="96" alt="AI Bro" /></p>
+<p align="center"><img src="app/ai-bro-icon.png" width="88" height="88" alt="AI Bro" /></p>
 <h1 align="center">AI Bro</h1>
-<p align="center"><strong>你的知识与行动伙伴</strong></p>
-<p align="center">把持续对话、原始资料、自己的理解和下一步，放在同一个工作区。</p>
+<p align="center"><strong>把一次对话，变成可以继续的工作。</strong></p>
+<p align="center">文件有版本，项目有记忆，想法有下一步。</p>
 <p align="center">简体中文 · <a href="README.en.md">English</a></p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases">下载 Mac App</a> · <a href="https://zihenghe04.github.io/AIBro/">产品与短片</a> · <a href="#快速开始">快速开始</a> · <a href="CONTRIBUTING.md">参与改进</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0">下载 Mac App</a> · <a href="https://zihenghe04.github.io/AIBro/">官网</a> · <a href="https://zihenghe04.github.io/AIBro/#workspace">功能演示</a> · <a href="CHANGELOG.md">更新日志</a></p>
 
-![课程项目与可编辑的主笔记](launch/dist/assets/read-edit-zh.jpg)
+![AI Bro 工作区总览](launch/dist/assets/recordings/zh/01-overview.gif)
 
-AI 帮你读完一份课件或论文之后，工作可以继续。AI Bro 将原件、可编辑 Markdown 笔记、任务与项目关联保存；换个对话，也能检索已有知识，从来源继续核对。
+AI Bro 是一个本地优先的 Mac AI 工作区，把对话、文件、项目、科研知识与日程放在同一个地方。你可以带入一份课件、一篇论文或一个想法，让 AI 整理与推进，在旁边核对来源和修改，再把成果留给下一次工作。
 
-> [v0.6.5 macOS 预览版已发布](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.5)：提供 Apple Silicon DMG、对应源码与校验文件，支持直接采纳草稿、补充材料与按需知识库读取。中英文产品短片见 [v0.6.3](https://github.com/zihenghe04/AIBro/releases/tag/v0.6.3)。
+原生 SwiftUI / AppKit 导航、图表与日程，配合可调节的文档阅读区；macOS 26 上使用系统 Liquid Glass。日常、课程、科研各有空间，资料与对话可以归入长期项目。
 
-**当前为 macOS 开发预览版。**发行包支持 Apple Silicon、macOS 12+；使用 ad-hoc 签名，尚未完成 Apple Developer ID 签名与公证，不含自动更新。代码采用 AGPL-3.0 开源许可。
+## 一份资料，可以接着做什么？
 
-[观看中文产品短片](https://zihenghe04.github.io/AIBro/assets/film-zh.mp4) · [Watch in English](https://zihenghe04.github.io/AIBro/assets/film-en.mp4)
+- **学习**：导入课件和课表，整理知识脉络，边看原件边补充笔记，把复习安排放进日程。
+- **科研**：从论文进入方法、实验和问题，把来源、失败经验与 review 反馈沉淀进 Wiki，带着积累继续研究。
+- **日常与项目**：随手记下想法，整理成计划、清单和日程；在后续对话里修改已有安排，而不是重新创建一遍。
 
-截图与短片来自隔离的示例工作区，不含个人资料。短片使用预设模型回复，展示真实应用操作和保存过程，经过剪辑。
+## 产品特色
 
-## 从资料到下一步
+下面的 GIF 来自真实应用操作，使用示例工作区。官网提供自动循环的轻量视频与放大查看，完整演示见[产品影片](https://zihenghe04.github.io/AIBro/#film)。
 
-> 把这份课件整理进课程项目，保留原件，生成主笔记和合理的学习任务。
+### 文件有了下文。
 
-1. **交给 AI**：拖入文件或粘贴链接，说明需求，查看读取与执行进度。
-2. **核对成果**：打开对应的项目、原件、主笔记与任务，检查内容和归属。
-3. **留下理解**：并排阅读原件和笔记，编辑 Markdown，保存自己的补充。
-4. **接着工作**：新对话检索已有资料；后续补充截止时间时，更新原任务。
+把原件放在对话旁边，修改就不再是一段难以核对的回答。 拖放或 @ 引用资料，说清想改哪里。AI 生成修改后，逐项查看 Diff，在源码与排版预览间切换，再保存或撤销。
 
-直接拖入项目的文件会先保存为「待 AI 分析」。存储、改名和文字索引不会被当成已经分析；AI 对人工编辑笔记的修改会先形成待核对草稿。
+![打开修改卡片，切换 Diff、源码与预览](launch/dist/assets/recordings/zh/02-file-review.gif)
 
-## 能做什么
+### 文件在左，思考在旁。
 
-| 能力 | 可以怎样用 |
-| --- | --- |
-| **持续对话与资料整理** | 文件与指令一起发送；结合上下文判断空间和项目，课程归属不明确时先核对。 |
-| **持久化知识库** | 原件、笔记、任务与来源关联保存；按项目检索，跨会话继续使用。 |
-| **可编辑主笔记** | 标签式阅读区、PDF 页码导航、Markdown 编辑与导出；相关笔记可合并，保留人工内容与历史版本。 |
-| **论文与研究** | 论文结构化分析，按 DOI、arXiv 或链接去重更新；关系网络区分明确引用、共同标签和项目关系。 |
-| **任务与进度** | 新增、更新、完成和移动任务，维护截止时间与清单；D3 趋势图支持 7/30 天切换、选日查看条目。 |
-| **模型与 Skills** | 本机官方 Codex 登录或兼容 API；按对话选择模型与推理强度，复用内置/自定义 Skills，单独配置润色模型。 |
-| **本机项目关联** | 在授权目录中按线索发现项目，只读查看并保存目录关联，下一次对话可以读取最新资料。 |
-| **可选自托管同步** | 将支持的知识、任务、对话和受管原件同步到自己的服务器，查看状态并处理冲突。 |
+看资料的时候，不必丢掉项目的上下文。 在项目文件树中切换原件和笔记，阅读区保持在右侧。并排核对资料，调节分区宽度，让阅读和推进工作发生在同一个地方。
 
-界面支持中文／English、深浅外观、可调宽度分区、可跳过或重播的新手引导。macOS 26 可使用原生系统玻璃；其他环境保留可读的回退外观，详见[外观与可访问性](docs/APPEARANCE.md)。
+![从项目文件树打开阅读区](launch/dist/assets/recordings/zh/06-project-reader.gif)
 
-<details>
-<summary>查看更多实际界面：知识问答、论文与进度</summary>
+### 项目，接着上次继续。
 
-**换个对话，检索已保存的知识。**
+计划、任务、对话和产出，终于在同一处。 把工作归入项目。通过看板、依赖和时间轴安排下一步；项目计划与按日日志为后续对话提供持续上下文。
 
-![知识问答与展开的来源](launch/dist/assets/knowledge-reuse-zh.jpg)
+![浏览进度图表，横向查看时间轴](launch/dist/assets/recordings/zh/05-project-charts.gif)
 
-**论文库与关系网络。**
+### 读过的，成为研究积累。
 
-![论文库与关联网络](launch/dist/assets/research-library-zh.jpg)
+论文之外，留下方法、失败经验和仍然开放的问题。 科研空间里浏览真实 Markdown 目录。连接概念、方法、实验和 review 反馈，沿来源与双链核对证据，审阅后再合并更新。
 
-**从趋势回到具体任务与资料。**
+![浏览科研 Wiki 与分类条目](launch/dist/assets/recordings/zh/07-research-wiki.gif)
 
-![活动趋势与当天条目](launch/dist/assets/overview-zh.jpg)
+### 先记下来，再长出新想法。
 
-</details>
+零散灵感，不必马上整理得井井有条。 随手写一句，附上链接、图片或文件。积累后按主题选中一组，让 AI 整理、寻找关联或设计验证步骤，原始记录始终保留。
 
-## 快速开始
+![打开随记并查看关联日程](launch/dist/assets/recordings/zh/04-captures.gif)
 
-### 方式一：下载 App
+### 让下一步，真正落到时间里。
 
-1. 从 [Releases](https://github.com/zihenghe04/AIBro/releases) 下载 `AI-Bro-<version>-macos-arm64-preview.dmg` 与对应校验文件。
-2. 核对校验值，打开 DMG 并将 `AI Bro.app` 移到「应用程序」。更新前正常退出旧版 App；工作区会保留。
-3. 打开「设置」连接模型，再从新手引导或一份示例资料开始。
+课表、会议和任务安排，不用在几个工具间来回记。 导入 ICS 课表，点击日期查看详情。设置循环和提前提醒；从随记或对话提出日程时，先检查草稿再保存。
 
-发行包内置 Python 与 PDF 运行时，**运行 App 不需要另外安装 Node.js、Python 或 Homebrew**。首次打开可能需要在 macOS「隐私与安全性」中允许该预览 App；完整步骤见[安装与构建](docs/DISTRIBUTION.md)。Intel、Windows、Linux 发行包暂未提供。
+![切换日程视图](launch/dist/assets/recordings/zh/03-agenda.gif)
 
-### 方式二：从源码运行
+### 做过什么，找得回来。
 
-需要 macOS、Node.js 22+（发行构建推荐 24）、Python 3.10+。PDF 预览与图表提取使用 PyMuPDF。
+结果之外，过程也值得留下。 从执行历史回看一次工作的目标、活动和结果。误删的受管内容可以在回收站检查、恢复，让整理工作更从容。
+
+![查看执行历史与回收站](launch/dist/assets/recordings/zh/08-history-trash.gif)
+
+### 模型由你选，工作留在这里。
+
+换一种能力，不用换掉整个工作区。 连接自定义 API 或本机 Codex 登录，按会话选择模型与推理强度。文件、笔记和项目保持归属，继续用适合当前任务的模型推进。
+
+![查看模型连接设置](launch/dist/assets/recordings/zh/09-model-settings.gif)
+
+### 让 Agent 带着上下文推进
+
+- **检索有来源**：本地 BM25 关键词索引、可选向量检索与重排；按章节和相邻段落继续阅读，答案可以回到证据。
+- **执行有过程**：文件工具、联网搜索、网页读取、终端命令与研究子代理统一记录活动，关键操作通过审批条确认。
+- **工作流可复用**：用 Skills 组织常用流程；项目保存计划、长期记忆和按日日志，为后续对话与自动任务提供上下文。
+- **对话有归属**：项目会话留在项目下，其他对话用文件夹整理，支持重命名、移动、归档与恢复。
+
+## 开始使用
+
+1. 从 [GitHub Release](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0) 下载 Mac App，按[安装指南](docs/DISTRIBUTION.md)完成安装。
+2. 在设置中连接兼容 API，或使用本机官方 Codex CLI 登录；选择这次对话要使用的模型。
+3. 拖入文件、粘贴链接或用 `@` 引用资料，告诉 AI 你想得到的结果。
+4. 在阅读区检查原件、预览和修改，把资料、笔记与下一步任务归入项目。
+
+> 可以这样开始：“整理这篇论文的方法与实验，保留证据来源，把值得验证的问题写成研究笔记。”
+
+## 本地保存，按需连接
+
+项目、对话、笔记和受管文件保存在本机。你决定连接哪个模型、授权哪个目录，也可以部署自己的同步服务，在个人设备间继续工作。使用远程模型时，完成请求所需的内容会发送至你配置的提供商。
+
+## 开发与文档
 
 ```sh
 git clone https://github.com/zihenghe04/AIBro.git
 cd AIBro
 npm ci
 python3 -m venv .venv
-source .venv/bin/activate
+. .venv/bin/activate
 python -m pip install -r requirements.txt
-AI_WORKSTATION_PYTHON="$PWD/.venv/bin/python" npm start
+npm run start:native
 ```
 
-源码启动默认使用本机工作区；已经安装 App 时，先退出旧实例。开发测试请按[贡献指南](CONTRIBUTING.md)使用隔离数据。
+构建环境、校验和与安装步骤见[安装与构建](docs/DISTRIBUTION.md)。
 
-```sh
-# 本机开发 App，仍依赖本机 Python
-npm run app
+[更新日志](CHANGELOG.md) · [桌面与数据](docs/DESKTOP_APP.md) · [检索设计](docs/KNOWLEDGE_RETRIEVAL.md) · [自托管同步](docs/CLOUD_SYNC.md) · [贡献指南](CONTRIBUTING.md)
 
-# 含独立运行时的发行包；输出目录必须尚不存在
-npm run release:mac -- --output "$PWD/release/preview"
-```
-
-### 连接模型
-
-- **兼容 API**：在设置中填写服务地址、模型与 API Key，点击「保存设置」。测试成功不等于凭据已经保存。
-- **账号登录**：需要额外安装官方 Codex CLI，发行包不内置它。可选模型、推理强度、文件和工具能力取决于当前连接。
-- 模型调用可能产生提供商费用。AI Bro 不提供无限上下文、免费额度或服务可用性保证。
-
-## 数据、权限与当前边界
-
-- **本地优先**：SQLite 保存规范数据，JSON 是可读镜像。使用模型时，相关内容会发给所选提供商；获取网页也需要访问对应来源。
-- **凭据留在本机**：桌面 API Key 使用系统加密保存，不进入工作区快照与云同步。浏览器凭据与桌面独立配置；macOS 可能请求钥匙串授权。
-- **授权有范围**：本机项目能力是目录发现、只读查看与持久关联，当前不支持任意源码写入或终端命令执行。会话审批模式不会扩大这些能力。
-- **长文件有边界**：原件、页面图像或文字的投递方式取决于连接；文件大小、图片预算和模型上下文仍有限制。
-- **同步不等于备份**：自托管首版会同步支持的修改和删除，不提供端到端加密、按项目选择同步或实时多人协作；模型密钥和本机目录授权不随工作区同步。
-
-旧版 AI Workstation 的工作区与内部应用标识会保留。数据目录、备份、恢复与删除语义见[桌面文档](docs/DESKTOP_APP.md)；同步范围、设备撤销和服务器明文边界见[云同步说明](docs/CLOUD_SYNC.md)。
-
-## 文档与开发
-
-| 文档 | 内容 |
-| --- | --- |
-| [安装与构建](docs/DISTRIBUTION.md) | 下载、首次打开、构建、版本与校验 |
-| [桌面使用](docs/DESKTOP_APP.md) | 数据目录、模型设置、备份与恢复 |
-| [自托管同步](docs/CLOUD_SYNC.md) / [服务部署](cloud/README.md) | 同步范围、冲突、账号与运维 |
-| [外观与可访问性](docs/APPEARANCE.md) | 主题、系统玻璃、回退与开发细节 |
-| [版本说明](docs/RELEASE_NOTES.md) | 已发布改动与当前限制 |
-| [贡献指南](CONTRIBUTING.md) | 开发环境、测试、问题反馈与 PR |
-
-在已激活的 Python 虚拟环境中运行：
-
-```sh
-npm test
-npm run test:cloud
-```
-
-后端测试入口为每组测试创建独立临时工作区，不需要真实资料或模型密钥。`asset-manifest.json` 是 Web、服务端与桌面构建的共同资源入口。
-
-AI Bro 原创代码采用 [GNU AGPL v3.0](LICENSE)（`AGPL-3.0-only`）。允许商业使用；分发及修改后的网络服务须履行相应源码提供义务。用户的文件、笔记、API Key 和其他私人数据不属于软件源码，不因此要求公开。第三方依赖保留各自许可证，相关说明见[发行文档](docs/DISTRIBUTION.md#依赖与源码--dependencies-and-source)。Logo 的设计来源见[品牌文档](docs/BRAND.md)。
-
-## 仓库结构
-
-应用源码、工程工具和产品展示分开组织；从仓库根目录运行上面的命令即可。
-
-```text
-AIBro/
-├── app/          # Electron, UI, local backend & runtime assets
-├── scripts/      # Start, build, release & demo tooling
-├── tests/        # Unit, integration & UI regression tests
-├── docs/         # Usage, distribution, architecture & branding
-├── cloud/        # Self-hosted sync deployment
-├── demo/         # Fictional demo fixtures
-├── launch/       # Bilingual product website
-└── .github/      # CI & GitHub Pages workflows
-```
+AI Bro 采用 [AGPL-3.0](LICENSE) 许可。第三方依赖保留各自许可；用户的文件、笔记和凭据不属于应用源码分发范围。

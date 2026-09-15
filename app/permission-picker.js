@@ -27,7 +27,7 @@
       button.onclick = () => { if (mode === 'legacy') delete conversation.permissionMode; else conversation.permissionMode = mode; api.save(); render(conversation); api.onChange?.(); dialog.close(); };
       dialog.append(button);
     }
-    const footer = document.createElement('p'); footer.className = 'permission-picker-note'; footer.textContent = '仅应用于此对话的后续执行。本机功能目前为只读搜索与项目关联，不包含任意文件写入或终端执行。'; dialog.append(footer);
+    const footer = document.createElement('p'); footer.className = 'permission-picker-note'; footer.textContent = '仅应用于此对话的后续执行。文件修改限已连接目录并保留审阅快照；终端命令仍需具体参数审批，已记住的固定检查除外。'; dialog.append(footer);
     dialog.addEventListener('close', () => dialog.remove(), { once: true }); document.body.append(dialog); dialog.showModal();
   }
   function confirmRead({ title, detail, signal }) {

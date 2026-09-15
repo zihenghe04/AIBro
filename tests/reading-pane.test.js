@@ -35,7 +35,7 @@ function dom() {
   add('taskDialog','dialog');add('paperDialog','dialog');
   return {document,add,$:q=>document.querySelector(q)};
 }
-function harness({real=false,getBlob,beforeLeave}={}) {
+function harness({real=false,getBlob,beforeLeave,WorkspaceLayout}={}) {
   const d=dom();const state={projects:[{id:'p',name:'课程'}],imports:[{id:'a',name:'原件.pdf',mimeType:'application/pdf',projectId:'p'},{id:'b',name:'图片.png',mimeType:'image/png',projectId:'p'}],notes:[{id:'n',title:'研究笔记',content:'实际笔记',projectId:'p',sourceAttachmentIds:['a']}],papers:[],tasks:[{id:'t',title:'任务'}],previewRecord:null,openTaskId:'t'};
   const calls=[],revoked=[];let api,serial=0,context;
   if(real){
@@ -46,7 +46,7 @@ function harness({real=false,getBlob,beforeLeave}={}) {
     vm.runInContext(source.slice(source.indexOf('let previewRequestVersion ='),source.indexOf('\nconst searchTypeLabel =')),context);
   }
   const getItem=(kind,id)=>real?context.previewItem(kind,id):(kind==='note'?state.notes:state.imports).find(x=>x.id===id&&!x.archived&&!x.deletedAt&&state.projects.some(p=>p.id===x.projectId&&!p.archived));
-  api=Reading.createController({getItem,beforeLeave,onSuspend:()=>real?context.suspendPreview():calls.push(['suspend']),onSelect:(kind,id,page)=>{calls.push(['select',kind,id,page]);return real?context.openPreview(kind,id,page):api.present(kind,id,page);}},{document:d.document,matchMedia:()=>({matches:false})});
+  api=Reading.createController({getItem,beforeLeave,onSuspend:()=>real?context.suspendPreview():calls.push(['suspend']),onSelect:(kind,id,page)=>{calls.push(['select',kind,id,page]);return real?context.openPreview(kind,id,page):api.present(kind,id,page);}},{document:d.document,WorkspaceLayout,matchMedia:()=>({matches:false})});
   if(real)context.window.ReadingPane=api;
   return {...d,state,api,calls,context,revoked,open:(kind,id,page)=>real?context.openPreview(kind,id,page):api.present(kind,id,page)};
 }
@@ -143,4 +143,10 @@ test('native dialog close keeps the unsaved-change decision visible until it is 
   const wait=deferred();const h=harness({beforeLeave:()=>wait.promise});h.open('note','n');h.$('#previewDialog').close();
   assert.equal(h.$('#previewDialog').open,true);assert.equal(h.api.snapshot().visible,true);
   wait.resolve(false);await Promise.resolve();await Promise.resolve();assert.equal(h.api.snapshot().visible,true);assert.equal(h.$('#previewDialog').open,true);
+});
+
+test('reader visibility refreshes geometry even when no animation frame can run',()=>{
+ let h;const observed=[];h=harness({WorkspaceLayout:{refresh(){if(h)observed.push(h.document.body.classList.contains('reading-open'));}}});
+ h.open('note','n');assert.equal(observed.at(-1),true);
+ h.api.hide();assert.equal(observed.at(-1),false);h.api.reopen();assert.equal(observed.at(-1),true);
 });

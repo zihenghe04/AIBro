@@ -1,5 +1,6 @@
 """Explicitly connected local code folders, with bounded, read-only snapshots."""
 import fcntl
+import office_documents
 import hashlib
 import json
 import os
@@ -38,7 +39,7 @@ class LocalProjects:
     TEXT_SUFFIXES = frozenset({
         '.md', '.mdx', '.txt', '.json', '.html', '.htm', '.css', '.scss', '.sass',
         '.less', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.vue', '.svelte',
-        '.py', '.toml', '.yaml', '.yml', '.go', '.rs', '.rb', '.php', '.java',
+        '.swift', '.sql', '.csv', '.xml', '.sh', '.c', '.h', '.cpp', '.py', '.toml', '.yaml', '.yml', '.go', '.rs', '.rb', '.php', '.java',
     })
     CODE_MARKERS = frozenset({'package.json', 'index.html', 'pyproject.toml', 'cargo.toml', 'go.mod', 'src'})
 
@@ -346,6 +347,94 @@ class LocalProjects:
         if name in ('app.tsx', 'app.jsx', 'app.vue', 'page.tsx', 'page.jsx', 'index.tsx', 'index.jsx', 'main.ts', 'main.js'):
             return (3, depth, relative)
         return (4 if path.parts[0] in ('src', 'app', 'pages') else 5, depth, relative)
+
+    @contextmanager
+    def _connected_folder(self, candidate_id):
+        """Revalidate grants and traverse using descriptors, never resolved paths."""
+        with self._lock():
+            data = self._load()
+            candidate = data['candidates'].get(candidate_id) if isinstance(candidate_id, str) else None
+            root = next((r for r in data['roots'] if candidate and r['id'] == candidate.get('rootId')), None)
+            if root is None:
+                raise LocalProjectError('目录连接已撤销，请重新连接本机项目。', 403)
+            relative = candidate['relativePath']
+            if self._candidate(root, relative, '')['id'] != candidate_id:
+                raise LocalProjectError('无效的目录连接。', 403)
+            root_fd = self._open_root(root)
+            try:
+                folder_fd = self._open_below(root_fd, relative)
+                try:
+                    yield folder_fd
+                finally:
+                    os.close(folder_fd)
+            except OSError:
+                raise LocalProjectError('文件不存在、无法读取或已变为符号链接。', 404)
+            finally:
+                os.close(root_fd)
+
+    def browse_files(self, candidate_id, path='', offset=0):
+        self._parts(path)
+        if type(offset) is not int or offset < 0:
+            raise LocalProjectError('无效的目录页码。')
+        with self._connected_folder(candidate_id) as folder_fd:
+            descriptor = self._open_below(folder_fd, path)
+            try:
+                entries = []
+                # One directory at a time; browsing never reads file contents.
+                with os.scandir(descriptor) as scan:
+                    for entry in scan:
+                        if self._excluded(entry.name) or entry.is_symlink():
+                            continue
+                        metadata = entry.stat(follow_symlinks=False)
+                        directory = stat.S_ISDIR(metadata.st_mode)
+                        if not directory and not stat.S_ISREG(metadata.st_mode):
+                            continue
+                        name = entry.name
+                        supported = directory or Path(name).suffix.lower() in self.TEXT_SUFFIXES | office_documents.SUFFIXES or name.lower() in ('readme', 'license')
+                        entries.append({'name': name, 'path': (path + '/' if path else '') + name,
+                            'type': 'directory' if directory else 'file', 'size': metadata.st_size,
+                            'supported': supported})
+                entries.sort(key=lambda e: (e['type'] != 'directory', e['name'].casefold(), e['name']))
+                return {'entries': entries[offset:offset + 100], 'offset': offset, 'total': len(entries),
+                    'nextOffset': offset + 100 if offset + 100 < len(entries) else None}
+            finally:
+                os.close(descriptor)
+
+    def read_file(self, candidate_id, path, offset=0, version=None):
+        parts = self._parts(path)
+        if not parts or type(offset) is not int or offset < 0:
+            raise LocalProjectError('无效的文件路径或读取位置。')
+        if Path(parts[-1]).suffix.lower() not in self.TEXT_SUFFIXES | office_documents.SUFFIXES and parts[-1].lower() not in ('readme', 'license'):
+            raise LocalProjectError('此格式请通过附件导入；本机引用当前支持 Markdown、代码和文本。', 415)
+        with self._connected_folder(candidate_id) as folder_fd:
+            parent = self._open_below(folder_fd, '/'.join(parts[:-1]))
+            try:
+                descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+                with os.fdopen(descriptor, 'rb') as handle:
+                    before = os.fstat(handle.fileno())
+                    if not stat.S_ISREG(before.st_mode):
+                        raise LocalProjectError('只能读取普通文件。', 403)
+                    if before.st_size > 4 * 1024 * 1024:
+                        raise LocalProjectError('此文本超过 4 MB，请拆分或通过附件导入。', 413)
+                    raw = handle.read(4 * 1024 * 1024 + 1)
+                    after = os.fstat(handle.fileno())
+                    if len(raw) > 4 * 1024 * 1024 or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                        raise LocalProjectError('读取期间文件发生变化，请更新引用后重试。', 409)
+                digest = hashlib.sha256(raw).hexdigest()
+                if version and version != digest:
+                    raise LocalProjectError('文件已修改，请在输入框上方更新引用后继续。', 409)
+                try:
+                    content = office_documents.inspect(raw,Path(path).suffix.lower()) if Path(path).suffix.lower() in office_documents.SUFFIXES else raw.decode('utf-8-sig')
+                except UnicodeDecodeError:
+                    raise LocalProjectError('此文件不是 UTF-8 文本，请通过附件导入。', 415)
+                if '\x00' in content:
+                    raise LocalProjectError('检测到二进制内容，请通过附件导入。', 415)
+                excerpt = content[offset:offset + 12000]
+                return {'path': path, 'version': digest, 'size': len(raw), 'offset': offset,
+                    'text': excerpt, 'totalChars': len(content),
+                    'nextOffset': offset + len(excerpt) if offset + len(excerpt) < len(content) else None}
+            finally:
+                os.close(parent)
 
     def snapshot(self, candidate_id):
         if not isinstance(candidate_id, str) or not re.fullmatch(r'local_[a-f0-9]{40}', candidate_id):

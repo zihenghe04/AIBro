@@ -12,13 +12,13 @@
   const resultIds = results => [...new Set(list(results).filter(result => result?.type === 'note' && result.id).map(result => result.id))];
   function groups(state, conversation) {
     const messages = list(conversation?.messages).filter(active);
-    const rows = messages.map((message, order) => ({ ids: resultIds(message.results), at: Number(message.at || message.createdAt) || 0, order }));
+    const rows = messages.map((message, order) => ({ ids: [...resultIds(message.results),...list(list(state.agentRuns).find(r=>r.id===message.runId)?.memoryNoteIds)], at: Number(message.at || message.createdAt) || 0, order }));
     for (const run of list(state.agentRuns)) {
       if (!active(run) || run.conversationId !== conversation?.id) continue;
       // Message results are the user-visible review boundary; avoid duplicating
       // their underlying run with a different timestamp.
       if (messages.some(message => message.runId === run.id && resultIds(message.results).length)) continue;
-      rows.push({ ids: resultIds(run.results), at: Number(run.finishedAt || run.completedAt || run.startedAt) || 0, order: rows.length });
+      rows.push({ ids: [...resultIds(run.results),...list(run.memoryNoteIds)], at: Number(run.finishedAt || run.completedAt || run.startedAt) || 0, order: rows.length });
     }
     return rows.filter(row => row.ids.length).sort((a, b) => b.at - a.at || b.order - a.order);
   }

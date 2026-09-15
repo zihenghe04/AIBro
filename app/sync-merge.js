@@ -6,7 +6,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
   const COLLECTIONS = ['projects','tasks','notes','imports','papers','conversations','links','attachments','trash','skills'];
-  const DEVICE_FIELDS = new Set(['localFolder','localPath','rootPath','rootId','path','absolutePath','permissionMode','permissions','approvalPolicy','sandboxMode','draft','draftAttachmentIds']);
+  const DEVICE_FIELDS = new Set(['localFolder','localPath','rootPath','rootId','path','absolutePath','permissionMode','permissions','approvalPolicy','sandboxMode','draft','draftAttachmentIds','draftFileReferences']);
   const MISSING = Symbol('missing');
   const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
   const get = (value, key, fallback = MISSING) => own(value, key) ? value[key] : fallback;

@@ -62,7 +62,7 @@
     if (bound && !active(projects.get(bound))) return output;
     const space = bound ? projects.get(bound).workspace : ['日常', '课程', '科研'].includes(conversation.workspace) ? conversation.workspace : null;
     const available = task => active(task) && (!task.projectId || active(projects.get(task.projectId)));
-    const scoped = task => available(task) && (!bound || task.projectId === bound) && (!space || (projects.get(task.projectId)?.workspace || task.workspace) === space);
+    const scoped = task => available(task) && (!bound || task.projectId === bound || (options.includeUnassigned && !task.projectId)) && (!space || (projects.get(task.projectId)?.workspace || task.workspace) === space);
     const add = (id, rank, recency, reason) => {
       const task = tasks.get(id); if (!scoped(task)) return;
       const current = candidates.get(id);
@@ -82,6 +82,7 @@
       if (task.sourceConversationId === conversation.id) add(task.id, 2, time(task.updatedAt || task.createdAt), '当前对话创建');
       if (bound && task.projectId === bound) add(task.id, 3, time(task.updatedAt || task.createdAt), '当前项目任务');
     }
+    for (const id of list(options.candidateTaskIds)) add(id, 0, 0, '任务目录查询候选，需按用户意图核对');
     const goal = normalize(options.goal), titles = new Map();
     for (const task of tasks.values()) if (available(task)) { const title = normalize(task.title); if (title) { const matches = titles.get(title) || []; matches.push(task); titles.set(title, matches); } }
     const mentioned = [...titles.keys()].filter(title => titleMention(goal, title));
@@ -95,7 +96,7 @@
     const ordered = [...candidates.values()].sort((a, b) => a.rank - b.rank || b.recency - a.recency || a.task.id.localeCompare(b.task.id));
     for (const { task, reason } of ordered) {
       const project = projects.get(task.projectId);
-      const essentials = { id: task.id, title: clip(task.title, 240), workspace: project?.workspace || task.workspace || null, projectId: task.projectId || null, status: task.status || 'todo', priority: task.priority || 'medium', dueAt: task.dueAt ?? null, startAt: task.startAt ?? null, relation: reason };
+      const essentials = { id: task.id, title: clip(task.title, 240), workspace: project?.workspace || task.workspace || null, projectId: task.projectId || null, status: task.status || 'todo', priority: task.priority || 'medium', dueAt: task.dueAt ?? null, startAt: task.startAt ?? null, relation: reason, dependsOn:list(task.dependsOn), blockedBy:list(task.dependsOn).filter(id=>!active(tasks.get(id))||tasks.get(id).status!=='done') };
       let row;
       for (const size of [600, 160, 0]) {
         const record = { ...essentials, description: clip(task.description, size), checklist: list(task.checklist).slice(0, size ? 10 : 0).map(item => typeof item === 'string' ? { text: clip(item, 100), done: false } : { id: item.id, text: clip(item.text || item.title, 100), done: !!item.done }), sourceAttachmentIds: list(task.sourceAttachmentIds).filter(validId).slice(0, size ? 8 : 0), updatedAt: task.updatedAt ?? null };
@@ -110,10 +111,45 @@
     }
     return output;
   }
+  // Catalog search is separate from document excerpts. A project may also
+  // reference standalone tasks in the same space, without moving ownership.
+  function search(state, conversation, request = {}) {
+    const offset = request.offset === undefined ? 0 : Number(request.offset);
+    if (!Number.isSafeInteger(offset) || offset < 0) throw Error('无效任务分页位置');
+    const fold = value => normalize(value).replace(/[零一二两三四五六七八九十百]+/g, word => {
+      const digit = c => '零一二三四五六七八九'.indexOf(c === '两' ? '二' : c);
+      let total = 0, current = 0;
+      for (const c of word) { if (c === '十' || c === '百') { total += (current || 1) * (c === '十' ? 10 : 100); current = 0; } else current = digit(c); }
+      return String(total + current);
+    }).replace(/[^\p{L}\p{N}]/gu, '');
+    const query = fold(request.query || ''), projects = uniqueIndex(state.projects);
+    const bound = conversation.projectId || null, space = bound ? projects.get(bound)?.workspace : conversation.workspace;
+    if (!active(conversation) || (bound && !active(projects.get(bound)))) return {type:'task_list',entries:[],total:0,nextOffset:null,context:{taskIds:[],snapshots:{}}};
+    const grams = value => new Set(Array.from({length:Math.max(0,value.length-1)},(_,i)=>value.slice(i,i+2)));
+    const qgrams = grams(query);
+    const ranked = [...uniqueIndex(state.tasks).values()].filter(t=>active(t)&&(!t.projectId||active(projects.get(t.projectId)))&&(!bound||!t.projectId||t.projectId===bound)&&(!space||space==='auto'||(projects.get(t.projectId)?.workspace||t.workspace)===space)).map(t=>{
+      const title=fold(t.title), shared=[...grams(title)].filter(g=>qgrams.has(g)).length;
+      return {task:t,score:!query?1:title.includes(query)||query.includes(title)&&title.length>1?100:shared};
+    }).filter(x=>!query||x.score>=2).sort((a,b)=>b.score-a.score||a.task.id.localeCompare(b.task.id));
+    const page=ranked.slice(offset,offset+20);
+    const scopedConversation={...conversation,messages:[]};
+    const context=build({...state,agentRuns:[],tasks:page.map(x=>x.task)},scopedConversation,{candidateTaskIds:page.map(x=>x.task.id),includeUnassigned:true,maxChars:48000});
+    const entries=context.text.split('\n').filter(line=>line.startsWith('{')).map(JSON.parse);
+    return {type:'task_list',entries,total:ranked.length,offset,nextOffset:offset+page.length<ranked.length?offset+page.length:null,context};
+  }
+  function readCatalog(state, conversation, request, run) {
+    const {context,...result}=search(state,conversation,request);
+    run.taskContext ||= {taskIds:[],snapshots:{}};
+    for (const id of context.taskIds) if (!run.taskContext.taskIds.includes(id)) {
+      run.taskContext.taskIds.push(id);
+      Object.defineProperty(run.taskContext.snapshots,id,{value:context.snapshots[id],enumerable:true,writable:true,configurable:true});
+    }
+    return result;
+  }
   function assertUnchanged(state = {}, actions = [], snapshots = {}) {
     const tasks = uniqueIndex(state.tasks), projects = uniqueIndex(state.projects);
     for (const action of list(actions)) {
-      if (action.type !== 'update_task') continue;
+      if (!['update_task', 'delete_task'].includes(action.type)) continue;
       const id = action.taskId;
       if (!validId(id) || !Object.hasOwn(snapshots || {}, id)) { const error = new Error('更新任务缺少本轮已读取的有效 taskId，请使用已提供的任务 ID；指代不明确时先询问。'); error.code = 'TASK_CONTEXT'; throw error; }
       const current = tasks.get(id), baseline = snapshots[id], project = current?.projectId ? projects.get(current.projectId) : null;
@@ -122,5 +158,5 @@
     }
     return true;
   }
-  return { build, assertUnchanged };
+  return { build, search, readCatalog, assertUnchanged };
 });

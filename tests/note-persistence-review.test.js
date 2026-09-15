@@ -74,7 +74,7 @@ test('independent research follow-up permits its actual prior note without new a
   };
   const context = vm.createContext({
     state, window: { NoteConsolidation }, NoteConsolidation,
-    run: { projectId: null }, attachmentsBefore: [],
+    run: { projectId: null }, attachmentsBefore: [], fileContext: { snapshots: [] },
     conversation: { messages: [{ results: [{ type: 'note', id: 'fragment' }, { type: 'note', id: 'archived' }] }] },
     visibleNote: note => !note.archived
   });

@@ -186,9 +186,9 @@ function isTrustedCredentialSender(event, webContents, localOrigin) {
   } catch (_) { return false; }
 }
 
-function registerApiCredentialHandlers({ ipcMain, getWindow, getLocalOrigin, getStore }) {
+function registerApiCredentialHandlers({ ipcMain, getWindow, getLocalOrigin, getStore, channelPrefix = CHANNEL_PREFIX }) {
   for (const operation of ['status', 'read', 'save', 'remove']) {
-    ipcMain.handle(CHANNEL_PREFIX + operation, (event, input) => {
+    ipcMain.handle(channelPrefix + operation, (event, input) => {
       if (!isTrustedCredentialSender(event, getWindow()?.webContents, getLocalOrigin())) fail('INVALID_SENDER', '仅当前工作站主窗口可访问本机 API 凭据。');
       return getStore()[operation](input);
     });

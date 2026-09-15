@@ -1,0 +1,236 @@
+[
+  {
+    "id": "overview",
+    "clip": "01-overview",
+    "zh": [
+      "从今天开始，接着上次继续。",
+      "不用先翻遍聊天记录，才能找回工作。",
+      "总览汇集项目、待办和最近积累。日常、课程与科研各有空间，从正在推进的项目直接回到任务和资料。",
+      "工作区总览 · 最近项目 · 空间入口"
+    ],
+    "en": [
+      "A place to pick up from.",
+      "Find the work, without digging through yesterday’s chats.",
+      "Your overview brings projects, tasks and saved knowledge together. Move into Daily, Courses or Research, then return to the materials behind your next step.",
+      "Overview · Recent projects · Spaces"
+    ],
+    "steps": [
+      "Bring your materials",
+      "Choose a space",
+      "Continue the project"
+    ],
+    "result": "One home for work in progress",
+    "eyebrow": "01 / OVERVIEW",
+    "caption": "浏览总览与最近项目",
+    "duration": 6.8,
+    "bytes": 3851631
+  },
+  {
+    "id": "files",
+    "clip": "02-file-review",
+    "zh": [
+      "文件有了下文。",
+      "把原件放在对话旁边，修改就不再是一段难以核对的回答。",
+      "拖放或 @ 引用资料，说清想改哪里。AI 生成修改后，逐项查看 Diff，在源码与排版预览间切换，再保存或撤销。",
+      "文件与版本快照 · 可审阅修改 · Finder 定位"
+    ],
+    "en": [
+      "Files you can build on.",
+      "Keep the source beside the conversation. See what actually changed.",
+      "Drop a file or @ reference it. Describe the change, inspect the diff, switch between source and preview, then save or undo.",
+      "Files and snapshots · Reviewable edits · Reveal in Finder"
+    ],
+    "steps": [
+      "Reference a file",
+      "Inspect the changes",
+      "Read source or preview"
+    ],
+    "result": "An editable result, with a reviewable history",
+    "eyebrow": "02 / FILES",
+    "caption": "打开修改卡片，切换 Diff、源码与预览",
+    "duration": 15.2,
+    "bytes": 4222877
+  },
+  {
+    "id": "agenda",
+    "clip": "03-agenda",
+    "zh": [
+      "让下一步，真正落到时间里。",
+      "课表、会议和任务安排，不用在几个工具间来回记。",
+      "导入 ICS 课表，点击日期查看详情。设置循环和提前提醒；从随记或对话提出日程时，先检查草稿再保存。",
+      "ICS 导入 · 循环与提醒 · 来源回链"
+    ],
+    "en": [
+      "Give the next step a time.",
+      "Keep classes, meetings and project tasks in view.",
+      "Import an ICS timetable, open a date, and set recurrence and reminders. Review a proposed event from a capture or conversation before saving it.",
+      "ICS import · Recurrence and reminders · Linked sources"
+    ],
+    "steps": [
+      "Import your timetable",
+      "Open a day",
+      "Set an advance reminder"
+    ],
+    "result": "Classes, meetings and tasks in context",
+    "eyebrow": "03 / AGENDA",
+    "caption": "切换日程视图",
+    "duration": 5.9,
+    "bytes": 2593291
+  },
+  {
+    "id": "captures",
+    "clip": "04-captures",
+    "zh": [
+      "先记下来，再长出新想法。",
+      "零散灵感，不必马上整理得井井有条。",
+      "随手写一句，附上链接、图片或文件。积累后按主题选中一组，让 AI 整理、寻找关联或设计验证步骤，原始记录始终保留。",
+      "文字与附件 · 标签与批次 · 想法、实验和行动"
+    ],
+    "en": [
+      "Catch the thought. Make sense of it later.",
+      "An idea does not have to arrive fully organized.",
+      "Write a line, add a link, image or file. Select a group later for AI organization, connections or a small experiment. Keep the original observations.",
+      "Text and attachments · Tags and batches · Ideas and next steps"
+    ],
+    "steps": [
+      "Capture a thought",
+      "Find a connection",
+      "Plan the next step"
+    ],
+    "result": "Keep the original idea linked to the action",
+    "eyebrow": "04 / CAPTURES",
+    "caption": "打开随记并查看关联日程",
+    "duration": 16.1,
+    "bytes": 6434337
+  },
+  {
+    "id": "projects",
+    "clip": "05-project-charts",
+    "zh": [
+      "项目，接着上次继续。",
+      "计划、任务、对话和产出，终于在同一处。",
+      "把工作归入项目。通过看板、依赖和时间轴安排下一步；项目计划与按日日志为后续对话提供持续上下文。",
+      "项目文件树 · 任务与排期 · 计划和长期记忆"
+    ],
+    "en": [
+      "Projects that pick up where you left off.",
+      "Plans, tasks, conversations and outputs share one home.",
+      "Organize work into a project. Use boards, dependencies and timelines to choose the next step, with project plans and daily logs available to future chats.",
+      "Project tree · Tasks and schedule · Durable plans and memory"
+    ],
+    "steps": [
+      "Plan the work",
+      "Schedule the tasks",
+      "Track progress"
+    ],
+    "result": "Return with the context you built last time",
+    "eyebrow": "05 / PROJECTS",
+    "caption": "浏览进度图表，横向查看时间轴",
+    "duration": 12.3,
+    "bytes": 7942584
+  },
+  {
+    "id": "reader",
+    "clip": "06-project-reader",
+    "zh": [
+      "文件在左，思考在旁。",
+      "看资料的时候，不必丢掉项目的上下文。",
+      "在项目文件树中切换原件和笔记，阅读区保持在右侧。并排核对资料，调节分区宽度，让阅读和推进工作发生在同一个地方。",
+      "项目文件树 · 并排阅读 · 可调分区"
+    ],
+    "en": [
+      "Keep the source beside the work.",
+      "Read a document without losing your place in the project.",
+      "Move through sources and notes in the project tree while the reader stays alongside your work. Resize the panes to give the current task the room it needs.",
+      "Project tree · Side-by-side reading · Resizable panes"
+    ],
+    "steps": [
+      "Browse the project tree",
+      "Open a source",
+      "Read alongside your notes"
+    ],
+    "result": "Less window switching. More context.",
+    "eyebrow": "06 / READER",
+    "caption": "从项目文件树打开阅读区",
+    "duration": 8.1,
+    "bytes": 4598728
+  },
+  {
+    "id": "wiki",
+    "clip": "07-research-wiki",
+    "zh": [
+      "读过的，成为研究积累。",
+      "论文之外，留下方法、失败经验和仍然开放的问题。",
+      "科研空间里浏览真实 Markdown 目录。连接概念、方法、实验和 review 反馈，沿来源与双链核对证据，审阅后再合并更新。",
+      "Markdown 目录 · 证据与双链 · 版本和便携导出"
+    ],
+    "en": [
+      "Reading becomes research memory.",
+      "Keep the methods, failed attempts and unanswered questions—not just the papers.",
+      "Browse a real Markdown directory inside Research. Connect concepts, methods, experiments and review feedback, follow sources and backlinks, then review proposed updates.",
+      "Markdown folders · Evidence and backlinks · Versions and export"
+    ],
+    "steps": [
+      "Papers & sources",
+      "Methods & experiments",
+      "Questions & insights"
+    ],
+    "result": "Research memory that grows beyond a conversation",
+    "eyebrow": "07 / WIKI",
+    "caption": "浏览科研 Wiki 与分类条目",
+    "duration": 7.6,
+    "bytes": 6738326
+  },
+  {
+    "id": "history",
+    "clip": "08-history-trash",
+    "zh": [
+      "做过什么，找得回来。",
+      "结果之外，过程也值得留下。",
+      "从执行历史回看一次工作的目标、活动和结果。误删的受管内容可以在回收站检查、恢复，让整理工作更从容。",
+      "执行历史 · 状态追踪 · 回收站"
+    ],
+    "en": [
+      "Keep a trail of the work.",
+      "The process matters as much as the answer.",
+      "Return to a run’s goal, activity and results through execution history. Inspect and restore supported deleted items from the trash when something needs to come back.",
+      "Execution history · Run status · Trash and recovery"
+    ],
+    "steps": [
+      "Inspect a past run",
+      "Follow the result",
+      "Recover deleted items"
+    ],
+    "result": "A traceable path back to your work",
+    "eyebrow": "08 / HISTORY",
+    "caption": "查看执行历史与回收站",
+    "duration": 8.7,
+    "bytes": 2189488
+  },
+  {
+    "id": "models",
+    "clip": "09-model-settings",
+    "zh": [
+      "模型由你选，工作留在这里。",
+      "换一种能力，不用换掉整个工作区。",
+      "连接自定义 API 或本机 Codex 登录，按会话选择模型与推理强度。文件、笔记和项目保持归属，继续用适合当前任务的模型推进。",
+      "模型连接 · 会话选择 · 本地工作区"
+    ],
+    "en": [
+      "Change the model. Keep your workspace.",
+      "Choose the capabilities that fit the task.",
+      "Connect a compatible custom API or local Codex sign-in, then select a model and reasoning effort per chat. Keep your projects, notes and files in the same place.",
+      "Model connections · Per-chat choice · Local workspace"
+    ],
+    "steps": [
+      "Connect a provider",
+      "Choose a model",
+      "Continue your project"
+    ],
+    "result": "Your files and context stay organized",
+    "eyebrow": "09 / MODELS",
+    "caption": "查看模型连接设置",
+    "duration": 3.6,
+    "bytes": 1692155
+  }
+]

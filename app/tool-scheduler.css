@@ -1,0 +1,4 @@
+.tool-ledger { max-width:100%; }
+.tool-ledger-row { margin:8px 0; padding:8px 12px; border-left:2px solid var(--line, #cbd5d1); }
+.tool-ledger-row summary { cursor:pointer; line-height:1.6; overflow-wrap:anywhere; }
+.tool-ledger-row pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:320px; overflow:auto; font-size:12px; }

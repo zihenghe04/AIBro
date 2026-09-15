@@ -174,3 +174,17 @@ test('project import with missing target is rejected before any upload and canno
   const c=harness([]);await c.importMaterials(event,{files:[{name:'source.png',type:'image/png',size:12}],projectId:null});
   assert.equal(c.calls.length,0);assert.equal(c.state.imports.length,0);assert.match(c.message,/目标项目/);
 });
+
+test('capture import stores attachments on the original capture without consuming any conversation draft',async()=>{
+ const c=harness([]);c.state.notes=[{id:'capture',kind:'随记',content:'原文',sourceAttachmentIds:[],updatedAt:1}];
+ const original=JSON.stringify(c.state.conversations);c.currentConversation=()=>{throw Error('capture import must not use chat');};
+ const result=await c.importMaterials(event,{files:[{name:'figure.png',type:'image/png',size:12}],captureNoteId:'capture'});
+ assert.equal(result.imported.length,1);assert.equal(result.failedFiles.length,0);assert.equal(c.state.notes[0].content,'原文');
+ assert.deepEqual(Array.from(c.state.notes[0].sourceAttachmentIds),[result.imported[0].id]);assert.equal(result.imported[0].importOrigin,'capture');assert.equal(JSON.stringify(c.state.conversations),original);assert.equal(c.navigated,undefined);
+});
+test('capture removed during upload retains failed file for retry and never attaches it elsewhere',async()=>{
+ const upload=deferred(),c=harness([],{upload});c.state.notes=[{id:'capture',kind:'随记',sourceAttachmentIds:[]}];
+ const file={name:'figure.png',type:'image/png',size:12};const pending=c.importMaterials(event,{files:[file],captureNoteId:'capture'});
+ c.state.notes=[];upload.resolve(response());const result=await pending;
+ assert.equal(c.state.imports.length,0);assert.equal(result.failedFiles[0],file);assert.equal(c.state.attachments.length,0);
+});

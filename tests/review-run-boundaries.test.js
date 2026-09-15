@@ -11,7 +11,7 @@ const cut = (start, end) => source.slice(source.indexOf(start), source.indexOf(e
 const empty = () => ({ projects: [{id:'research', name:'控制实验', workspace:'科研'}], tasks:[], notes:[], imports:[], papers:[], links:[], trash:[], agentRuns:[], conversations:[{id:'conversation',title:'Existing conversation',projectId:'research',workspace:'科研',messages:[],attachments:[]}], currentConversationId:'conversation', settings:{permissions:{'日常':'auto','课程':'auto','科研':'approval'}} });
 function executionContext() {
   let next=0;
-  const c=vm.createContext({state:empty(),Core,AttachmentContext,AttachmentDelivery,AttachmentAnalysis,window:{AttachmentAnalysis},workspaceName:v=>v==='科研'||v==='课程'?v:'日常',uid:prefix=>`${prefix}-${++next}`,normalizeStateShape:()=>{},addRunStep:()=>{},save:()=>{},renderAll:()=>{}});
+  const c=vm.createContext({structuredClone,state:empty(),Core,AttachmentContext,AttachmentDelivery,AttachmentAnalysis,window:{AttachmentAnalysis},workspaceName:v=>v==='科研'||v==='课程'?v:'日常',uid:prefix=>`${prefix}-${++next}`,normalizeStateShape:()=>{},addRunStep:()=>{},save:()=>{},renderAll:()=>{}});
   vm.runInContext(cut('function activeResultRecord(', '\nfunction conversationProjectIds(') + cut('function dedupeResultEntries(', '\nfunction groupedEntities(') + cut('function commitAttachmentAnalysis(', '\nfunction executeActions(')+cut('function executeActions(', '\nfunction fallbackWorkflow(')+cut('function actionsNeedApproval(', '\nfunction actionSummary('),c);
   return c;
 }
@@ -21,6 +21,7 @@ test('approval considers actual action targets, even when the model declares a d
   const run={workspace:'日常',conversationId:'conversation',pendingActions:[{type:'create_task',workspace:'科研',projectId:'research',title:'Protected experiment'}]};
   assert.equal(c.actionsNeedApproval(run),true,'A research write requires research approval regardless of the model workspace label');
   c.state.tasks.push({id:'research-task',title:'Review experiment',workspace:'科研',projectId:'research',status:'todo'});
+  run.taskContext=require('../app/task-context').build(c.state,c.state.conversations[0]);
   run.pendingActions=[{type:'delete_task',taskId:'research-task'}];
   assert.equal(c.actionsNeedApproval(run),true,'Delete must use the existing object workspace');
 });
@@ -85,7 +86,7 @@ test('changing the conversation scope during model preparation affects only the 
   c.state.projects.push({id:'another-project',name:'另一项目',workspace:'日常'});
   let ready;const pending=new Promise(resolve=>{ready=resolve});let recalledScope, requestText;
   const models={configuration:()=>({provider:'api',model:'fixture-model',effort:''}),resolve:()=>pending};
-  const retrieval={buildContext:(_state,scope)=>{recalledScope={...scope};return {text:'FROZEN_CONTEXT',entries:[],coverage:{}}}};
+  const retrieval={buildIndexedContext:(_state,scope)=>{recalledScope={...scope};return {text:'FROZEN_CONTEXT',entries:[],coverage:{}}}};
   Object.assign(c,{$:node,window:{ConversationModels:models,ContextRetrieval:retrieval,AttachmentAnalysis},ConversationModels:models,localStorage:{getItem:()=>''},document:{createElement:()=>node('holder')},AbortController,URL,setTimeout,clearTimeout,
     activeRunController:null,liveRenderTimer:null,currentConversation:()=>c.state.conversations[0],currentAttachments:()=>[],defaultModelConfiguration:()=>({provider:'api',model:'fixture-model',effort:''}),renderConversation(){},renderMessage(){},classifyWorkspace:()=> '科研',visiblePaper:()=>true,actionSummary:()=>'',
     AgentTransport:{requestPlan:async request=>{requestText=request.input;return JSON.stringify({workspace:'科研',message:'Read only result',actions:[]})}},addRunStep:(run,text,status)=>{run.steps.push({text,status})},

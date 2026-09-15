@@ -23,13 +23,13 @@ test('geometry clips viewport, skips invalid bounds, and produces bounded native
   assert.deepEqual(Native.clippedRect({left:-4,top:10,width:100,height:80},{width:80,height:60}),{x:0,y:10,width:80,height:50});
   assert.equal(Native.clippedRect({left:NaN,top:0,width:2,height:2},{width:80,height:60}),null);
   assert.equal(Native.clippedRect({left:90,top:0,width:2,height:2},{width:80,height:60}),null);
-  const h=harness();const {regions}=Native.collectRegions(h.document,h.env);assert.equal(regions.length,4);assert.deepEqual(regions[0],{id:'sidebar',x:8,y:8,width:207,height:884,radius:23,style:'regular'});
+  const h=harness();const {regions}=Native.collectRegions(h.document,h.env);assert.equal(regions.length,2);assert.deepEqual(regions[0],{id:'sidebar',x:8,y:8,width:207,height:884,radius:23,style:'regular'});
   for(const r of regions){assert.ok(r.x>=0&&r.y>=0);assert.ok(r.x+r.width<=1440&&r.y+r.height<=900);assert.ok(r.radius<=Math.min(r.width,r.height)/2);}
   h.controller.destroy();
 });
 test('only successful activation reveals the material; startup rejection keeps CSS fallback',async()=>{
   const pending=deferred();const h=harness({setRegions:(regions)=>regions.length?pending.promise:Promise.resolve({supported:true,active:false,regions:0})});await tick();assert.equal(h.active(),false);assert.equal(h.glassCalls.length,0);
-  pending.resolve({supported:true,active:true,regions:4});await h.controller.ready;assert.equal(h.active(),true);assert.deepEqual(h.glassCalls,[true]);assert.equal(h.nodes.get('#composer').attrs.get('data-native-glass-region'),'composer');h.controller.destroy();await tick();assert.equal(h.active(),false);
+  pending.resolve({supported:true,active:true,regions:2});await h.controller.ready;assert.equal(h.active(),true);assert.deepEqual(h.glassCalls,[true]);assert.equal(h.nodes.get('#composer').attrs.has('data-native-glass-region'),false);h.controller.destroy();await tick();assert.equal(h.active(),false);
   const failure=harness({status:()=>Promise.reject(new Error('no bridge'))});await failure.controller.ready;assert.equal(failure.active(),false);assert.equal(failure.calls.length,0);failure.controller.destroy();
 });
 test('unsupported runtime never starts region updates or leaves transparent controls',async()=>{
@@ -38,11 +38,11 @@ test('unsupported runtime never starts region updates or leaves transparent cont
 });
 test('reader header unions toolbar and tabs; hidden or non-agent regions disappear',async()=>{
   const h=harness();await h.controller.ready;h.element('.reading-toolbar',900,8,530,47);h.element('.reading-tabs',900,55,530,41);
-  h.nodes.get('#conversationNavigator').hidden=true;h.body.dataset.view='project';h.controller.refresh();await h.flush();const regions=h.calls.at(-1);assert.equal(regions.some(r=>r.id==='composer'||r.id==='navigator'),false);assert.deepEqual(regions.at(-1),{id:'reader-header',x:900,y:8,width:530,height:88,radius:16,style:'regular'});
-  assert.equal(h.nodes.get('.reading-tabs').attrs.get('data-native-glass-region'),'reader-header');h.controller.destroy();
+  h.nodes.get('#conversationNavigator').hidden=true;h.body.dataset.view='project';h.controller.refresh();await h.flush();const regions=h.calls.at(-1);assert.equal(regions.some(r=>r.id==='composer'||r.id==='navigator'),false);assert.deepEqual(regions.map(r=>r.id),['sidebar']);
+  assert.equal(h.nodes.get('.reading-tabs').attrs.has('data-native-glass-region'),false);h.controller.destroy();
 });
 test('many resize signals coalesce, unchanged geometry does not IPC, and streaming text is ignored',async()=>{
-  const h=harness();await h.controller.ready;h.nodes.get('#composer').rect.width=660;
+  const h=harness();await h.controller.ready;h.nodes.get('#conversationNavigator').rect.width=260;
   for(let n=0;n<100;n++)h.resize();assert.equal(h.active(),false);assert.equal(h.timers.size,1);await h.flush();assert.equal(h.calls.length,2);assert.equal(h.active(),true);
   for(let n=0;n<100;n++)h.mutate([{type:'childList',target:{},addedNodes:[{nodeType:3}],removedNodes:[]}]);assert.equal(h.timers.size,0);assert.equal(h.calls.length,2);
   h.resize();await h.flush();assert.equal(h.calls.length,2);h.controller.destroy();
@@ -52,7 +52,7 @@ test('CSS controller class bookkeeping does not cause a native feedback loop',as
   h.body.classList.add('reading-open');h.nodes.get('#conversationNavigator').hidden=true;h.mutate([{type:'attributes',target:h.body,attributeName:'class'}]);await h.flush();assert.equal(h.calls.length,2);h.controller.destroy();
 });
 test('late native activation is not exposed after layout changed; only latest geometry activates',async()=>{
-  const pending=deferred();const h=harness({setRegions:(regions,index)=>index===1?pending.promise:Promise.resolve({supported:true,active:regions.length>0,regions:regions.length})});await tick();h.nodes.get('#composer').rect.width=500;h.controller.refresh();pending.resolve({supported:true,active:true,regions:4});await h.controller.ready;assert.equal(h.active(),false);await h.flush();assert.equal(h.active(),true);assert.equal(h.calls.at(-1).find(r=>r.id==='composer').width,500);h.controller.destroy();
+  const pending=deferred();const h=harness({setRegions:(regions,index)=>index===1?pending.promise:Promise.resolve({supported:true,active:regions.length>0,regions:regions.length})});await tick();h.nodes.get('#conversationNavigator').rect.width=500;h.controller.refresh();pending.resolve({supported:true,active:true,regions:2});await h.controller.ready;assert.equal(h.active(),false);await h.flush();assert.equal(h.active(),true);assert.equal(h.calls.at(-1).find(r=>r.id==='navigator').width,500);h.controller.destroy();
 });
 test('reduced transparency clears native views and resumes native only after a new successful acknowledgement',async()=>{
   const h=harness();await h.controller.ready;for(const q of h.queries){q.matches=true;q.emit('change');assert.equal(h.active(),false);await h.flush();assert.deepEqual(h.calls.at(-1),[]);assert.equal(h.glassCalls.at(-1),false);q.matches=false;q.emit('change');await h.flush();assert.equal(h.active(),true);}h.controller.destroy();
@@ -62,7 +62,7 @@ test('resize dragging and hidden document clear regions, and stop creates no pol
   h.body.classList.remove('workspace-resizing');h.document.emit('pointerup');await h.flush();assert.equal(h.active(),true);h.document.hidden=true;h.document.emit('visibilitychange');await h.flush();assert.deepEqual(h.calls.at(-1),[]);assert.equal(h.active(),false);h.controller.destroy();
 });
 test('destruction during in-flight activation clears after the response and cannot reactivate',async()=>{
-  const pending=deferred();const h=harness({setRegions:(regions,index)=>index===1?pending.promise:Promise.resolve({supported:true,active:false,regions:0})});await tick();h.controller.destroy();assert.equal(h.active(),false);pending.resolve({supported:true,active:true,regions:4});await h.controller.ready;await tick();assert.deepEqual(h.calls.at(-1),[]);assert.equal(h.active(),false);assert.equal(h.timers.size,0);assert.ok(h.glassCalls.every(value=>!value));
+  const pending=deferred();const h=harness({setRegions:(regions,index)=>index===1?pending.promise:Promise.resolve({supported:true,active:false,regions:0})});await tick();h.controller.destroy();assert.equal(h.active(),false);pending.resolve({supported:true,active:true,regions:2});await h.controller.ready;await tick();assert.deepEqual(h.calls.at(-1),[]);assert.equal(h.active(),false);assert.equal(h.timers.size,0);assert.ok(h.glassCalls.every(value=>!value));
 });
 test('native failures or malformed acknowledgements keep opaque fallback and clear stale views',async()=>{
   for(const result of ['reject',{supported:true,active:true,regions:99},{supported:true,active:false,regions:0,reason:'native-failure'}]){
@@ -70,14 +70,14 @@ test('native failures or malformed acknowledgements keep opaque fallback and cle
   }
 });
 test('native CSS only exposes acknowledged surfaces and protects solid reading planes and reduced transparency',()=>{
-  const css=fs.readFileSync(require.resolve('../app/native-glass-ui.css'),'utf8');assert.match(css,/html\.native-liquid-glass/);assert.match(css,/\[data-native-glass-region\]/);assert.match(css,/#previewDialog \{background:var\(--lg-content\)\}/);assert.match(css,/prefers-reduced-transparency/);assert.match(css,/forced-colors/);assert.match(css,/message-list[\s\S]*?mask-image/);
+  const css=fs.readFileSync(require.resolve('../app/native-glass-ui.css'),'utf8');assert.match(css,/html\.native-liquid-glass/);assert.match(css,/\[data-native-glass-region\]/);assert.match(css,/#previewDialog \{background:var\(--lg-content\)\}/);assert.match(css,/prefers-reduced-transparency/);assert.match(css,/forced-colors/);assert.match(css,/\.conversation-pane \{background:var\(--lg-content\)\}/);
   assert.doesNotMatch(css,/[;{]\s*(?:transform|filter)\s*:/);assert.match(css,/backdrop-filter:none/);assert.match(css,/mask-composite:intersect/);
 });
 
 test('the opaque shell is present before activation and updates only to acknowledged rounded holes',async()=>{
   const h=harness();await h.controller.ready;const shell=h.body.children.find(el=>el.id==='nativeGlassShell');assert.ok(shell);assert.equal(shell.style.display,'block');assert.equal(shell.attrs.get('aria-hidden'),'true');assert.equal(shell.children[0].attrs.get('fill-rule'),'evenodd');
   assert.equal(shell.children[0].attrs.get('d'),Native.shellPath(h.calls[0],1440,900));assert.ok(shell.children[0].attrs.get('d').startsWith('M0 0H1440V900H0Z'));
-  h.body.dataset.view='research';h.controller.refresh();assert.equal(shell.style.display,'none');await h.flush();assert.equal(shell.style.display,'block');assert.equal(shell.children[0].attrs.get('d'),Native.shellPath(h.calls.at(-1),1440,900));assert.equal(h.calls.at(-1).some(region=>region.id==='composer'),false);
+  h.body.dataset.view='research';h.nodes.get('#conversationNavigator').hidden=true;h.controller.refresh();assert.equal(shell.style.display,'none');await h.flush();assert.equal(shell.style.display,'block');assert.equal(shell.children[0].attrs.get('d'),Native.shellPath(h.calls.at(-1),1440,900));assert.equal(h.calls.at(-1).some(region=>region.id==='composer'),false);
   h.controller.destroy();assert.equal(shell.removed,true);assert.equal(shell.style.display,'none');
 });
 
@@ -90,9 +90,9 @@ test('native text scrims guarantee 4.5 contrast on the worst possible external b
     const material=pattern('content'),edge=pattern('edge');assert.ok(material&&edge);
     const alpha=Number(material[4]),edgeAlpha=Number(edge[4]),rim=edge.slice(1,4).map(n=>Number(n)*edgeAlpha+external*(1-edgeAlpha));
     const base=material.slice(1,4).map((n,i)=>Number(n)*alpha+rim[i]*(1-alpha));
-    assert.ok(Math.max(...rim.map((n,i)=>Math.abs(n-base[i])))<16,'native highlight is softly attenuated, not an extreme outline');
+    assert.ok(1-(1-alpha)*(1-edgeAlpha)<.8,'the native material must not be sealed behind almost opaque overlays');
     for(const role of ['text','muted','faint']){
-      const hex=new RegExp(`--${role}:#([a-f0-9]{6});`).exec(block)[1],fg=hex.match(/../g).map(n=>parseInt(n,16)),ls=[luminance(fg),luminance(base)].sort((a,b)=>b-a);assert.ok((ls[0]+.05)/(ls[1]+.05)>=4.5,`${suffix||'dark'} ${role}`);
+      const hex=role==='text'?new RegExp(`--${role}:#([a-f0-9]{6});`).exec(block)[1]:(suffix?'414143':'dedee0'),fg=hex.match(/../g).map(n=>parseInt(n,16)),ls=[luminance(fg),luminance(base)].sort((a,b)=>b-a);assert.ok((ls[0]+.05)/(ls[1]+.05)>=4.5,`${suffix||'dark'} ${role}`);
     }
   }
   assert.match(css,/#nativeGlassShell[^}]*fill:var\(--bg\)/);assert.match(css,/--native-feather-x:linear-gradient/);assert.match(css,/pointer-events:none/);

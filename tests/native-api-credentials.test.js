@@ -337,3 +337,16 @@ test('Electron main import, store construction, status and deletion do not even 
   assert.equal(getterCalls, 1);
   assert.equal(fs.existsSync(path.join(userData, 'credentials')), false);
 });
+
+test('embedding credentials are isolated from chat credentials and removal', t => {
+  const f=fixture(t),directory=path.join(f.root,'embedding-credentials');
+  const embedding=createApiCredentialStore({...f.config,directory});
+  f.store.save(connection);
+  embedding.save({...connection,token:'synthetic-embedding-only',model:'embedding-model'});
+  assert.equal(f.store.read({base:connection.base}).token,connection.token);
+  assert.equal(embedding.read({base:connection.base}).token,'synthetic-embedding-only');
+  assert.equal(fs.readFileSync(path.join(directory,'api.json'),'utf8').includes('synthetic-embedding-only'),false);
+  embedding.remove();
+  assert.equal(embedding.status().hasKey,false);
+  assert.equal(f.store.read({base:connection.base}).token,connection.token);
+});

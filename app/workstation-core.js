@@ -5,6 +5,8 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
   const Research = typeof module === 'object' && module.exports ? require('./research-library.js') : globalThis.ResearchLibrary;
+  const Wiki = typeof module === 'object' && module.exports ? require('./research-wiki.js') : globalThis.ResearchWiki;
+  const Dependencies=typeof module==='object'&&module.exports?require('./task-dependencies'):globalThis.TaskDependencies;
   const spaces = ['日常', '课程', '科研'];
   const norm = value => String(value || '').trim().toLowerCase().replace(/[\s·_-]+/g, '');
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -85,6 +87,7 @@
     };
   }
   const labels = { link_local_project: '关联本机项目', set_workspace: '设置空间', create_project: '创建项目', rename_attachment: '重命名资料', assign_attachment: '归档资料', create_knowledge_item: '保存知识', create_note: '保存笔记', update_note: '更新笔记', append_note: '追加笔记', upsert_paper: '保存论文分析', create_task: '创建任务', update_task: '更新任务', delete_task: '删除任务', delete_note: '删除笔记', add_tag: '添加标签', create_link: '建立关联', link_items: '建立关联' };
+  labels.upsert_wiki = '保存科研 Wiki';
   labels.upsert_paper = '保存论文分析';
   function applyPlan(original, actions, context = {}) {
     if (!Array.isArray(actions) || actions.length > 80) throw new Error('单次最多执行 80 个动作，请分批整理');
@@ -151,6 +154,8 @@
       }
     }
     function applyNoteProposal(item, proposal, sources) {
+      if(item.kind?.startsWith('科研 Wiki/')&&context.protectNoteUpdates)throw new Error('科研 Wiki 更新请使用 upsert_wiki，先完整读取正文与已有草稿。');
+      if(item.kind==='随记'&&context.protectNoteUpdates)throw new Error('原始随记不可由 Agent 改写，请创建独立整理笔记并使用不同标题。');
       const content = typeof proposal.content === 'string' ? proposal.content : String(item.content || '');
       const title = typeof proposal.title === 'string' ? proposal.title : String(item.title || '');
       if (item.userEdited || context.protectNoteUpdates === true || item.aiDraft) {
@@ -188,7 +193,7 @@
     }
     function cleanTaskPatch(patch, previous = {}) {
       const result = {};
-      for (const key of ['title', 'description', 'status', 'priority', 'startAt', 'dueAt', 'checklist']) if (Object.prototype.hasOwnProperty.call(patch, key)) result[key] = patch[key];
+      for (const key of ['title', 'description', 'status', 'priority', 'startAt', 'dueAt', 'checklist', 'dependsOn']) if (Object.prototype.hasOwnProperty.call(patch, key)) result[key] = patch[key];
       if ('title' in result) result.title = required(result.title, '任务名称');
       if ('status' in result && !['todo', 'in_progress', 'done', 'blocked'].includes(result.status)) throw new Error('任务状态无效');
       if ('priority' in result && !['low', 'medium', 'high'].includes(result.priority)) throw new Error('任务优先级无效');
@@ -198,6 +203,7 @@
         const due = Object.hasOwn(result, 'dueAt') ? result.dueAt : previous.dueAt;
         if (start !== null && start !== undefined && start !== '' && due !== null && due !== undefined && due !== '' && taskDate(start, '开始').at > taskDate(due, '截止').end) throw new Error('任务截止时间不能早于开始时间');
       }
+      if ('dependsOn' in result) result.dependsOn=Dependencies.validate(state,{...previous,...result},Array.isArray(result.dependsOn)?result.dependsOn.map(id=>refs.get(id)||id):result.dependsOn);
       if ('checklist' in result) {
         if (!Array.isArray(result.checklist)) throw new Error('检查清单必须是数组');
         result.checklist = result.checklist.map(x => typeof x === 'string' ? { text: x, done: false } : { text: String(x.text || ''), done: !!x.done }).filter(x => x.text.trim());
@@ -233,6 +239,13 @@
         if (type === 'rename_attachment') { item.originalName ||= item.name; item.name = required(action.newName, '资料名称').replace(/[\\/]/g, '-'); item.updatedAt = now; record('import', item, `重命名资料：${item.name}`, 'renamed'); }
         else if (type === 'assign_attachment') { const project = projectFor(action, workspace); route(item, project, workspace); item.folderPath = folderPath(action.folderPath || item.folderPath); item.updatedAt = now; record('import', item, `归档资料：${item.name}`, 'assigned'); }
         else { item.tags = [...new Set([...(item.tags || []), required(action.tag, '标签')])]; item.updatedAt = now; record('import', item, `添加标签：${action.tag}`, 'updated'); }
+        continue;
+      }
+      if (type === 'upsert_wiki') {
+        const project = projectFor(action, '科研');
+        const result = Wiki.apply(state, action, {...context, projectId:project?.id||null, uid, now});
+        record('note', result.note, `${result.operation==='drafted'?'生成 Wiki 待审阅修改':'保存科研 Wiki'}：${result.note.title}`, result.operation);
+        if(action.id)refs.set(action.id,result.note.id);
         continue;
       }
       if (type === 'upsert_paper') {
@@ -304,7 +317,7 @@
         if (!item) {
           item = { id: uid(type === 'create_task' ? 'task' : 'note'), title, sourceAttachmentIds: sources, createdAt: now, updatedAt: now, sourceConversationId: context.conversationId, agentRunId: context.runId };
           route(item, project, workspace);
-          if (type === 'create_task') Object.assign(item, { description: '', status: 'todo', priority: 'medium', dueAt: null, checklist: [] }, cleanTaskPatch(action));
+          if (type === 'create_task') Object.assign(item, { description: '', status: 'todo', priority: 'medium', dueAt: null, checklist: [] }, cleanTaskPatch(action,item));
           else Object.assign(item, { content: String(action.content || action.body || ''), kind: String(action.kind || '笔记'), tags: action.tags || [], folderPath: folderPath(action.folderPath) });
           collection.push(item);
         } else {
@@ -325,7 +338,7 @@
       }
       if (type === 'update_task' || type === 'update_note' || type === 'append_note' || type === 'delete_task' || type === 'delete_note') {
         const isTask = type.endsWith('task'); const key = isTask ? 'tasks' : 'notes'; const id = type === 'append_note' ? action.noteId : action.taskId || action.noteId;
-        if (type === 'update_task' && Object.hasOwn(context, 'allowedTaskIds')) {
+        if (isTask && Object.hasOwn(context, 'allowedTaskIds')) {
           if (!Array.isArray(context.allowedTaskIds) || context.allowedTaskIds.some(taskId => typeof taskId !== 'string' || !taskId)) throw new Error('可更新任务范围无效');
           if (!context.allowedTaskIds.includes(id)) throw new Error('任务不在当前允许更新范围内，请使用当前任务的 ID');
         }
@@ -335,7 +348,8 @@
         }
         const item = state[key].find(x => x.id === id && !x.archived); if (!item) throw new Error(`找不到${isTask ? '任务' : '笔记'}：${id || '缺少 ID'}`);
         if ((type === 'update_note' || type === 'append_note') && (item.archivedAt || item.deleted || item.deletedAt || (item.projectId && !state.projects.some(project => project.id === item.projectId && !project.archived && !project.archivedAt && !project.deleted && !project.deletedAt)))) throw new Error(`笔记已归档、删除或不可用：${id}`);
-        if (type === 'update_task' && (item.archivedAt || item.deleted || item.deletedAt || (item.projectId && !state.projects.some(project => project.id === item.projectId && !project.archived && !project.archivedAt && !project.deleted && !project.deletedAt)))) throw new Error(`任务已归档、删除或不可用：${id}`);
+        if (isTask && (item.archivedAt || item.deleted || item.deletedAt || (item.projectId && !state.projects.some(project => project.id === item.projectId && !project.archived && !project.archivedAt && !project.deleted && !project.deletedAt)))) throw new Error(`任务已归档、删除或不可用：${id}`);
+        if(type==='delete_note'&&item.kind==='随记'&&context.protectNoteUpdates)throw new Error('原始随记请由用户在界面中删除。');
         if (type.startsWith('delete')) { state.trash.push({ type: isTask ? 'task' : 'note', title: item.title, deletedAt: now, data: { [key]: [item], links: state.links.filter(x => x.sourceId === id || x.targetId === id) } }); state[key] = state[key].filter(x => x.id !== id); state.links = state.links.filter(x => x.sourceId !== id && x.targetId !== id); record(isTask ? 'task' : 'note', item, `移入回收站：${item.title}`, 'deleted'); }
         else {
           const patch = type === 'append_note' ? {} : { ...(action.patch || {}) }; if (type !== 'append_note' && Object.hasOwn(action, 'status')) patch.status = action.status;

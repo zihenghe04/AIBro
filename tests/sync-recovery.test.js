@@ -187,7 +187,7 @@ test('an early user edit during the startup fetch is retained instead of being o
   assert.equal(h.c.state.tasks[0].title, 'Typed before server arrived');
   assert.equal(h.storedState().tasks[0].title, 'Typed before server arrived');
   assert.equal(h.c.serverConflict, true);
-  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests.filter(r=>r.url==='/__state').length, 1);
 });
 
 test('dirty startup at the same revision is retried normally without a false conflict', async () => {

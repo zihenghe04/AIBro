@@ -12,7 +12,7 @@
   // local files. Newly introduced action types require an explicit review.
   const WORKSTATION_ACTIONS = new Set([
     'set_workspace', 'create_project', 'rename_attachment', 'assign_attachment',
-    'create_knowledge_item', 'create_note', 'update_note', 'append_note', 'upsert_paper',
+    'create_knowledge_item', 'create_note', 'update_note', 'append_note', 'upsert_paper', 'upsert_wiki',
     'create_task', 'update_task', 'delete_task', 'delete_note', 'add_tag',
     'create_link', 'link_items', 'link_local_project'
   ]);

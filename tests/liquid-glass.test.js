@@ -157,7 +157,7 @@ test('SVG filter displaces the backdrop, corrects sRGB neutrality, and never app
 test('filter combines clear rim and 9px frosted center with complementary masks, without a transparent text-leaking seam', () => {
   const h=refractionFixture();h.flush();const nodes=h.children[0].children[0].children[0].children;
   const result=name=>nodes.find(node=>node.attrs.get('result')===name);
-  assert.equal(result('clear-glass').attrs.get('stdDeviation'),'.35');assert.equal(result('frosted-glass').attrs.get('stdDeviation'),'9');assert.equal(result('frosted-glass').attrs.get('in'),'refracted');
+  assert.equal(result('clear-glass').attrs.get('stdDeviation'),'.35');assert.equal(result('frosted-glass').attrs.get('stdDeviation'),'14');assert.equal(result('frosted-glass').attrs.get('in'),'refracted');
   assert.equal(result('rim-mask').attrs.get('in'),'lens-map-raw');assert.deepEqual(result('rim-mask').attrs.get('values').trim().split(/\s+/).map(Number).slice(15),[0,0,1,0,0]);
   assert.equal(result('clear-rim').attrs.get('operator'),'in');assert.equal(result('frosted-center').attrs.get('operator'),'out');
   const merge=nodes.at(-1);assert.equal(merge.attrs.get('operator'),'arithmetic');assert.equal(merge.attrs.get('k2'),'1');assert.equal(merge.attrs.get('k3'),'1');assert.equal(merge.attrs.get('in'),'clear-rim');assert.equal(merge.attrs.get('in2'),'frosted-center');
@@ -225,10 +225,10 @@ test('material palette has no fixed blue dye or luminous lower rim while keeping
   assert.match(css,/\.agent-message \.message-identity::before[^}]+box-shadow:none/);
 });
 
-test('native material suspends the CSS lens but retains composer height measurement and resumes the cached fallback', () => {
+test('native navigation and DOM composer lens remain independently active', () => {
   const h=refractionFixture({withChat:true});h.flush();assert.equal(h.writes,1);h.controller.setNativeActive(true);
-  assert.equal(h.composer.attrs.has('data-glass-refracting'),false);assert.equal(h.pane.attrs.get('data-glass-chat'),'true');
-  h.resize(480,210);h.flush();assert.equal(h.pane.style.props.get('--lg-composer-height'),'210px');assert.equal(h.writes,1);
+  assert.equal(h.composer.attrs.has('data-glass-refracting'),true);assert.equal(h.pane.attrs.get('data-glass-chat'),'true');
+  h.resize(480,210);h.flush();assert.equal(h.pane.style.props.get('--lg-composer-height'),'210px');assert.equal(h.writes,2);
   h.controller.setNativeActive(false);h.flush();assert.equal(h.composer.attrs.get('data-glass-refracting'),'true');assert.equal(h.writes,2);
   h.controller.setNativeActive(true);h.controller.setNativeActive(false);h.flush();assert.equal(h.writes,2);h.controller.destroy();
 });

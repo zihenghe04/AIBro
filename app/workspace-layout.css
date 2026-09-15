@@ -64,3 +64,48 @@ body.light-mode.workspace-layout-ready .sidebar-theme-control,body.light-mode.wo
 #previewMeta{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .entity-row>span>small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 @media(prefers-reduced-motion:reduce){.import-row-actions .text-action,.preview-analysis-status .text-action{transition:none}}
+
+/* The project navigator is a column, including when a document is docked.
+   Each column scrolls on its own; opening a file never replaces the navigator. */
+body[data-view=project] #project.active-view{display:flex;flex-direction:column;overflow:hidden;scrollbar-gutter:auto;max-width:none}
+body[data-view=project] #project>.page-heading{flex:0 0 auto;width:100%;min-width:0;margin-bottom:20px}
+body[data-view=project] #project>.project-layout{display:grid;grid-template-columns:clamp(180px,28%,240px) minmax(0,1fr);gap:18px;align-items:stretch;flex:1;min-height:0;min-width:0;width:100%;max-width:none;overflow:hidden}
+body[data-view=project] #projectTreePanel{position:static;align-self:stretch;width:auto;min-width:0;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border:0;border-right:1px solid var(--line);border-radius:0;padding:8px 12px 8px 0}
+body[data-view=project] #projectTreePanel>.tree-heading{position:sticky;top:-8px;z-index:1;background:var(--canvas);padding:8px 0 12px}
+body[data-view=project] .project-content{container:project-content / inline-size;width:auto;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:4px}
+body[data-view=project] .project-content>.section-tabs{position:sticky;top:0;z-index:3;background:var(--canvas);overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;white-space:nowrap}
+body[data-view=project].reading-open #project{padding:20px}
+body[data-view=project] #project>.project-local-summary,body[data-view=project] #project>.project-pending-analysis{flex-shrink:0;width:100%}
+@container project-content (max-width:680px){
+ .project-content .project-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .project-content .project-metrics>div{padding:12px}
+ .project-content .project-metrics>div:nth-child(3){border-left:0}
+ .project-content .project-summary{grid-template-columns:minmax(0,1fr);gap:16px}
+ .project-content .planning-summary-grid{grid-template-columns:minmax(0,1fr)}
+ .project-content .planning-heading{flex-wrap:wrap}
+}
+@container project-content (max-width:370px){
+ .project-content .planning-card{padding:14px}
+ .project-content .planning-completion{flex-direction:column;gap:16px}
+ .project-content .card-title{flex-wrap:wrap;gap:8px}
+ .project-content .section-tabs{gap:14px}
+}
+@media(max-width:980px){body[data-view=project] #project>.project-layout{gap:12px}body[data-view=project] #project>.page-heading{margin-bottom:14px}}
+
+body[data-view=project] #projectTreePanel>.tree-heading{display:grid;grid-template-columns:minmax(0,1fr) 10px;gap:4px 6px}
+body[data-view=project] #projectTreePanel>.tree-heading>h2{grid-column:1;grid-row:1}
+body[data-view=project] #projectTreeCount{grid-column:1;grid-row:2}
+body[data-view=project] #projectTreePanel>.tree-heading:after{grid-column:2;grid-row:1/3;align-self:center}
+body[data-view=project] .project-content>.section-tabs .section-tab.active:after{bottom:0}
+/* Heading actions wrap before they can squeeze the project title to one glyph. */
+body[data-view=project] #project>.page-heading{flex-direction:row;align-items:flex-start;flex-wrap:wrap;gap:12px}
+body[data-view=project] #project>.page-heading>div:first-child{flex:1 1 300px}
+body[data-view=project] #project .page-heading-actions{flex:0 1 auto;flex-wrap:wrap}
+@container project-content (max-width:370px){
+ .project-content .project-summary-meta{grid-template-columns:minmax(0,1fr);gap:6px}
+ .project-content .planning-card{overflow-x:auto}
+ .project-content .project-summary-main{min-width:0;overflow-wrap:anywhere}
+}
+/* Keep names legible in nested folders; status detail remains available on hover. */
+body[data-view=project] #projectTreePanel .tree-node{padding-left:4px}
+body[data-view=project] #projectTreePanel .tree-node>.analysis-badge{flex:0 0 6px;width:6px;padding:0;border:0;background:none;font-size:0;gap:0;overflow:hidden}

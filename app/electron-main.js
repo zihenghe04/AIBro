@@ -51,6 +51,22 @@ registerApiCredentialHandlers({
   })
 });
 
+// Embedding credentials are independent of chat credentials and never synced.
+let embeddingCredentialStore;
+registerApiCredentialHandlers({
+  ipcMain, channelPrefix: 'workstation:embedding-credentials:',
+  getWindow: () => mainWindow, getLocalOrigin: () => localOrigin,
+  getStore: () => embeddingCredentialStore ||= createApiCredentialStore({
+    directory: path.join(app.getPath('userData'), 'embedding-credentials'),
+    safeStorage: {
+      isEncryptionAvailable: () => require('electron').safeStorage.isEncryptionAvailable(),
+      getSelectedStorageBackend: () => require('electron').safeStorage.getSelectedStorageBackend(),
+      encryptString: value => require('electron').safeStorage.encryptString(value),
+      decryptString: value => require('electron').safeStorage.decryptString(value)
+    }
+  })
+});
+
 // Multiple writers can give different windows stale localStorage snapshots.
 const ownsInstance = app.requestSingleInstanceLock();
 if (!ownsInstance) app.quit();

@@ -6,7 +6,7 @@ const os = require('node:os');
 const { command, treeHash } = require('./release-runtime');
 
 // Package an already verified release bundle, never the installed user app.
-function buildDmg({ app, output }) {
+function buildDmg({ app, output, minimumMacOS = '12' }) {
   if (process.platform !== 'darwin') throw Error('DMG packaging requires macOS.');
   app = path.resolve(app); output = path.resolve(output);
   if (!output.endsWith('.dmg') || fs.existsSync(output)) throw Error('Use a new .dmg output path.');
@@ -21,7 +21,7 @@ function buildDmg({ app, output }) {
     fs.mkdirSync(contents); fs.mkdirSync(mount);
     command('/usr/bin/ditto', ['--noqtn', app, path.join(contents, 'AI Bro.app')]);
     fs.symlinkSync('/Applications', path.join(contents, 'Applications'));
-    fs.writeFileSync(path.join(contents, 'Install - 安装.txt'), 'AI Bro\n\n将 AI Bro.app 拖到 Applications，然后从应用程序打开。\nDrag AI Bro.app to Applications, then open it from Applications.\n\n更新前请退出旧版本。个人工作区会保留。\nQuit the older app before replacing it. Your workspace is retained.\n\nApple Silicon · macOS 12+ · Developer preview\n本预览版尚未经 Apple 公证。\nThis preview is not Apple-notarized.\nhttps://github.com/zihenghe04/AIBro\n');
+    fs.writeFileSync(path.join(contents, 'Install - 安装.txt'), `AI Bro\n\n将 AI Bro.app 拖到 Applications，然后从应用程序打开。\nDrag AI Bro.app to Applications, then open it from Applications.\n\n更新前请退出旧版本。个人工作区会保留。\nQuit the older app before replacing it. Your workspace is retained.\n\nApple Silicon · macOS ${minimumMacOS}+ · Developer preview\n本预览版尚未经 Apple 公证。\nThis preview is not Apple-notarized.\nhttps://github.com/zihenghe04/AIBro\n`);
     command('/usr/bin/hdiutil', ['create', '-volname', 'AI Bro', '-srcfolder', contents, '-format', 'UDZO', '-fs', 'HFS+', temporary]);
     command('/usr/bin/hdiutil', ['verify', temporary]);
     command('/usr/bin/hdiutil', ['attach', '-readonly', '-nobrowse', '-mountpoint', mount, temporary]); attached = true;

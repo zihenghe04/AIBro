@@ -54,6 +54,9 @@
       maximize.setAttribute('aria-label', expanded ? '恢复并排阅读' : '放大阅读区');
       maximize.setAttribute('aria-pressed', String(expanded));
       maximize.title = expanded ? '恢复并排阅读' : '放大阅读区';
+      // A hidden native WebView may suspend animation frames. Structural
+      // visibility must establish its width now, not wait for that frame.
+      (env.WorkspaceLayout || globalThis.WorkspaceLayout)?.refresh();
     }
     function renderTabs() {
       const focusedKey = document.activeElement?.dataset?.readingKey || document.activeElement?.dataset?.readingCloseKey;
@@ -61,10 +64,10 @@
       tabs.forEach((tab, index) => {
         const row = node('div', 'reading-tab'); row.classList.toggle('active', tab.key === activeKey);
         const select = button('', tab.title, () => selectTab(tab.key));
-        select.className = 'reading-tab-select'; select.dataset.readingKey = tab.key;
+        select.className = 'reading-tab-select'; select.dataset.readingKey = tab.key;if(tab.kind==='import')select.dataset.openImportContext=tab.id;
         select.setAttribute('role', 'tab'); select.setAttribute('aria-selected', String(tab.key === activeKey));
         select.setAttribute('aria-controls', dialog.id); select.tabIndex = tab.key === activeKey ? 0 : -1;
-        const badge = node('span', 'reading-tab-kind', tab.kind === 'note' ? '笔记' : '资料');
+        const badge = node('span', 'reading-tab-kind', ['review','local-review'].includes(tab.kind) ? '审阅' : tab.kind === 'note' ? '笔记' : '资料');
         const label = node('span', 'reading-tab-title', tab.title);
         select.append(badge, label);
         select.onkeydown = event => {
