@@ -3,7 +3,7 @@
 <p align="center"><strong>Turn a conversation into work you can continue.</strong></p>
 <p align="center">Reviewable files. Durable projects. Ideas with a next step.</p>
 <p align="center"><a href="README.md">简体中文</a> · English</p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0">Get the Mac app</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.0/AI-Bro-0.1.2-unsigned.ipa">Get the iOS app</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en#film">Watch the demo</a> · <a href="CHANGELOG.md">Changelog</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.1">Get the Mac app</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.1/AI-Bro-0.1.3-unsigned.ipa">Get the iOS app</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en#film">Watch the demo</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
 ![Updating a task in the English AI Bro workspace](launch/dist/assets/recordings/project-en.gif)
 
@@ -27,7 +27,7 @@ Native SwiftUI / AppKit navigation, charts and calendars sit alongside a resizab
 - **UCAS course assistant:** school sign-in, course lookup, attendance check-in and course QR codes.
 - **Continue across devices:** connect both devices to the same self-hosted sync service for notes, tasks, projects and conversations, with explicit conflict handling.
 
-[Download iOS 0.1.2 IPA](https://github.com/zihenghe04/AIBro/releases/download/v0.7.0/AI-Bro-0.1.2-unsigned.ipa) · [Installation and signing](mobile/docs/INSTALL.md) · [Connect your devices](mobile/docs/CONNECT_DEVICES.md) · [Mobile source](mobile/)
+[Download iOS 0.1.3 IPA](https://github.com/zihenghe04/AIBro/releases/download/v0.7.1/AI-Bro-0.1.3-unsigned.ipa) · [Installation and signing](mobile/docs/INSTALL.md) · [Connect your devices](mobile/docs/CONNECT_DEVICES.md) · [Mobile source](mobile/)
 
 For iPhone and iPad running iOS 16 or later. The IPA requires signing with your own developer identity. The mobile interface is currently in Chinese; the English website describes its workflows without substituting Chinese screenshots.
 
@@ -82,7 +82,7 @@ Choose the capabilities that fit the task. Connect a compatible custom API or lo
 
 ## Get started
 
-1. Download the Mac app from [GitHub Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0) and follow the [installation guide](docs/DISTRIBUTION.md).
+1. Download the Mac app from [GitHub Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.1) and follow the [installation guide](docs/DISTRIBUTION.md).
 2. Connect a compatible API or local official Codex CLI sign-in, then select a model.
 3. Drop in a file, paste a link or `@` reference saved material. Describe the result you want.
 4. Inspect the source, preview and changes in the reader. Keep the notes, files and next steps in a project.
@@ -110,3 +110,7 @@ See [installation and building](docs/DISTRIBUTION.md) for toolchain requirements
 [Changelog](CHANGELOG.md) · [Desktop and data](docs/DESKTOP_APP.md) · [Retrieval](docs/KNOWLEDGE_RETRIEVAL.md) · [Self-hosted sync](docs/CLOUD_SYNC.md) · [Contributing](CONTRIBUTING.md)
 
 Licensed under [AGPL-3.0](LICENSE). Third-party dependencies retain their licenses. User files, notes and credentials are not part of the application source distribution.
+
+### Keep plans on time
+
+Give a task a deadline and choose when to be reminded: at the deadline, 15 minutes, an hour, or a day before. Completing or rescheduling it updates pending notifications. Enable notifications in Agenda → Reminders on Mac, or Settings → Reminders on iOS. Task reminder settings sync between devices; each device manages its own notification permission.

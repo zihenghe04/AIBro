@@ -128,7 +128,7 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
             let allowed=try await center.requestAuthorization(options:[.alert,.sound,.badge])
             var settings=preferences;if allowed && !settings.notifications && settings.taskReminderMinutes == nil {settings.taskReminderMinutes=60};settings.notifications=allowed;try updatePreferences(settings)
             if !allowed {notificationStatus="通知未获授权，请在系统设置中允许 AI Bro 通知。"}
-        }catch{self.error=error.localizedDescription}
+        }catch{self.error=error.localizedDescription;notificationStatus="通知授权失败："+error.localizedDescription}
     }
     func testNotification() async {
         guard !qa else {return}

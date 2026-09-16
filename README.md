@@ -3,7 +3,7 @@
 <p align="center"><strong>把一次对话，变成可以继续的工作。</strong></p>
 <p align="center">文件有版本，项目有记忆，想法有下一步。</p>
 <p align="center">简体中文 · <a href="README.en.md">English</a></p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0">下载 Mac App</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.0/AI-Bro-0.1.2-unsigned.ipa">下载 iOS App</a> · <a href="https://zihenghe04.github.io/AIBro/">官网</a> · <a href="https://zihenghe04.github.io/AIBro/#workspace">功能演示</a> · <a href="CHANGELOG.md">更新日志</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.1">下载 Mac App</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.1/AI-Bro-0.1.3-unsigned.ipa">下载 iOS App</a> · <a href="https://zihenghe04.github.io/AIBro/">官网</a> · <a href="https://zihenghe04.github.io/AIBro/#workspace">功能演示</a> · <a href="CHANGELOG.md">更新日志</a></p>
 
 ![AI Bro 工作区总览](launch/dist/assets/recordings/zh/01-overview.gif)
 
@@ -34,7 +34,7 @@ AI Bro 是一个本地优先的 Mac AI 工作区，把对话、文件、项目�
 - **国科大课程助手**：学校账号登录、课程查询、到课签到与课程二维码。
 - **手机记，电脑继续**：两端连接同一自托管同步服务，交换笔记、任务、项目与对话，并处理修改冲突。
 
-[下载 iOS 0.1.2 IPA](https://github.com/zihenghe04/AIBro/releases/download/v0.7.0/AI-Bro-0.1.2-unsigned.ipa) · [安装与签名](mobile/docs/INSTALL.md) · [连接 Mac 与同步服务](mobile/docs/CONNECT_DEVICES.md) · [移动端源码](mobile/)
+[下载 iOS 0.1.3 IPA](https://github.com/zihenghe04/AIBro/releases/download/v0.7.1/AI-Bro-0.1.3-unsigned.ipa) · [安装与签名](mobile/docs/INSTALL.md) · [连接 Mac 与同步服务](mobile/docs/CONNECT_DEVICES.md) · [移动端源码](mobile/)
 
 iPhone / iPad，iOS 16 及以上。IPA 需要使用自己的开发者身份签名安装。
 
@@ -106,7 +106,7 @@ iPhone / iPad，iOS 16 及以上。IPA 需要使用自己的开发者身份签�
 
 ## 开始使用
 
-1. 从 [GitHub Release](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0) 下载 Mac App，按[安装指南](docs/DISTRIBUTION.md)完成安装。
+1. 从 [GitHub Release](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.1) 下载 Mac App，按[安装指南](docs/DISTRIBUTION.md)完成安装。
 2. 在设置中连接兼容 API，或使用本机官方 Codex CLI 登录；选择这次对话要使用的模型。
 3. 拖入文件、粘贴链接或用 `@` 引用资料，告诉 AI 你想得到的结果。
 4. 在阅读区检查原件、预览和修改，把资料、笔记与下一步任务归入项目。
@@ -134,3 +134,7 @@ npm run start:native
 [更新日志](CHANGELOG.md) · [桌面与数据](docs/DESKTOP_APP.md) · [检索设计](docs/KNOWLEDGE_RETRIEVAL.md) · [自托管同步](docs/CLOUD_SYNC.md) · [贡献指南](CONTRIBUTING.md)
 
 AI Bro 采用 [AGPL-3.0](LICENSE) 许可。第三方依赖保留各自许可；用户的文件、笔记和凭据不属于应用源码分发范围。
+
+### 让安排按时提醒你
+
+在对话里说“明天晚上 8 点提醒我买洗衣液和袜子”，就能保存一条带时间的任务。也可以为已有任务设置到点或提前提醒，完成、改期后自动更新通知。Mac 在「日程 → 提醒」开启系统通知；iOS 在「设置 → 日程提醒」开启。每条任务的提醒设置可以跨设备同步，通知权限由各设备单独管理。

@@ -9,7 +9,7 @@ extension Workspace {
               Bundle.main.bundleIdentifier == "app.aibro.reminder-qa" else {throw AgendaError.message("Reminder QA requires its isolated bundle")}
         await agenda.requestNotifications()
         let permission=await agenda.center.notificationSettings()
-        guard permission.authorizationStatus == .authorized else {throw AgendaError.message("QA notification permission not authorized")}
+        guard permission.authorizationStatus == .authorized else {throw AgendaError.message("QA notification permission not authorized: \(permission.authorizationStatus.rawValue); \(agenda.error ?? "no request error")")}
         var preferences=agenda.preferences;preferences.notifications=true;preferences.showTitles=true;preferences.taskReminderMinutes=60;try agenda.updatePreferences(preferences)
         let js="""
         const now=Date.now();
