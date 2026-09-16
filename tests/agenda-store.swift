@@ -1,5 +1,5 @@
 import Foundation
-struct ContentRecord {let id:String;let title:String;let workspace:String;let projectId:String;let kind:String;let status:String;let start:Double?;let due:Double?;let completed:Double?;var dueDay:String?=nil}
+struct ContentRecord {let id:String;let title:String;let workspace:String;let projectId:String;let kind:String;let status:String;let start:Double?;let due:Double?;let completed:Double?;var dueDay:String?=nil;var updated:Double?=nil;var reminderMinutes:Int?=nil;var reminderDisabled:Bool?=nil}
 @main struct AgendaStoreTests {
  @MainActor static func main() throws {
   let folder=FileManager.default.temporaryDirectory.appendingPathComponent("agenda-test-"+UUID().uuidString);try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true);defer{try? FileManager.default.removeItem(at:folder)}
@@ -33,6 +33,12 @@ struct ContentRecord {let id:String;let title:String;let workspace:String;let pr
   try store.restore(remind);check(!store.plannedNotifications(now:now.addingTimeInterval(3500)).contains{$0.2=="Reminder"},"past trigger never fires unexpectedly on reopen")
   preferences.taskReminderMinutes=15;try store.updatePreferences(preferences)
   check(store.plannedNotifications(now:now).contains{$0.2=="Date only" && $0.1==dated.start.addingTimeInterval(-900)},"task reminder preference participates in scheduling")
+  var t=ContentRecord(id:"explicit",title:"Explicit",workspace:"日常",projectId:"",kind:"task",status:"todo",start:nil,due:now.addingTimeInterval(600).timeIntervalSince1970*1000,completed:nil)
+  t.reminderMinutes=0;store.updateTasks([t]);check(store.plannedNotifications(now:now).contains{$0.2=="Explicit" && abs($0.1.timeIntervalSince(now)-600)<0.01},"explicit exact reminder overrides global advance")
+  t.reminderDisabled=true;store.updateTasks([t]);check(!store.plannedNotifications(now:now).contains{$0.2=="Explicit"},"per task off overrides global preference")
+  t.reminderDisabled=false;t.reminderMinutes=nil;t.updated=now.timeIntervalSince1970*1000;preferences.taskReminderMinutes=60;try store.updatePreferences(preferences);store.updateTasks([t]);check(store.plannedNotifications(now:now).contains{$0.2=="Explicit" && abs($0.1.timeIntervalSince(now)-600)<0.01},"new task inside advance window falls back to deadline")
+  t.updated=now.addingTimeInterval(-7200).timeIntervalSince1970*1000;store.updateTasks([t]);check(!store.plannedNotifications(now:now).contains{$0.2=="Explicit"},"already elapsed advance reminder is not scheduled again")
+  preferences.taskReminderMinutes=0;try store.updatePreferences(preferences);check(store.plannedNotifications(now:now).contains{$0.2=="Explicit"},"changing global preference rebuilds task reminders")
   preferences.briefingHour=99;do{try store.updatePreferences(preferences);fatalError("invalid time accepted")}catch{};check(store.preferences.briefingHour != 99,"invalid notification preferences never persist")
   let corrupt=folder.appendingPathComponent("corrupt");try FileManager.default.createDirectory(at:corrupt,withIntermediateDirectories:true);try Data("broken".utf8).write(to:corrupt.appendingPathComponent("agenda.json"));let bad=AgendaStore();bad.load(folder:corrupt,qa:true);do{try bad.save(event);fatalError("corrupt store overwritten")}catch{};check(try String(contentsOf:corrupt.appendingPathComponent("agenda.json"),encoding:.utf8)=="broken","corrupt store is not overwritten")
   print("\(count) agenda store checks passed")

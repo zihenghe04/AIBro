@@ -71,7 +71,7 @@
     if(!manual&&(!config.enabled||!config.autoUpdate))return;
     const captured={...config},generation=epoch;controller=new AbortController();queued=false;paint();report('正在增量更新向量索引');
     let completed=false;
-    try{const result=await engine.update(captured,{signal:controller.signal});completed=true;progress=result;report(result.pending?'资料有新变化，部分段落待更新':'向量索引已更新');}
+    try{const result=await engine.update(captured,{signal:controller.signal});completed=true;progress=result;report(result.pending?'资料有新变化，部分段落待更新':captured.enabled?'向量索引已更新':'向量索引已更新；混合检索尚未启用，Agent 当前仍使用关键词检索');}
     catch(error){report(error.code==='CANCELLED'?'向量更新已停止，已完成批次保留':error.message);}
     finally{controller=null;await refresh();paint();if(completed&&generation===epoch&&(queued||progress?.pending)&&config.enabled&&config.autoUpdate)workspaceSaved();}
   }

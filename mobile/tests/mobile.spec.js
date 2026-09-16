@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 test("school login shows actionable failure without leaking response secrets, and supports a credential-free check", async ({ page }) => {
   let loginCalls = 0;
-  await page.route("https://iclass.ucas.edu.cn:8181/**", async (route) => {
-    const login = route.request().url().includes("user/login.action");
+  await page.route("**/api/ucas", async (route) => {
+    const login = route.request().postDataJSON().url.includes("user/login.action");
     if (login) loginCalls++;
     await route.fulfill({
       contentType: "application/json",
@@ -175,9 +175,9 @@ test("school login, current course, rolling QR and confirmed attendance", async 
   const now = new Date("2026-09-16T08:30:00+08:00");
   await page.clock.install({ time: now });
   let signs = 0;
-  await page.route("https://iclass.ucas.edu.cn:8181/**", (route) => {
+  await page.route("**/api/ucas", (route) => {
     let value = { STATUS: 0 };
-    const url = route.request().url();
+    const url = route.request().postDataJSON().url;
     if (url.includes("login.action"))
       value.result = {
         id: "1",
@@ -241,8 +241,8 @@ test("school connection opt-in recovers an expired session and logout removes ac
 }) => {
   let logins = 0,
     expired = false;
-  await page.route("https://iclass.ucas.edu.cn:8181/**", (route) => {
-    const url = route.request().url();
+  await page.route("**/api/ucas", (route) => {
+    const url = route.request().postDataJSON().url;
     let body;
     if (url.includes("login.action")) {
       logins++;

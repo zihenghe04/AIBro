@@ -857,6 +857,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if path == '/__cloud/status': result = service.status()
                 elif path == '/__cloud/devices': result = service.devices()
                 elif path == '/__cloud/conflicts': result = service.conflicts()
+                elif path == '/__cloud/ssh': result = service.ssh.status()
                 else: self.send_error(404); return
             else:
                 payload=json.loads(self.read_body(16384) or b'{}')
@@ -865,6 +866,9 @@ class Handler(SimpleHTTPRequestHandler):
                     STORE.ensure_sync(); result=service.connect(payload)
                 elif path == '/__cloud/sync': result=service.sync_now()
                 elif path == '/__cloud/settings': result=service.settings(payload)
+                elif path == '/__cloud/ssh/inspect': result=service.ssh.inspect(payload)
+                elif path == '/__cloud/ssh/save': result=service.ssh.save(payload)
+                elif path == '/__cloud/ssh/move': result=service.ssh.move(payload)
                 elif path == '/__cloud/disconnect': result=service.disconnect()
                 elif path == '/__cloud/revoke': result=service.revoke(payload.get('deviceId'))
                 elif path == '/__cloud/resolve': result=service.resolve(payload.get('id'),payload.get('choice'))

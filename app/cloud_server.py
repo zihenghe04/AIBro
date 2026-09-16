@@ -417,7 +417,9 @@ class CloudHTTPServer(ThreadingHTTPServer):
         TCPServer.server_bind(self)
         self.server_name, self.server_port = self.server_address[:2]
 
-    def __init__(self, address, store):
+    def __init__(self, address, store, web_origins=None):
+        from cloud_web import origins
+        self.web_origins = origins(os.environ.get('CLOUD_WEB_ORIGINS', '')) if web_origins is None else origins(','.join(web_origins))
         self.store = store
         self.slots = threading.BoundedSemaphore(16)
         super().__init__(address, CloudHandler)
@@ -448,6 +450,28 @@ class CloudHandler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         # No headers, request bodies, URLs with credentials, or access tokens.
         pass
+
+    def end_headers(self):
+        origin = self.headers.get('Origin')
+        if origin and origin in self.server.web_origins:
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
+            self.send_header('Access-Control-Expose-Headers', 'ETag, Content-Length')
+        super().end_headers()
+
+    def do_OPTIONS(self):
+        if self.headers.get('Origin') not in self.server.web_origins:
+            self.send_json({'error': '当前网页尚未获准连接此服务。', 'code': 'origin_denied'}, 403); return
+        method = self.headers.get('Access-Control-Request-Method', '')
+        headers = {h.strip().lower() for h in self.headers.get('Access-Control-Request-Headers', '').split(',') if h.strip()}
+        if method not in ('GET', 'HEAD', 'POST', 'PUT', 'DELETE') or headers - {'authorization', 'content-type'}:
+            self.send_json({'error': '跨域请求无效。', 'code': 'cors_denied'}, 403); return
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE')
+        self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+        self.send_header('Access-Control-Max-Age', '600')
+        self.send_header('Content-Length', '0')
+        self.end_headers()
 
     def send_json(self, payload, status=200):
         data = encoded(payload)
@@ -485,13 +509,18 @@ class CloudHandler(BaseHTTPRequestHandler):
             raise APIError(400, 'invalid_json', '请求必须为有效 JSON。')
 
     def route(self):
+        if self.headers.get('Origin') and self.headers.get('Origin') not in self.server.web_origins:
+            raise APIError(403, 'origin_denied', '当前网页尚未获准连接此服务。')
         request_url = urlsplit(self.path); path = request_url.path; store = self.server.store
         if path == '/v1/health' and self.command in ('GET', 'HEAD'):
             self.send_json({'protocol': PROTOCOL}); return
         if path == '/v1/auth/login' and self.command == 'POST':
             self.send_json(store.login(self.json_body(), self.client_address[0])); return
         identity = store.authenticate(self.headers.get('Authorization'))
-        if path == '/v1/devices' and self.command == 'GET':
+        if path == '/v1/web/relay' and self.command == 'POST':
+            from cloud_web import relay
+            self.send_json(relay(self.json_body(), APIError))
+        elif path == '/v1/devices' and self.command == 'GET':
             self.send_json(store.devices(identity))
         elif path == '/v1/auth/logout' and self.command == 'POST':
             # Consume only an optional empty/object body; its content is unused.

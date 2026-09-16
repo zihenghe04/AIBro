@@ -154,3 +154,25 @@ test('conflict review prioritizes readable content while keeping complete record
   const h=harness({status:connected({conflicts:1}),fetch:call=>call.url==='/__cloud/conflicts'?{ok:true,json:async()=>({conflicts:[{id:'review',local:value,remote:null}]})}:undefined});await h.api.refresh();await h.api.conflicts();
   const details=h.elements.find(item=>item.tagName==='details');assert.ok(details);assert.notEqual(details.open,true);assert.match(details.children.find(item=>item.tagName==='pre').textContent,/保留的完整数据/);h.api.destroy();
 });
+
+test('connected users can reopen configuration, keep drafts during refresh, and cancel without changing connection', async () => {
+  const h=harness({status:connected({target:{serverUrl:'https://sync.example.test'}})}); await h.api.refresh();
+  const form=h.elements.find(e=>e.tagName==='form'); assert.equal(form.hidden,true);
+  await h.el('cloudEditConnection').fire('click'); assert.equal(form.hidden,false);
+  assert.equal(h.el('cloudUsername').value,'researcher'); assert.equal(h.el('cloudPassword').value,'');
+  h.el('cloudDeviceName').value='新版设备名称'; await h.api.refresh(); assert.equal(h.el('cloudDeviceName').value,'新版设备名称');
+  h.el('cloudPassword').value='synthetic'; await h.el('cloudEditConnection').fire('click');
+  assert.equal(form.hidden,true); assert.equal(h.el('cloudPassword').value,'');
+  assert.equal(h.calls.some(c=>c.method==='POST'),false);h.api.destroy();
+});
+
+test('SSH directory moves require inspection and agreement and invalidate inspection when host changes', async () => {
+  const config={target:'fixture-host',sshPort:0,localPort:18787,remotePort:8787}, remote={dataPath:'/home/fixture/cloud',databasePath:'/home/fixture/cloud/cloud.sqlite3'};
+  const h=harness({status:connected(),fetch:c=>c.url.startsWith('/__cloud/ssh')?{ok:true,json:async()=>({config,remote})}:null});await h.api.refresh();
+  await h.el('cloudSSHSettings').fire('click');
+  const move=h.elements.find(e=>e.textContent==='复制校验并切换目录');assert.equal(move.disabled,true);
+  await h.elements.find(e=>e.textContent==='读取服务器路径').fire('click');
+  assert.equal(move.disabled,true);h.el('cloudSSHMoveConfirmed').checked=true;await h.el('cloudSSHMoveConfirmed').fire('change');assert.equal(move.disabled,false);
+  h.el('cloudSSH-target').value='another-host';await h.el('cloudSSH-target').fire('input');assert.equal(move.disabled,true);
+  assert.equal(h.calls.some(c=>c.url==='/__cloud/ssh/move'),false);h.api.destroy();
+});

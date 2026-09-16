@@ -3,7 +3,6 @@ import AppKit
 import WebKit
 
 struct Item: Identifiable, Decodable, Hashable { let id: String; let title: String; let workspace: String }
-struct ContentRecord: Identifiable, Decodable { let id:String;let title:String;let workspace:String;let projectId:String;let kind:String;let status:String;let start:Double?;let due:Double?;let completed:Double?;let dueDay:String? }
 struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let conversationFolders:[ConversationFolder]?; let tasks:[ContentRecord]?;let documents:[ContentRecord]?;let modalOpen:Bool?;let readingOpen:Bool?;let readerAvailable:Bool?; let projects: [Item]; let conversations: [Item]; let taskCount: Int; let noteCount: Int; let sourceCount: Int; let view: String; let conversationId: String; let busy: Bool; let projectId: String? }
 
 @MainActor final class Workspace: NSObject, ObservableObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
@@ -222,10 +221,18 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
         do {
             for _ in 0..<200 { if ready { break }; try await Task.sleep(nanoseconds:100_000_000) }
             guard ready else { throw CocoaError(.fileReadUnknown) }
+            if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_NOTIFICATIONS"] == "1" {try await reminderQA(destination);return}
             let seed = try String(contentsOf:root.appendingPathComponent("native/Resources/qa-workspace.js"),encoding:.utf8)
             _ = try await web.evaluateJavaScript(seed)
             try await Task.sleep(nanoseconds:800_000_000)
             guard snapshot?.projects.first?.id == "native-qa" else { throw CocoaError(.validationMissingMandatoryProperty) }
+            if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_OVERVIEW"] == "1" {
+                let fixture=try String(contentsOf:root.appendingPathComponent("native/Resources/qa-overview.js"),encoding:.utf8)
+                _ = try await web.evaluateJavaScript(fixture)
+                selection="overview";spaceContent=false
+                try "READY: synthetic overview".write(toFile:destination,atomically:true,encoding:.utf8)
+                return
+            }
             if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_TIMELINE"] == "1" {
                 selection="project:qa-trip"; spaceContent=false
                 if let window=web.window {
@@ -425,7 +432,7 @@ struct MainView: View {
                 if ["research","research-projects","wiki"].contains(model.selection ?? ""){ResearchNavigation(model:model)}
             ZStack {
                 WebContent(model:model).opacity(nativeContent ? 0 : 1).allowsHitTesting(!nativeContent)
-                if model.selection == "overview" { Overview(model:model) }
+                if model.selection == "overview" { Overview(model:model).opacity(model.spaceContent ? 0:1).allowsHitTesting(!model.spaceContent) }
                 if model.selection == "agenda" { AgendaView(model:model,store:model.agenda) }
                 if model.selection == "conversations" {ConversationHub(model:model)}
                 if model.selection == "research-projects" {ResearchProjects(model:model)}
@@ -459,7 +466,7 @@ struct MainView: View {
     }
     var dashboardProject:String? {guard let selection=model.selection,selection.hasPrefix("project:") else{return nil};return String(selection.dropFirst(8))}
     var spaceName:String? {if let id=dashboardProject{return model.snapshot?.projects.first(where:{$0.id==id})?.workspace};return ["daily":"日常","courses":"课程","research":"科研"][model.selection ?? ""] }
-    var nativeContent:Bool { ["overview","agenda","conversations","research-projects"].contains(model.selection ?? "") || (spaceName != nil && !model.spaceContent) }
+    var nativeContent:Bool { if model.selection == "overview" && model.spaceContent {return false};return ["overview","agenda","conversations","research-projects"].contains(model.selection ?? "") || (spaceName != nil && !model.spaceContent) }
     var selectionTint:Color {if let space=spaceName{return StudioPalette.space(space)};return StudioPalette.jade}
     func sidebarHeading(_ title:String)->some View {Text(title).font(.system(size:10,weight:.medium)).foregroundStyle(.tertiary).padding(.horizontal,13).padding(.top,20).padding(.bottom,7)}
     func sidebarButton(_ name:String,_ icon:String,_ tag:String,_ tint:Color)->some View {
@@ -482,22 +489,20 @@ struct Overview: View {
                 VStack(alignment:.leading,spacing:24) {
                     HStack { Text(nativeUI("你的工作台", "YOUR WORKSPACE")).font(.system(size:11,weight:.medium)).tracking(2).foregroundStyle(.secondary);Spacer();Label(model.snapshot?.busy == true ? nativeUI("正在执行", "Running") : nativeUI("本地已就绪", "Workspace ready"),systemImage:"circle.fill").font(.system(size:10)).foregroundStyle(.secondary) }
                     hero
-                    HStack(spacing:0) {
-                        metric(nativeUI("项目", "Projects"),model.snapshot?.projects.count ?? 0,"folder")
-                        metric(nativeUI("待完成", "To do"),model.snapshot?.taskCount ?? 0,"checkmark.circle")
-                        metric(nativeUI("笔记", "Notes"),model.snapshot?.noteCount ?? 0,"doc.text")
-                        metric(nativeUI("原始资料", "Sources"),model.snapshot?.sourceCount ?? 0,"tray.full")
-                    }.padding(.vertical,6)
+                    TimelineView(.periodic(from:.now,by:60)) { context in
+                        OverviewActions(model:model,now:context.date,compact:geometry.size.width < 950)
+                    }
                     Divider().opacity(0.5)
                     HStack(alignment:.top,spacing:28) {
                         VStack(alignment:.leading,spacing:18) {
                             HStack { Text(nativeUI("继续推进", "Pick up where you left off")).font(.system(size:18,weight:.semibold));Spacer();Button {model.selection="dashboard"} label:{Image(systemName:"arrow.up.right")}.buttonStyle(LiftStyle()).help(nativeUI("查看详细仪表板", "Open detailed dashboard")) }
                             if model.snapshot?.projects.isEmpty != false {
                                 VStack(alignment:.leading,spacing:10) { Image(systemName:"folder.badge.plus").font(.title2);Text(nativeUI("从一个项目开始", "Start with a project")).font(.headline);Text(nativeUI("在对话中描述目标，让资料、笔记与行动有一个共同的归处。", "Describe a goal in chat to bring your sources, notes and next steps together.")).font(.callout).foregroundStyle(.secondary).lineSpacing(5) }.frame(maxWidth:.infinity,alignment:.leading).padding(24).background(paper,in:RoundedRectangle(cornerRadius:18))
-                            } else { ForEach((model.snapshot?.projects ?? []).prefix(5)) { item in project(item) } }
+                            } else { ForEach((model.snapshot?.projects ?? []).prefix(3)) { item in project(item) } }
                         }.frame(maxWidth:.infinity,alignment:.topLeading)
                         VStack(alignment:.leading,spacing:18) {
-                            Text(nativeUI("进入空间", "Your spaces")).font(.system(size:18,weight:.semibold))
+                            Text(nativeUI("知识与资料", "Knowledge & sources")).font(.system(size:18,weight:.semibold))
+                            Text(nativeUI("\(model.snapshot?.noteCount ?? 0) 篇笔记 · \(model.snapshot?.sourceCount ?? 0) 份原始资料", "\(model.snapshot?.noteCount ?? 0) notes · \(model.snapshot?.sourceCount ?? 0) sources")).font(.system(size:11)).foregroundStyle(.secondary)
                             space(nativeUI("日常", "Daily"),nativeUI("把计划变成下一步行动", "Turn a plan into the next step"),"calendar","daily")
                             space(nativeUI("课程", "Courses"),nativeUI("让每一次学习相互连接", "Connect what you learn"),"books.vertical","courses")
                             space(nativeUI("科研", "Research"),nativeUI("从文献积累到新的发现", "From reading to discovery"),"flask","research")
@@ -689,12 +694,20 @@ struct StudioHero:View {
     }
     func projectCount(_ space:String)->Int {model.snapshot?.projects.filter{$0.workspace == space}.count ?? 0}
     func node(_ name:String,_ symbol:String,count:Int)->some View {
-        Button {model.selection=name == "科研" ? "research":name == "课程" ? "courses":"daily"} label:{
-            HStack(spacing:11) {
-                Image(systemName:symbol).font(.system(size:20,weight:.medium)).foregroundStyle(dark ? .white:StudioPalette.space(name))
-                VStack(alignment:.leading,spacing:5){Text(NativeL10n.space(name)).font(.system(size:13,weight:.semibold));Text(nativeUI("\(count) 个项目", "\(count) projects")).font(.system(size:10)).foregroundStyle(.secondary)}
-            }.frame(width:126,height:70).background((dark ? Color.black:Color.white).opacity(0.12),in:RoundedRectangle(cornerRadius:24)).modifier(OpticalGlass())
-        }.buttonStyle(LiftStyle()).modifier(HoverLift()).accessibilityLabel(nativeUI("打开\(name)空间，\(count)个项目", "Open \(NativeL10n.space(name)), \(count) projects"))
+        TimelineView(.periodic(from:.now,by:60)) { context in
+            let tasks=OverviewTaskSummary(tasks:model.snapshot?.tasks ?? [],now:context.date).space(name)
+            Button {model.selection=name == "科研" ? "research":name == "课程" ? "courses":"daily"} label:{
+                HStack(spacing:10) {
+                    Image(systemName:symbol).font(.system(size:20,weight:.medium)).foregroundStyle(dark ? .white:StudioPalette.space(name))
+                    VStack(alignment:.leading,spacing:4) {
+                        Text(NativeL10n.space(name)).font(.system(size:13,weight:.semibold))
+                        Text(nativeUI("\(tasks.pending.count) 项待办", "\(tasks.pending.count) to do")).font(.system(size:11,weight:.medium))
+                        Text(tasks.overdue.isEmpty ? nativeUI("今天 \(tasks.today.count) · \(count) 个项目", "Today \(tasks.today.count) · \(count) projects"):nativeUI("今天 \(tasks.today.count) · 逾期 \(tasks.overdue.count)", "Today \(tasks.today.count) · \(tasks.overdue.count) overdue"))
+                            .font(.system(size:9)).foregroundStyle(tasks.overdue.isEmpty ? .secondary:StudioPalette.coral)
+                    }
+                }.frame(width:146,height:82).background((dark ? Color.black:Color.white).opacity(0.12),in:RoundedRectangle(cornerRadius:24)).modifier(OpticalGlass())
+            }.buttonStyle(LiftStyle()).modifier(HoverLift()).accessibilityLabel(nativeUI("打开\(name)空间，\(tasks.pending.count)项待办，今天\(tasks.today.count)项，逾期\(tasks.overdue.count)项", "Open \(NativeL10n.space(name)), \(tasks.pending.count) pending, \(tasks.today.count) today, \(tasks.overdue.count) overdue"))
+        }
     }
     @ViewBuilder var actions:some View {
         if #available(macOS 26.0,*) {

@@ -1,4 +1,5 @@
-import { id, addMessage } from "./store.js";
+import { id, addMessage, putRecord, messageWireID } from "./store.js";
+import "../../app/reminder-intent.js";
 export function selectedContext(store, keys) {
   const unique = new Set(keys);
   for (const key of keys) {
@@ -36,6 +37,23 @@ export async function ask({
 }) {
   if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 20000)
     throw Error("请输入 20,000 字以内的内容");
+  const intent = contextKeys.length ? null : globalThis.AIBroReminderIntent.parse(prompt);
+  if (intent) {
+    if (intent.error) throw Error(intent.error);
+    const now=Date.now(), cid=conversationID || id(), tid=id(), userID=id(), replyID=id();
+    const userWire=await messageWireID(cid,userID), replyWire=await messageWireID(cid,replyID);
+    const text=`已保存「${intent.title}」，提醒时间：${new Date(intent.dueAt).toLocaleString()}。` + (store.state.settings.notifications ? "请留意本机系统通知；可在任务中修改提醒。" : "请先在设置 → 日程提醒中开启本机通知。");
+    await store.tx(s=>{
+      const conv=s.records["conversations:"+cid]?.data || {id:cid,title:prompt.slice(0,36),workspace:"日常",projectId:projectID,createdAt:now};
+      putRecord(s,"conversations",{...conv,updatedAt:now});
+      putRecord(s,"tasks",{...intent,id:tid,status:"todo",priority:"medium",workspace:conv.workspace,projectId:conv.projectId,createdAt:now,updatedAt:now,sourceConversationId:cid});
+      const position=Math.max(-1,...Object.values(s.records).filter(r=>!r.deleted&&r.data?.conversationId===cid).map(r=>r.data.position ?? -1))+1;
+      for(const [wire,mid,role,content,pos] of [[userWire,userID,"user",prompt,position],[replyWire,replyID,"assistant",text,position+1]]) {
+        s.records["messages:"+wire]={data:{id:mid,conversationId:cid,role,content,position:pos,at:now},version:0,remote:null,remoteDeleted:false,deleted:false,dirty:true};
+      }
+    });
+    return {conversationID:cid,text,sources:[]};
+  }
   const config = store.state.settings.model;
   if (!config?.base || !config.model) throw Error("请先在设置里连接模型");
   const token = await vault.get("model");

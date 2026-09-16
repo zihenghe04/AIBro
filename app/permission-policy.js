@@ -13,7 +13,7 @@
   const WORKSTATION_ACTIONS = new Set([
     'set_workspace', 'create_project', 'rename_attachment', 'assign_attachment',
     'create_knowledge_item', 'create_note', 'update_note', 'append_note', 'upsert_paper', 'upsert_wiki',
-    'create_task', 'update_task', 'delete_task', 'delete_note', 'add_tag',
+    'create_task', 'update_task', 'delete_task', 'delete_note', 'delete_attachment', 'add_tag',
     'create_link', 'link_items', 'link_local_project'
   ]);
   const destructive = type => /(?:^|_)(?:delete|merge|remove|archive|purge)(?:_|$)/.test(type);

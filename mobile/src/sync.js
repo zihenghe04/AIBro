@@ -14,8 +14,8 @@ export function serverURL(raw) {
   return u.href.replace(/\/$/, "");
 }
 export class Sync {
-  constructor(store, http, vault, files) {
-    Object.assign(this, { store, http, vault, files });
+  constructor(store, http, vault, files, deviceName = "AI Bro iPhone") {
+    Object.assign(this, { store, http, vault, files, deviceName });
     this.busy = null;
     this.status = "尚未连接";
   }
@@ -29,7 +29,7 @@ export class Sync {
       throw Error("当前工作区已绑定其他账号或服务，请勿混合资料");
     const session = await this.http(base + "/v1/auth/login", {
       method: "POST",
-      body: { username, password, deviceName: "AI Bro iPhone" },
+      body: { username, password, deviceName: this.deviceName },
     });
     if (!session.accessToken || !session.account?.id)
       throw Error("登录响应不完整");

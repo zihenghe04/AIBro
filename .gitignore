@@ -56,3 +56,7 @@ coverage/
 !/launch/dist/assets/recordings/*.mp4
 
 !/launch/dist/assets/recordings/zh/*.mp4
+
+# Web build and hosting credentials
+mobile/web-dist/
+.vercel/

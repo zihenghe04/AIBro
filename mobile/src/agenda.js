@@ -111,7 +111,8 @@ export function eventsFor(store, from, to) {
   for (const t of store
     .list("tasks")
     .filter((x) => x.status !== "done" && !x.archived && !x.deletedAt)) {
-    const due = typeof t.dueAt === "number" ? t.dueAt : Date.parse(t.dueAt);
+    let due = typeof t.dueAt === "number" ? t.dueAt : Date.parse(t.dueAt);
+    if (typeof t.dueAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.dueAt)) due = new Date(t.dueAt + "T09:00:00").getTime();
     if (due >= from && due < to)
       events.push({
         id: t.id,
@@ -119,7 +120,8 @@ export function eventsFor(store, from, to) {
         start: due,
         end: due + 60000,
         task: true,
-        reminderMinutes: 15,
+        updatedAt: t.updatedAt || t.createdAt || 0,
+        reminderMinutes: Object.hasOwn(t, "reminderMinutes") ? t.reminderMinutes : (Object.hasOwn(store.state?.settings || {}, "taskReminderMinutes") ? store.state.settings.taskReminderMinutes : 60),
         occurrenceID: "task:" + t.id,
       });
   }
@@ -130,7 +132,7 @@ export function eventsFor(store, from, to) {
       reminderAt:
         e.reminderMinutes == null || (e.completed || []).includes(e.start)
           ? null
-          : e.start - e.reminderMinutes * 60000,
+          : e.task && e.updatedAt >= e.start - e.reminderMinutes * 60000 && e.start - e.reminderMinutes * 60000 <= from ? e.start : e.start - e.reminderMinutes * 60000,
     }));
 }
 export function parseICS(text) {

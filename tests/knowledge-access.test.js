@@ -7,6 +7,38 @@ test('cancellation and repeated requests do not silently complete',async()=>{con
 
 test('fenced tool requests are executed instead of treated as a completed answer',async()=>{let calls=0;const out=await K.continuePlan('```json\n'+JSON.stringify({knowledgeRequests:[{type:'list'}],actions:[]})+'\n```',{execute:async()=>{calls++;return {entries:[]}},ask:async()=>JSON.stringify({message:'done',actions:[]})});assert.equal(calls,1);assert.match(out,/done/);});
 
+test('multi-page evidence and PDF images survive later read and search turns',async()=>{
+ const s=state();s.notes[0].content='FIRST_PAGE_'+ 'x'.repeat(12000)+'LAST_PAGE';let turn=0;
+ const plan=requests=>JSON.stringify({knowledgeRequests:requests,actions:[]});
+ await K.continuePlan(plan([{type:'read',id:'n000'}]),{execute:r=>r.type==='read_page'?{id:'pdf',page:1,blocks:[{type:'input_image',image_url:'synthetic'}]}:K.execute(s,{projectId:'p'},r),ask:async(text,images)=>{
+  turn++;assert.match(text,/FIRST_PAGE/);
+  if(turn===1)return plan([{type:'read',id:'n000',offset:12000}]);
+  assert.match(text,/LAST_PAGE/);
+  if(turn===2)return plan([{type:'read_page',recordType:'import',id:'pdf',page:1}]);
+  assert.equal(images.length,1);
+  if(turn===3)return plan([{type:'search',query:'quantum optics'}]);
+  return '{"message":"done","actions":[]}';
+ }});assert.equal(turn,4);
+});
+
+test('alternating reads and rebatched default-equivalent requests execute once and stop without progress',async()=>{
+ const plan=r=>JSON.stringify({knowledgeRequests:r,actions:[]});let calls=0,turn=0,notifications=0;
+ const cycles=[[{type:'search',query:'a'}],[{type:'read',id:'n'}],[{id:'n',offset:0,recordType:'note',variant:'current',type:'read'},{offset:0,type:'list',query:'ignored'}],[{query:'a',offset:0,type:'search'}]];
+ await assert.rejects(K.continuePlan(plan([{type:'list'}]),{execute:async()=>{calls++;return {text:'saved',nextOffset:null}},onResult:()=>notifications++,ask:async text=>{
+  if(turn===3)assert.match(text,/已复用结果/);
+  return plan(cycles[turn++]);
+ }}),{code:'KNOWLEDGE_STALLED'});
+ assert.equal(calls,3);assert.equal(notifications,3);
+});
+
+test('context capacity is explicit and cached reads remain scoped and cancellable',async()=>{
+ let turn=0,checks=0;
+ await K.continuePlan('{"knowledgeRequests":[{"type":"read","id":"a"}]}',{evidenceChars:300,validate:()=>checks++,execute:async r=>({id:r.id,text:r.id.repeat(150)}),ask:async text=>{
+  if(++turn===1)return '{"knowledgeRequests":[{"type":"read","id":"b"}]}';
+  assert.match(text,/evidenceIncluded":false/);assert.match(text,/上下文容量/);return '{"actions":[]}';
+ }});assert.ok(checks>=4);
+});
+
 test('unreadable Wiki cache is excluded from search, initial context and explicit file reads', async () => {
   const F = require('../app/file-context'), C = require('../app/context-retrieval');
   const s = {projects:[{id:'p'}], notes:[{id:'broken',projectId:'p',title:'experiment',content:'STALE_EVIDENCE',wikiFileError:'missing Markdown'}]};

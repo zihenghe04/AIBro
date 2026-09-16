@@ -37,7 +37,7 @@ test('the permission catalogue stays aligned with actions actually supported by 
   for (const type of supported) {
     assert.equal(Policy.needsApproval({mode:'full',actions:[{type}]}),false,`${type} needs an explicit policy when added to Core`);
     assert.equal(Policy.needsApproval({mode:'request',actions:[{type}]}),true);
-    assert.equal(Policy.needsApproval({mode:'smart',actions:[{type}]}),type==='delete_task'||type==='delete_note');
+    assert.equal(Policy.needsApproval({mode:'smart',actions:[{type}]}),['delete_task','delete_note','delete_attachment'].includes(type));
   }
 });
 

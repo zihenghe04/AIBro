@@ -1,5 +1,5 @@
 import Foundation
-struct ContentRecord {let id:String;let title:String;let status:String;let due:Double?;let dueDay:String?;let projectId:String}
+struct ContentRecord {let id:String;let title:String;let status:String;let due:Double?;let dueDay:String?;let projectId:String;var updated:Double?=nil;var reminderMinutes:Int?=nil;var reminderDisabled:Bool?=nil}
 @main struct AgendaSyncStoreTests {
  @MainActor static func main() throws {
   let folder=FileManager.default.temporaryDirectory.appendingPathComponent("aibro-agenda-store-"+UUID().uuidString)

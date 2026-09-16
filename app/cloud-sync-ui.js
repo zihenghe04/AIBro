@@ -50,6 +50,7 @@
   function createController(hooks = {}, environment = root) {
     const doc = environment.document, fetcher = hooks.fetch || environment.fetch?.bind(environment);
     let card, badge, description, message, form, server, username, password, deviceName, merge, connectButton, accountBox, accountText, syncButton, autoToggle, disconnectButton, devicesButton, conflictsButton, pendingText, lastSyncText, deferredButton, dialog, dialogBody, dialogTitle;
+    let editingConnection = false, sshTimer = null, editButton, sshButton;
     let status = {}, busy = false, generation = 0, loading = null, timer = null, destroyed = false, deferredRevision = null, lastAppliedRevision = 0, dialogKind = '', lastFocus, observer = null, feedbackKind = '';
     const node = (tag, className, value) => { const result = doc.createElement(tag); if (className) result.className = className; if (value !== undefined) result.textContent = value; return result; };
     const button = (label, className, handler) => { const result = node('button', className, label); result.type = 'button'; result.addEventListener('click', handler); return result; };
@@ -60,7 +61,10 @@
       const view = describe(status), blocked = busy || hostBusy();
       badge.textContent = busy ? '正在处理…' : view.label; badge.dataset.state = busy ? 'syncing' : view.state;
       description.textContent = view.connected ? '知识、笔记和任务同步到你连接的服务器；断开后本地资料仍保留。' : '当前资料保存在本机。连接自己的云服务器后，可以在多台设备间同步。';
-      form.hidden = view.connected && view.state !== 'auth_required'; accountBox.hidden = !view.connected;
+      form.hidden = view.connected && view.state !== 'auth_required' && !editingConnection; accountBox.hidden = !view.connected;
+      server.readOnly = !!status.target?.serverUrl;
+      if (editButton) { editButton.disabled = blocked; editButton.textContent = editingConnection ? '取消修改' : '修改连接配置'; }
+      if (sshButton) sshButton.disabled = blocked;
       accountText.textContent = [status.account?.username, status.serverUrl, status.device?.name].filter(Boolean).join(' · ') || '云账号已连接';
       pendingText.textContent = view.pending == null ? '待上传数量尚未确认' : `待上传 ${view.pending} 项`;
       lastSyncText.textContent = `最后同步：${view.lastSync}`;
@@ -74,7 +78,7 @@
     }
     async function request(route, payload) {
       if (!fetcher) throw new Error('请在桌面应用或本地服务中使用云同步。');
-      const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 45000);
+      const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), route.startsWith('/__cloud/ssh/') ? 120000 : 45000);
       try {
         const response = await fetcher(route, { method: payload === undefined ? 'GET' : 'POST', headers: payload === undefined ? undefined : { 'Content-Type': 'application/json' }, body: payload === undefined ? undefined : JSON.stringify(payload), signal: controller.signal });
         const data = await response.json();
@@ -135,7 +139,7 @@
       } catch (error) { report(error.message); return false; }
       password.value = '';
       const ok = await mutate('/__cloud/connect', payload, true);
-      if (ok) merge.checked = false; paint(); return ok;
+      if (ok) { merge.checked = false; editingConnection = false; } paint(); return ok;
     }
     async function sync() { return mutate('/__cloud/sync', {}, true); }
     function mountDialog(title, kind) {
@@ -192,6 +196,74 @@
         }
       } catch (error) { if (dialog.open && dialogKind === 'conflicts') dialogBody.replaceChildren(node('p', 'cloud-sync-error', error.message)); }
     }
+    function editConnection() {
+      if (busy || hostBusy()) return;
+      editingConnection = !editingConnection;
+      password.value = ''; merge.checked = false;
+      if (editingConnection) {
+        server.value = status.serverUrl || ''; username.value = status.account?.username || '';
+        deviceName.value = status.device?.name || ''; password.value = ''; merge.checked = false;
+        report('可更新登录凭据与设备名称。SSH 主机和远程目录请在“SSH 与存储目录”修改；切换到其他账号仍需独立工作区。', 'info');
+      }
+      paint(); if (editingConnection) server.focus();
+    }
+    async function sshSettings() {
+      mountDialog('SSH 与存储目录', 'ssh');
+      clearTimeout(sshTimer);
+      try {
+        const state = await request('/__cloud/ssh');
+        if (dialogKind !== 'ssh' || !dialog.open) return;
+        dialogBody.replaceChildren();
+        if (!state.config) { dialogBody.append(node('p','','没有检测到 AI Bro 的 SSH 隧道。当前可能通过 HTTPS 连接；请先配置 SSH 部署。')); return; }
+        const fields = node('div','cloud-sync-fields'), inputs = {};
+        for (const [key,label] of [['target','SSH 主机别名 / 用户名@主机'],['sshPort','SSH 端口（0 表示沿用 SSH 配置）'],['localPort','Mac 本机转发端口'],['remotePort','服务器服务端口']]) {
+          const wrap = node('label'); const input = node('input'); input.type = key === 'target' ? 'text' : 'number';
+          input.id = 'cloudSSH-' + key; input.value = text(state.config[key]); input.autocomplete = 'off';
+          if (key === 'localPort') input.readOnly = true;
+          wrap.append(node('span','',label),input); fields.append(wrap); inputs[key] = input;
+        }
+        const detail = node('p','cloud-sync-muted'); detail.textContent = '沿用系统 SSH 密钥及主机校验。本机端口保持不变，避免改变工作区绑定。';
+        const pathBox = node('div','cloud-sync-storage'), pathText = node('p'), dbText = node('p','cloud-sync-muted');
+        const destinationLabel = node('label'); const destination = node('input'); destination.type = 'text'; destination.id = 'cloudSSHDataPath'; destination.placeholder = '/home/用户名/新的数据目录'; destinationLabel.append(node('span','','新的服务器数据目录'), destination);
+        const message = node('p','cloud-sync-message'); message.id = 'cloudSSHMessage'; message.setAttribute('role','status');
+        const agreement = node('label','cloud-sync-agreement'); const confirmed = node('input'); confirmed.type = 'checkbox'; confirmed.id = 'cloudSSHMoveConfirmed'; agreement.append(confirmed,node('span','','短暂停止云服务，复制并校验后切换目录；保留旧目录。请暂时停止其他设备编辑。'));
+        let verified = null, processing = false;
+        const values = () => Object.fromEntries(Object.entries(inputs).map(([key,input])=>[key,key === 'target' ? input.value.trim() : Number(input.value)]));
+        const showRemote = remote => { pathText.textContent = '当前数据目录：' + (remote?.dataPath || '尚未读取'); dbText.textContent = remote?.databasePath ? '数据库：' + remote.databasePath : ''; };
+        const update = () => { for (const input of [...Object.values(inputs), destination, confirmed]) input.disabled = processing; inspectButton.disabled = saveButton.disabled = processing; moveButton.disabled = processing || !verified || !confirmed.checked; };
+        const perform = async (route, payload) => {
+          processing = true; update(); message.textContent = '正在核对服务器…';
+          try { return await request(route,payload); }
+          catch(error) { message.textContent = error.message; return null; }
+          finally { processing = false; update(); }
+        };
+        const inspectButton = button('读取服务器路径','cloud-sync-button',async()=>{
+          const c=values(), result=await perform('/__cloud/ssh/inspect',{config:c});
+          if(result) { verified=JSON.stringify(c) === JSON.stringify(state.config) && JSON.stringify(c) === JSON.stringify(values()) ? result.remote : null; showRemote(result.remote); message.textContent = verified ? '已核对当前账号和实际存储目录。' : '已核对该服务器。修改连接后请先保存，再迁移目录。'; update(); }
+        });
+        const saveButton = button('保存并重新连接','cloud-sync-button',async()=>{
+          const result=await perform('/__cloud/ssh/save',{config:values()});
+          if(result) { state.config=result.config; verified=JSON.stringify(values()) === JSON.stringify(result.config) ? result.remote : null; showRemote(result.remote); message.textContent='SSH 配置已保存，连接检查通过。'; update(); }
+        });
+        const poll = async () => {
+          if(dialogKind!=='ssh'||!dialog.open) return;
+          try { const value=await request('/__cloud/ssh'); message.textContent=value.job?.message||''; if(value.remote) showRemote(value.remote); processing=value.job?.state==='running'; update(); if(processing) sshTimer=setTimeout(poll,1500); }
+          catch(error) { processing=false; update(); message.textContent='状态读取中断。迁移可能仍在服务器进行，请重新打开此窗口检查，不要重复提交。'; }
+        };
+        const moveButton = button('复制校验并切换目录','cloud-sync-button cloud-sync-primary',async()=>{
+          if(!verified || !confirmed.checked) return;
+          const result=await perform('/__cloud/ssh/move',{expectedPath:verified.dataPath,dataPath:destination.value.trim(),confirmed:true});
+          if(result) { confirmed.checked=false; verified=null; processing=true; update(); await poll(); }
+        });
+        for(const input of Object.values(inputs)) input.addEventListener('input',()=>{verified=null;update();});
+        confirmed.addEventListener('change',update);
+        const actions=node('div','cloud-sync-actions'); actions.append(inspectButton,saveButton);
+        pathBox.append(pathText,dbText,destinationLabel,agreement,moveButton);
+        dialogBody.append(fields,detail,actions,pathBox,message); showRemote(state.remote); update();
+        if(state.job?.state==='running') { processing=true; update(); await poll(); }
+        else inspectButton.click?.();
+      } catch(error) { if(dialogKind==='ssh') dialogBody.replaceChildren(node('p','cloud-sync-message',error.message)); }
+    }
     function mount() {
       if (card) return; const host = hooks.container || doc.querySelector('#settings .settings-grid') || doc.getElementById('settings'); if (!host) return;
       card = node('article', 'card cloud-sync-card'); card.id = 'cloudSyncCard';
@@ -204,7 +276,7 @@
       connectButton = node('button', 'cloud-sync-button cloud-sync-primary', '连接并合并'); connectButton.id = 'cloudConnect'; connectButton.type = 'submit'; form.append(fields, agreement, connectButton);
       accountBox = node('div', 'cloud-sync-connected'); accountText = node('p', 'cloud-sync-account'); const metrics = node('div', 'cloud-sync-metrics'); pendingText = node('span'); lastSyncText = node('span'); metrics.append(pendingText,lastSyncText);
       const autoLabel = node('label', 'cloud-sync-auto'); autoToggle = node('input'); autoToggle.type = 'checkbox'; autoToggle.id = 'cloudAutoSync'; autoToggle.addEventListener('change', () => mutate('/__cloud/settings', { autoSync: autoToggle.checked })); autoLabel.append(autoToggle,node('span','','自动同步'));
-      const actions = node('div', 'cloud-sync-actions'); syncButton = button('立即同步', 'cloud-sync-button cloud-sync-primary', sync); syncButton.id = 'cloudSyncNow'; devicesButton = button('管理设备', 'cloud-sync-button', devices); devicesButton.id = 'cloudDevices'; conflictsButton = button('处理冲突', 'cloud-sync-button', conflicts); conflictsButton.id = 'cloudConflicts'; disconnectButton = button('断开连接', 'cloud-sync-button cloud-sync-subtle', () => mutate('/__cloud/disconnect', {})); disconnectButton.id = 'cloudDisconnect'; actions.append(syncButton,devicesButton,conflictsButton,disconnectButton); accountBox.append(accountText,metrics,autoLabel,actions);
+      const actions = node('div', 'cloud-sync-actions'); syncButton = button('立即同步', 'cloud-sync-button cloud-sync-primary', sync); syncButton.id = 'cloudSyncNow'; devicesButton = button('管理设备', 'cloud-sync-button', devices); devicesButton.id = 'cloudDevices'; conflictsButton = button('处理冲突', 'cloud-sync-button', conflicts); conflictsButton.id = 'cloudConflicts'; disconnectButton = button('断开连接', 'cloud-sync-button cloud-sync-subtle', () => mutate('/__cloud/disconnect', {})); disconnectButton.id = 'cloudDisconnect'; editButton = button('修改连接配置', 'cloud-sync-button', editConnection); editButton.id = 'cloudEditConnection'; sshButton = button('SSH 与存储目录', 'cloud-sync-button', sshSettings); sshButton.id = 'cloudSSHSettings'; actions.append(syncButton,editButton,sshButton,devicesButton,conflictsButton,disconnectButton); accountBox.append(accountText,metrics,autoLabel,actions);
       deferredButton = button('应用已收到的更新', 'cloud-sync-button', async () => { if (!deferredRevision || busy || hostBusy()) return; if ((await hooks.flush?.()) === false) { report('请先保存本机更改。'); return; } await applyRevision(deferredRevision); }); deferredButton.id = 'cloudApplyReceived'; deferredButton.hidden = true;
       message = node('p', 'cloud-sync-message'); message.id = 'cloudSyncMessage'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite'); const refreshButton = button('刷新状态', 'cloud-sync-refresh', () => refresh()); refreshButton.id = 'cloudRefresh'; card.append(header,description,form,accountBox,deferredButton,message,refreshButton); host.append(card); paint();
     }
@@ -216,7 +288,7 @@
       }
       return api;
     }
-    function destroy() { destroyed = true; generation++; clearTimeout(timer); observer?.disconnect(); dialog?.close(); }
+    function destroy() { destroyed = true; generation++; clearTimeout(timer); clearTimeout(sshTimer); observer?.disconnect(); dialog?.close(); }
     const api = { init, refresh, connect, sync, devices, conflicts, destroy, getStatus: () => ({ ...status }) };
     return api;
   }

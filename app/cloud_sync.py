@@ -203,6 +203,8 @@ class CloudSync:
         except CloudSyncError as error: self._last_error, self._last_code = str(error), error.code
         self._auto = bool(self._session and self._session.get('autoSync', True))
         self._thread = None
+        from cloud_ssh import CloudSSH
+        self.ssh = CloudSSH(self)
         if start_worker:
             self._thread = threading.Thread(target=self._worker, name='workstation-cloud-sync', daemon=True)
             self._thread.start()

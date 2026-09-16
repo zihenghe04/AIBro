@@ -19,3 +19,5 @@ DerivedData/
 *.mobileprovision
 .env
 .env.*
+.vercel
+.env*

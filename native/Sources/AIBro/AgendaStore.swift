@@ -4,7 +4,7 @@ import UserNotifications
 
 struct AgendaPreferences: Codable, Equatable {
     var notifications = false
-    var taskReminderMinutes: Int? = nil
+    var taskReminderMinutes: Int? = 60
     var briefing = false
     var briefingHour = 8
     var briefingMinute = 0
@@ -28,6 +28,7 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
     private var file:URL?
     private var tasks:[AgendaOccurrence]=[]
     private var taskKey=""
+    private var taskRecords:[ContentRecord]=[]
     private var scheduleWork:Task<Void,Never>?
     private var refreshTimer:Timer?
     private var revision=0
@@ -91,7 +92,7 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
         }
         try persist(next,preferences);events=next;reschedule();onChanged?()
     }
-    func updatePreferences(_ value:AgendaPreferences) throws {try value.validate();try persist(events,value);preferences=value;reschedule()}
+    func updatePreferences(_ value:AgendaPreferences) throws {try value.validate();try persist(events,value);preferences=value;taskKey="";updateTasks(taskRecords);reschedule()}
     func skip(_ occurrence:AgendaOccurrence) throws {var e=occurrence.event;e.excluded.append(occurrence.start);try save(e)}
     func toggleDone(_ occurrence:AgendaOccurrence) throws {var e=occurrence.event;if let i=e.completed.firstIndex(of:occurrence.start){e.completed.remove(at:i)}else{e.completed.append(occurrence.start)};try save(e)}
     func cancel(_ event:AgendaEvent) throws {var e=event;e.deleted=true;try save(e)}
@@ -106,10 +107,11 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
         } else {let duration=copy.end.timeIntervalSince(copy.start);copy.start=date;copy.end=date.addingTimeInterval(duration);try save(copy)}
     }
     func updateTasks(_ records:[ContentRecord]) {
-        let key=records.map{"\($0.id)|\($0.title)|\($0.status)|\($0.due ?? 0)|\($0.dueDay ?? "")|\($0.projectId)"}.joined(separator:"\n")
+        taskRecords=records
+        let key=records.map{"\($0.id)|\($0.title)|\($0.status)|\($0.due ?? 0)|\($0.dueDay ?? "")|\($0.projectId)|\($0.updated ?? 0)|\($0.reminderMinutes ?? -1)|\($0.reminderDisabled ?? false)"}.joined(separator:"\n")
         guard key != taskKey else{return};taskKey=key
         tasks=records.compactMap{task in guard task.status != "done",let stamp=task.due else{return nil}
-            var event=AgendaEvent();event.id="task:"+task.id;event.title=task.title;event.kind="task";event.start=Date(timeIntervalSince1970:stamp/1000);event.end=event.start.addingTimeInterval(60);event.projectID=task.projectId;event.reminderMinutes=nil
+            var event=AgendaEvent();event.id="task:"+task.id;event.title=task.title;event.kind="task";event.start=Date(timeIntervalSince1970:stamp/1000);event.end=event.start.addingTimeInterval(60);event.projectID=task.projectId;event.reminderMinutes=task.reminderDisabled == true ? nil : (task.reminderMinutes ?? preferences.taskReminderMinutes)
             if let day=task.dueDay {
                 let formatter=DateFormatter();formatter.locale=Locale(identifier:"en_US_POSIX");formatter.dateFormat="yyyy-MM-dd";formatter.timeZone = .current
                 if let date=formatter.date(from:day) {event.start=Calendar.current.date(bySettingHour:9,minute:0,second:0,of:date)!;event.end=event.start.addingTimeInterval(60);event.allDay=true}
@@ -124,7 +126,7 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
         guard !qa else {notificationStatus="独立验证模式：不申请通知权限";return}
         do {
             let allowed=try await center.requestAuthorization(options:[.alert,.sound,.badge])
-            var settings=preferences;settings.notifications=allowed;try updatePreferences(settings)
+            var settings=preferences;if allowed && !settings.notifications && settings.taskReminderMinutes == nil {settings.taskReminderMinutes=60};settings.notifications=allowed;try updatePreferences(settings)
             if !allowed {notificationStatus="通知未获授权，请在系统设置中允许 AI Bro 通知。"}
         }catch{self.error=error.localizedDescription}
     }
@@ -151,9 +153,10 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
         let limit=Calendar.current.date(byAdding:.day,value:30,to:now)!
         var planned:[(String,Date,String,Date)]=[]
         for occurrence in occurrences(from:now.addingTimeInterval(-86400),to:limit) where !occurrence.isDone {
-            let minutes=occurrence.taskID == nil ? occurrence.event.reminderMinutes:preferences.taskReminderMinutes
+            let minutes=occurrence.event.reminderMinutes
             guard let minutes else{continue}
-            let fire=occurrence.start.addingTimeInterval(-Double(minutes)*60)
+            let advance=occurrence.start.addingTimeInterval(-Double(minutes)*60)
+            let fire=occurrence.taskID.flatMap { id in taskRecords.first { $0.id == id }?.updated }.map { $0 / 1000 >= advance.timeIntervalSince1970 } == true && advance <= now ? occurrence.start : advance
             if fire>now {planned.append(("agenda-event-"+occurrence.id,fire,occurrence.event.title,occurrence.start))}
         }
         return planned.sorted{$0.1 == $1.1 ? $0.0<$1.0:$0.1<$1.1}

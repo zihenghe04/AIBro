@@ -6,6 +6,8 @@ import { Store, id, putRecord } from "./store.js";
 import { Sync } from "./sync.js";
 import {
   adapter,
+  prepareWorkspace,
+  extractText,
   vault,
   http,
   files,
@@ -62,6 +64,7 @@ const icons = {
 };
 async function loadWorkspace() {
   try {
+    await prepareWorkspace();
     return await new Store(adapter).load();
   } catch (e) {
     app.innerHTML =
@@ -72,7 +75,7 @@ async function loadWorkspace() {
   }
 }
 const store = await loadWorkspace();
-const sync = new Sync(store, http, vault, files),
+const sync = new Sync(store, http, vault, files, native ? "AI Bro iPhone" : "AI Bro Web"),
   ucas = new UCAS(http, vault);
 let tab = "today",
   selectedDay = dayKey(),
@@ -320,7 +323,7 @@ function chat() {
 }
 function settings() {
   const c = store.state.settings.model || {};
-  return `<section class="settings-card"><h2>设备与同步</h2><p>${esc(sync.status)}</p><p class="hint">连接与 Mac「设置 → 账号与云同步」相同的服务和账号。云同步密码独立于 SSH 服务器密码和学校账号密码。需先部署 AI Bro 同步服务，手机使用可访问的 HTTPS 地址。</p><form id="sync-form">${field("server", "自托管同步服务", "url", store.state.binding?.base || "")}${field("username", "云同步用户名", "text", store.state.binding?.username || "")}${field("password", "云同步账号密码", "password")}<label class="check"><input name="merge" type="checkbox" required>合并当前手机与此账号的资料</label><button class="primary" type="submit">连接并同步</button></form><div class="actions">${button("立即同步", "sync")}${button("断开连接", "disconnect", "", "quiet")}${button(`处理冲突 · ${countConflicts()}`, "conflicts", "", "quiet")}</div></section><section class="settings-card"><h2>模型连接</h2><form id="model-form">${field("base", "API 地址（以 /v1 结尾）", "url", c.base || "")}${field("model", "模型名称", "text", c.model || "")}${field("key", "API Key（留空保留原值）", "password")}<label>接口格式<select name="format"><option value="chat">Chat Completions 兼容接口</option><option value="responses" ${c.format === "responses" ? "selected" : ""}>Responses 兼容接口</option></select></label><button class="primary" type="submit">保存模型连接</button></form><p class="hint">引用内容会发送到你配置的模型服务。学校账号不会进入模型上下文。</p></section><section class="settings-card"><h2>日程提醒</h2><p>${store.state.settings.notifications ? "已启用" : "尚未启用"} · ${native ? "iOS 本地通知" : "当前为浏览器预览"}</p>${button("开启提醒", "notifications")}${button("关闭提醒", "notifications-off", "", "quiet")}</section><section class="settings-card"><h2>课程连接</h2>${button("国科大 · 轻新课堂 ›", "ucas", "", "wide")}</section><section class="settings-card"><h2>数据与恢复</h2>${button("导出手机工作区", "backup")}${button("导入工作区备份", "restore", "", "quiet")}<p class="hint">离线内容保存在此设备。备份包含内容与附件原件，不包含密码、会话与连接设置。</p></section><p class="footnote">AI Bro iOS · 0.1.0<br>知识与行动，在一起。</p>`;
+  return `<section class="settings-card"><h2>设备与同步</h2><p>${esc(sync.status)}</p><p class="hint">连接与 Mac「设置 → 账号与云同步」相同的服务和账号。云同步是可选功能，课程助手可以直接登录学校账号使用。要与电脑共用资料，请填写同一同步服务的 HTTPS 地址、云同步用户名和密码。使用 Tailscale 私有地址时，先在此设备连接同一 Tailscale 网络。云同步密码不是 SSH 密码，也不是学校密码。</p><form id="sync-form">${field("server", "自托管同步服务", "url", store.state.binding?.base || import.meta.env.VITE_SYNC_URL || "")}${field("username", "云同步用户名", "text", store.state.binding?.username || "")}${field("password", "云同步账号密码", "password")}<label class="check"><input name="merge" type="checkbox" required>合并当前设备与此账号的资料</label><button class="primary" type="submit">连接并同步</button></form><div class="actions">${button("立即同步", "sync")}${button("断开连接", "disconnect", "", "quiet")}${button(`处理冲突 · ${countConflicts()}`, "conflicts", "", "quiet")}</div></section><section class="settings-card"><h2>模型连接</h2><form id="model-form">${field("base", "API 地址（以 /v1 结尾）", "url", c.base || "")}${field("model", "模型名称", "text", c.model || "")}${field("key", "API Key（留空保留原值）", "password")}<label>接口格式<select name="format"><option value="chat">Chat Completions 兼容接口</option><option value="responses" ${c.format === "responses" ? "selected" : ""}>Responses 兼容接口</option></select></label><button class="primary" type="submit">保存模型连接</button></form><p class="hint">引用内容会发送到你配置的模型服务。学校账号不会进入模型上下文。</p></section><section class="settings-card"><h2>日程提醒</h2><p>${store.state.settings.notifications ? "已启用" : "尚未启用"} · ${native ? "iOS 本地通知" : "网页打开期间提醒；关闭后请使用 iOS 提醒"}</p>${button("开启提醒", "notifications")}<form id="task-reminder-settings"><label>普通任务临期提醒<select name="minutes">${[["off","关闭"],["0","截止时"],["15","提前 15 分钟"],["60","提前 1 小时"],["1440","提前 1 天"]].map(([v,t])=>`<option value="${v}" ${v===String(store.state.settings.taskReminderMinutes===null?"off":store.state.settings.taskReminderMinutes ?? 60)?"selected":""}>${t}</option>`).join("")}</select></label><button type="submit">保存提醒设置</button></form>${button("关闭提醒", "notifications-off", "", "quiet")}</section><section class="settings-card"><h2>课程连接</h2>${button("国科大 · 轻新课堂 ›", "ucas", "", "wide")}</section><section class="settings-card"><h2>数据与恢复</h2>${button("导出工作区备份", "backup")}${button("导入工作区备份", "restore", "", "quiet")}<p class="hint">离线内容保存在此设备。备份包含内容与附件原件，不包含密码、会话与连接设置。</p></section><p class="footnote">AI Bro ${native ? "iOS" : "Web"} · 0.1.3<br>知识与行动，在一起。</p>`;
 }
 function editCapture(note) {
   activeNote = note?.id || null;
@@ -351,16 +354,12 @@ async function attach(file) {
       ? new TextDecoder().decode(bytes).slice(0, 200000)
       : "",
   };
-  if (native && (/\.pdf$/i.test(file.name) || file.type.startsWith("image/"))) {
+  if (/\.pdf$/i.test(file.name) || (native && file.type.startsWith("image/"))) {
     try {
-      const { toBase64 } = await import("./platform.js");
-      const extracted = await Bridge.extractText({
-        name: file.name,
-        data: toBase64(bytes),
-      });
+      const extracted = await extractText(file.name, bytes);
       entry.content = extracted.text;
       entry.warning = extracted.warning;
-      entry.parser = "ios-device";
+      entry.parser = native ? "ios-device" : "browser-pdf";
     } catch (e) {
       entry.warning = e.message;
     }
@@ -444,7 +443,7 @@ function school() {
     "国科大课程助手",
     `
     <p class="lead">轻新课堂 · 让课程安排一目了然</p>
-    <details class="school-login"><summary>连接 / 更换学校账号</summary><form id="ucas-form">${field("username", "SEP 邮箱 / 轻新课堂学号")}${field("password", "对应账号的密码", "password")}<label class="check"><input type="checkbox" name="remember"> 在本机记住凭据，过期时恢复连接</label><button class="primary" type="submit">连接账号</button></form><p class="hint">两类账号共用此入口。默认只保存会话；勾选后，密码仅存于设备钥匙串，用于重新登录。退出账号会清除。浏览器预览只保存在内存。</p></details>
+    <details class="school-login"><summary>连接 / 更换学校账号</summary><form id="ucas-form">${field("username", "SEP 邮箱 / 轻新课堂学号")}${field("password", "对应账号的密码", "password")}<label class="check"><input type="checkbox" name="remember"> 在本机记住凭据，过期时恢复连接</label><button class="primary" type="submit">连接账号</button></form><p class="hint">两类账号共用此入口。默认只保存会话；勾选后可恢复连接。退出账号会清除凭据。${native ? "密码仅存于设备钥匙串。" : "网页版可直接连接学校，无需云同步账号。学校请求由网站的课程连接服务转发，不在服务器保存账号密码；凭据仅保留在当前标签页会话中。"}</p></details>
     <div class="actions">${button("检查学校连接", "ucas-check", "", "quiet")}${button("刷新今日课程", "ucas-refresh")}${button("退出学校账号", "ucas-logout", "", "quiet")}</div>
     <div class="school-overview"><div><small>当前课程 · 含课前 25 分钟</small><strong>${esc(current?.title || "暂无")}</strong></div><div><small>下一节课</small><strong>${esc(next?.title || "今日没有更多课程")}</strong></div></div>
     <p class="hint">学校时间 · ${esc(schoolDay())} · Asia/Shanghai</p><p role="status">${esc(courseStatus)}</p>
@@ -602,7 +601,7 @@ async function openImport(importID) {
   activeImport = f;
   openSheet(
     f.title || f.name,
-    `<p>${esc(f.mimeType || "文件")} · ${Math.round((f.size || 0) / 1024)} KB</p><div class="actions">${button("预览原件", "preview-file")}${button("导出原件", "export-file")}${native ? button("提取可引用文字", "extract-file", "", "quiet") : ""}</div>${f.warning ? `<p class="hint">${esc(f.warning)}</p>` : ""}${f.content ? `<article class="markdown reader">${md(f.content)}</article>` : '<p class="hint">可预览或导出原件；文件中的内容尚未作为可检索文字。</p>'}`,
+    `<p>${esc(f.mimeType || "文件")} · ${Math.round((f.size || 0) / 1024)} KB</p><div class="actions">${button("预览原件", "preview-file")}${button("导出原件", "export-file")}${native || /\.pdf$/i.test(f.name || "") ? button("提取可引用文字", "extract-file", "", "quiet") : ""}</div>${f.warning ? `<p class="hint">${esc(f.warning)}</p>` : ""}${f.content ? `<article class="markdown reader">${md(f.content)}</article>` : '<p class="hint">可预览或导出原件；文件中的内容尚未作为可检索文字。</p>'}`,
   );
 }
 async function readImport(f) {
@@ -692,7 +691,7 @@ function projectDetail(p) {
 function taskEditor(t, projectID) {
   openSheet(
     t ? "任务详情" : "添加任务",
-    `<form id="task-form" data-id="${t?.id || ""}">${field("title", "任务", "text", t?.title || "")}${field("due", "截止时间", "datetime-local", t?.dueAt ? localInput(t.dueAt) : "")}<label>状态<select name="status">${[
+    `<form id="task-form" data-id="${t?.id || ""}">${field("title", "任务", "text", t?.title || "")}${field("due", "截止时间", "datetime-local", t?.dueAt ? localInput(t.dueAt) : "")}<label>提醒<select name="reminder">${[["inherit","跟随本机设置"],["off","不提醒"],["0","到点提醒"],["15","提前 15 分钟"],["60","提前 1 小时"],["1440","提前 1 天"],...([0,15,60,1440,null,undefined].includes(t?.reminderMinutes)?[]:[[String(t.reminderMinutes),`提前 ${t.reminderMinutes} 分钟`]])].map(([v,label])=>`<option value="${v}" ${v===(t&&Object.hasOwn(t,"reminderMinutes")?(t.reminderMinutes===null?"off":String(t.reminderMinutes)):"inherit")?"selected":""}>${label}</option>`).join("")}</select></label><label>状态<select name="status">${[
       ["todo", "待开始"],
       ["doing", "进行中"],
       ["done", "已完成"],
@@ -916,19 +915,15 @@ const actions = {
       f.mimeType?.startsWith("image/")
     ))
       throw Error("当前支持 PDF 文本与图片文字识别");
-    const { toBase64 } = await import("./platform.js");
     notify("正在设备上识别文字…");
-    const r = await Bridge.extractText({
-      name: f.originalName || f.name,
-      data: toBase64(await readImport(f)),
-    });
+    const r = await extractText(f.originalName || f.name, await readImport(f));
     await store.put(
       "imports",
       {
         ...f,
         content: r.text,
         warning: r.warning,
-        parser: "ios-device",
+        parser: native ? "ios-device" : "browser-pdf",
         updatedAt: Date.now(),
       },
       f,
@@ -1334,7 +1329,7 @@ document.addEventListener("submit", async (e) => {
     } else if (f.id === "task-form") {
       if (!v.title.trim()) throw Error("填写任务名称");
       const old = store.get("tasks", f.dataset.id);
-      await store.put("tasks", {
+      const task = {
         ...old,
         id: old?.id || id(),
         title: v.title,
@@ -1346,7 +1341,10 @@ document.addEventListener("submit", async (e) => {
           v.status === "done" ? old?.completedAt || Date.now() : null,
         createdAt: old?.createdAt || Date.now(),
         updatedAt: Date.now(),
-      });
+      };
+      if (v.reminder === "inherit") delete task.reminderMinutes;
+      else task.reminderMinutes = v.reminder === "off" ? null : Number(v.reminder);
+      await store.put("tasks", task);
       sheet.close();
       render();
     } else if (f.id === "rename-form") {
@@ -1358,6 +1356,9 @@ document.addEventListener("submit", async (e) => {
       });
       sheet.close();
       render();
+    } else if (f.id === "task-reminder-settings") {
+      await store.tx(s=>s.settings.taskReminderMinutes=v.minutes === "off" ? null : Number(v.minutes));
+      notify("提醒设置已保存"); render();
     } else if (f.id === "model-form") {
       const u = new URL(v.base);
       if (
@@ -1381,7 +1382,7 @@ document.addEventListener("submit", async (e) => {
       notify(
         native
           ? "连接设置已保存，Key 存入钥匙串"
-          : "设置已保存；浏览器预览不持久保存 Key",
+          : "设置已保存；Key 只保留在当前标签页会话，关闭后需重新填写",
       );
       render();
     } else if (f.id === "sync-form") {
@@ -1578,8 +1579,16 @@ document.addEventListener("visibilitychange", () => {
     const label = sheet.querySelector("#qr-status");
     if (label) label.textContent = "已暂停，请返回课程重新打开签到码";
   } else {
+    sync.run().then(safeRender).catch(() => {});
+    refreshNotifications(true);
     tickCourses().catch(error);
     publishWidget().catch(error);
   }
 });
 publishWidget().catch(error);
+
+if (!native) {
+  document.body.classList.add("web-app");
+  refreshNotifications(true);
+  if (import.meta.env.PROD && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+}

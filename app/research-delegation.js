@@ -23,7 +23,7 @@
     }});
     try{
       const initial=await childAsk();
-      const result=await K.continuePlan(initial,{signal,batch:scheduler.batch,ask:childAsk});check();const final=parse(result);
+      const result=await K.continuePlan(initial,{signal,batch:scheduler.batch,ask:childAsk,validate:check});check();const final=parse(result);
       if((final.actions||[]).length||(final.fileEdits||[]).length)throw Error('子代理试图写入，已拒绝；主任务可检查读取结果。');
       if(typeof final.message!=='string'||!final.message.trim())throw Error('子代理未提供研究结果。');
       child.status='completed';child.message=final.message.slice(0,16000);child.truncated=final.message.length>16000;

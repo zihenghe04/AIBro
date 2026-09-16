@@ -4,6 +4,7 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import { Share } from "@capacitor/share";
 import { IndexedAdapter } from "./store.js";
 import { httpError } from "./http-error.js";
+import { tabVault, browserRequest, browserNotifications, claimWorkspace, extractPDF } from "./web-platform.js";
 export const native = Capacitor.isNativePlatform();
 export const Bridge = registerPlugin("MobileBridge");
 export const adapter = native
@@ -19,15 +20,15 @@ export const adapter = native
         ? "aibro-mobile-demo-v1"
         : "aibro-mobile-v1",
     );
-// Browser preview credentials intentionally survive only in memory. Production uses iOS Keychain.
-const secrets = new Map();
+// Keychain on iOS; browser credentials are scoped to this tab.
+const secrets = native ? null : tabVault(sessionStorage, "aibro-web-session:" + (new URLSearchParams(location.search).get("demo") === "1" ? "demo:" : "live:"));
 export const vault = {
   get: async (key) =>
     native ? (await Bridge.secretGet({ key })).value : secrets.get(key),
   set: async (key, value) =>
     native ? Bridge.secretSet({ key, value }) : secrets.set(key, value),
   remove: async (key) =>
-    native ? Bridge.secretRemove({ key }) : secrets.delete(key),
+    native ? Bridge.secretRemove({ key }) : secrets.remove(key),
 };
 export const toBase64 = (bytes) => {
   let out = "";
@@ -72,7 +73,7 @@ export async function http(
     status = r.status;
     data = raw ? fromBase64(r.data) : r.data;
   } else {
-    const r = await fetch(url, {
+    const r = await browserRequest(url, {
       method,
       headers,
       body:
@@ -84,7 +85,7 @@ export async function http(
             : JSON.stringify(body)),
       redirect: "error",
       signal: AbortSignal.timeout(120000),
-    });
+    }, vault);
     status = r.status;
     data = raw ? new Uint8Array(await r.arrayBuffer()) : await r.text();
   }
@@ -101,7 +102,7 @@ export async function http(
 let blobDB;
 async function db() {
   return (blobDB ||= new Promise((resolve, reject) => {
-    const r = indexedDB.open("aibro-mobile-files", 1);
+    const r = indexedDB.open(new URLSearchParams(location.search).get("demo") === "1" ? "aibro-mobile-demo-files" : "aibro-mobile-files", 1);
     r.onupgradeneeded = () => r.result.createObjectStore("blobs");
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
@@ -172,7 +173,7 @@ export async function exportFile(
   }
 }
 export async function reconcileNotifications(events, enabled) {
-  if (!native) return { scheduled: 0, message: "浏览器预览不发送系统提醒" };
+  if (!native) return browserNotifications(events, enabled);
   const pending = await LocalNotifications.getPending();
   const ours = pending.notifications.filter((n) => n.extra?.aibro === true);
   if (!enabled) {
@@ -206,6 +207,18 @@ export async function reconcileNotifications(events, enabled) {
   return { scheduled: next.length };
 }
 export async function enableNotifications() {
-  if (!native) throw Error("请在 iOS App 中开启系统提醒");
+  if (!native) {
+    if (!globalThis.Notification) throw Error("此浏览器未提供系统通知，请使用 iOS App 的日程提醒。");
+    return await Notification.requestPermission() === "granted";
+  }
   return (await LocalNotifications.requestPermissions()).display === "granted";
+}
+
+export async function prepareWorkspace() {
+  if (!native) await claimWorkspace(adapter.name);
+}
+export async function extractText(name, bytes) {
+  if (native) return Bridge.extractText({ name, data: toBase64(bytes) });
+  if (/\.pdf$/i.test(name)) return extractPDF(bytes);
+  throw Error("图片文字识别可在 iOS 或 Mac 完成后同步；网页版保留图片原件。");
 }

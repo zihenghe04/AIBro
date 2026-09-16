@@ -26,6 +26,13 @@ import WebKit
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage,replyHandler:@escaping(Any?,String?)->Void) {
         guard let origin=workspace?.origin, message.frameInfo.isMainFrame,let url=message.frameInfo.request.url,url.scheme=="http",url.host==origin.host,url.port==origin.port,let body=message.body as? [String:Any],let command=body["command"] as? String else{replyHandler(nil,"拒绝非工作区请求");return}
         do {
+            if command=="agenda-notifications" {
+                Task { @MainActor in
+                    guard let store=self.workspace?.agenda else {replyHandler(nil,"日程尚未就绪");return}
+                    if body["enable"] as? Bool == true {await store.requestNotifications()}
+                    replyHandler(["enabled":store.preferences.notifications,"status":store.notificationStatus],nil)
+                };return
+            }
             if command=="agenda-proposal",let proposal=body["proposal"] as? [String:Any]{try workspace?.reviewAgendaProposal(proposal);replyHandler(["ok":true],nil);return}
             if command=="agenda-draft",let id=body["id"] as? String {try workspace?.draftAgenda(id);replyHandler(["ok":true],nil);return}
             if command=="agenda-open",let id=body["id"] as? String {try workspace?.openLinkedAgenda(id);replyHandler(["ok":true],nil);return}

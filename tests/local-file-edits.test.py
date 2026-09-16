@@ -56,10 +56,24 @@ with tempfile.TemporaryDirectory(prefix='aibro-file-edits-') as tmp:
         reject(lambda:reveal_file(projects,None,dict(type='local',candidateId=cid,path='../outside.md'),launch),403)
         reject(lambda:reveal_file(projects,None,dict(type='local',candidateId=cid,path='link.md'),launch))
         class Store:
+            directory=base
             def load(self):return {'imports':[{'id':'fixture','name':'原件.pdf'}]}
             def file_path(self,id):return base/'files'/id
         store=Store();(base/'files').mkdir();store.file_path('fixture').write_bytes(b'%PDF synthetic')
-        reveal_file(projects,store,dict(type='import',id='fixture'),launch);assert calls[-1][-1]==str(store.file_path('fixture').resolve())
+        reveal_file(projects,store,dict(type='import',id='fixture'),launch)
+        exported=Path(calls[-1][-1]);assert exported.name=='原件.pdf';assert exported.read_bytes()==store.file_path('fixture').read_bytes()
+        assert exported != store.file_path('fixture');assert exported.is_relative_to((base/'exports').resolve())
+        reveal_file(projects,store,dict(type='import',id='fixture'),launch);assert calls[-1][-1]==str(exported)
+        exported.write_bytes(b'user edited copy')
+        reveal_file(projects,store,dict(type='import',id='fixture'),launch);assert Path(calls[-1][-1]).name=='原件 (2).pdf'
+        assert exported.read_bytes()==b'user edited copy';assert store.file_path('fixture').read_bytes()==b'%PDF synthetic'
+        store.file_path('fixture').write_bytes(b'%PDF-1.7\nsynthetic original')
+        store.load=lambda:{'imports':[{'id':'fixture','name':'../../renamed without extension'}]}
+        reveal_file(projects,store,dict(type='import',id='fixture'),launch)
+        safe_export=Path(calls[-1][-1]);assert safe_export.suffix=='.pdf';assert safe_export.parent==(base/'exports'/'fixture').resolve()
+        assert safe_export.read_bytes()==store.file_path('fixture').read_bytes()
+        (base/'exports').rename(base/'old-exports');(base/'exports').symlink_to(project,target_is_directory=True)
+        reject(lambda:reveal_file(projects,store,dict(type='import',id='fixture'),launch),409)
         reject(lambda:reveal_file(projects,store,dict(type='import',id='../../outside'),launch),404)
     pending=proposal();projects.disconnect(connection['root']['id']);reject(lambda:service.access(pending['id'],'apply'),403);assert service.access(pending['id'])['before'];assert target.read_bytes()==original
     assert service.access(pending['id'],'dismiss')['status']=='dismissed'

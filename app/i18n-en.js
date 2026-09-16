@@ -39,6 +39,7 @@
 "已更新段落": "Indexed passages",
 "待更新": "Pending",
 "向量索引已更新": "Vector index updated",
+"向量索引已更新；混合检索尚未启用，Agent 当前仍使用关键词检索": "Vector index updated. Hybrid retrieval is off; the agent is still using keyword search.",
 "正在增量更新向量索引": "Updating changed vector entries",
 "Embedding 配置已保存；索引与对话模型独立": "Embedding settings saved; independent of the chat model",
 "正在测试 embedding 连接": "Testing embedding connection",

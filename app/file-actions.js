@@ -12,7 +12,9 @@
  }
  async function reveal(ref){
   if(ref.type==='local'&&!hooks.getState().projects.some(p=>root.FileContext.active(p)&&p.id===ref.projectId&&p.localFolder?.id===ref.candidateId))throw Error(t('本机项目已断开或归档。','The local project is disconnected or archived.'));
-  return root.FileContext.request('/__local/reveal',ref.type==='local'?{type:'local',candidateId:ref.candidateId,path:ref.path}:{type:ref.type,id:ref.id});
+  const result=await root.FileContext.request('/__local/reveal',ref.type==='local'?{type:'local',candidateId:ref.candidateId,path:ref.path}:{type:ref.type,id:ref.id});
+  if(result.exported)hooks.toast(t('已在 Finder 中显示具名副本；修改副本不会影响知识库原件。','Showing a named copy in Finder. Editing it does not change the library original.'));
+  return result;
  }
  function close(focus=false){if(menu){menu.remove();menu=null;}if(focus&&opener?.isConnected)opener.focus();}
  function show(event,ref){

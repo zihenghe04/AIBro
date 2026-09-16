@@ -772,3 +772,13 @@ iframe {
 .school-login summary { padding:14px 0; cursor:pointer; }
 .school-qr { text-align:center; padding:20px 0; min-height:340px; }
 .school-qr img { max-width:100%; height:auto; border-radius:16px; }
+
+/* The same workspace expands naturally on laptop and tablet browsers. */
+@media (min-width: 1000px) {
+  .web-app header { max-width: 1080px; padding-inline: 32px; height: 88px; }
+  .web-app main { max-width: 1040px; padding-inline: 32px; }
+  .web-app .page-title { margin-top: 24px; }
+  .web-app .hero { padding: 36px; }
+  .web-app .settings-card { padding: 28px; }
+  .web-app nav { max-width: 660px; left: 50%; transform: translateX(-50%); right: auto; width: calc(100% - 48px); bottom: 20px; border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 12px 48px #133f2914; }
+}

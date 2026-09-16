@@ -89,8 +89,25 @@
   const labels = { link_local_project: '关联本机项目', set_workspace: '设置空间', create_project: '创建项目', rename_attachment: '重命名资料', assign_attachment: '归档资料', create_knowledge_item: '保存知识', create_note: '保存笔记', update_note: '更新笔记', append_note: '追加笔记', upsert_paper: '保存论文分析', create_task: '创建任务', update_task: '更新任务', delete_task: '删除任务', delete_note: '删除笔记', add_tag: '添加标签', create_link: '建立关联', link_items: '建立关联' };
   labels.upsert_wiki = '保存科研 Wiki';
   labels.upsert_paper = '保存论文分析';
+  labels.delete_attachment = '资料移入回收站';
+  function attachmentSnapshots(state,scope={}) {
+    const active=x=>x&&!x.deleted&&!x.deletedAt&&!x.archived&&!x.archivedAt&&!['deleted','archived'].includes(x.status);
+    return Object.fromEntries((state.imports||[]).filter(item=>{
+      const parent=(state.projects||[]).find(p=>p.id===item.projectId);
+      return active(item)&&(!item.projectId||active(parent))&&(!scope.projectId||item.projectId===scope.projectId)&&(!scope.workspace||scope.workspace==='auto'||(parent?.workspace||item.workspace)===scope.workspace);
+    }).map(item=>[item.id,JSON.stringify(item)]));
+  }
   function applyPlan(original, actions, context = {}) {
     if (!Array.isArray(actions) || actions.length > 80) throw new Error('单次最多执行 80 个动作，请分批整理');
+    // Compare against the pre-plan state, so a rename in the same transaction is allowed,
+    // but edits made by the user while the model was planning are never deleted silently.
+    for(const action of actions.filter(a=>a?.type==='delete_attachment')) {
+      const matches=(original.imports||[]).filter(item=>item.id===action.attachmentId);
+      const snapshots=context.attachmentSnapshots||{};
+      const currentScope=attachmentSnapshots(original,{projectId:context.projectId,workspace:context.workspace});
+      if(matches.length!==1||!Object.hasOwn(snapshots,action.attachmentId)||!Object.hasOwn(currentScope,action.attachmentId))throw Error('资料不在本轮允许删除范围内，请重新读取当前项目资料');
+      if(snapshots[action.attachmentId]!==JSON.stringify(matches[0]))throw Error('资料在读取后发生变化，请重新核对再删除');
+    }
     const state = clone(original); const results = []; const refs = new Map(); const touchedProjects = new Set();
     const now = context.now || Date.now(); let counter = 0;
     const uid = prefix => context.uid ? context.uid(prefix) : `${prefix}_${now}_${++counter}_${Math.random().toString(36).slice(2, 7)}`;
@@ -193,7 +210,7 @@
     }
     function cleanTaskPatch(patch, previous = {}) {
       const result = {};
-      for (const key of ['title', 'description', 'status', 'priority', 'startAt', 'dueAt', 'checklist', 'dependsOn']) if (Object.prototype.hasOwnProperty.call(patch, key)) result[key] = patch[key];
+      for (const key of ['title', 'description', 'status', 'priority', 'startAt', 'dueAt', 'reminderMinutes', 'checklist', 'dependsOn']) if (Object.prototype.hasOwnProperty.call(patch, key)) result[key] = patch[key];
       if ('title' in result) result.title = required(result.title, '任务名称');
       if ('status' in result && !['todo', 'in_progress', 'done', 'blocked'].includes(result.status)) throw new Error('任务状态无效');
       if ('priority' in result && !['low', 'medium', 'high'].includes(result.priority)) throw new Error('任务优先级无效');
@@ -203,6 +220,7 @@
         const due = Object.hasOwn(result, 'dueAt') ? result.dueAt : previous.dueAt;
         if (start !== null && start !== undefined && start !== '' && due !== null && due !== undefined && due !== '' && taskDate(start, '开始').at > taskDate(due, '截止').end) throw new Error('任务截止时间不能早于开始时间');
       }
+      if ('reminderMinutes' in result && result.reminderMinutes !== null && (!Number.isInteger(result.reminderMinutes) || result.reminderMinutes < 0 || result.reminderMinutes > 10080)) throw new Error('任务提前提醒必须是 0 至 10080 分钟，或 null 表示关闭');
       if ('dependsOn' in result) result.dependsOn=Dependencies.validate(state,{...previous,...result},Array.isArray(result.dependsOn)?result.dependsOn.map(id=>refs.get(id)||id):result.dependsOn);
       if ('checklist' in result) {
         if (!Array.isArray(result.checklist)) throw new Error('检查清单必须是数组');
@@ -239,6 +257,17 @@
         if (type === 'rename_attachment') { item.originalName ||= item.name; item.name = required(action.newName, '资料名称').replace(/[\\/]/g, '-'); item.updatedAt = now; record('import', item, `重命名资料：${item.name}`, 'renamed'); }
         else if (type === 'assign_attachment') { const project = projectFor(action, workspace); route(item, project, workspace); item.folderPath = folderPath(action.folderPath || item.folderPath); item.updatedAt = now; record('import', item, `归档资料：${item.name}`, 'assigned'); }
         else { item.tags = [...new Set([...(item.tags || []), required(action.tag, '标签')])]; item.updatedAt = now; record('import', item, `添加标签：${action.tag}`, 'updated'); }
+        continue;
+      }
+      if(type==='delete_attachment') {
+        const Lifecycle=typeof module==='object'&&module.exports?require('./content-lifecycle'):globalThis.ContentLifecycle;
+        const item=state.imports.find(x=>x.id===action.attachmentId);
+        if(!item)throw Error('找不到要删除的资料，或计划重复删除同一资料');
+        const removed=Lifecycle.remove(state,[{type:'import',id:item.id}],{}, {now,uid});
+        if(removed.removed.length!==1)throw Error('资料已归档、删除或不可用，请重新核对');
+        Object.assign(state,removed.state);
+        record('import',item,`移入回收站：${item.name||item.title}`,'deleted');
+        if(item.projectId)touchedProjects.add(item.projectId);
         continue;
       }
       if (type === 'upsert_wiki') {
@@ -393,5 +422,5 @@
     const uniqueResults = [...new Map(results.map(r => [`${r.type}:${r.id}:${r.operation}`, r])).values()];
     return { state, results: uniqueResults, projectIds: [...touchedProjects] };
   }
-  return { endpoint, folderPath, runLabel, parsePlan, partialMessage, dueInWeek, taskSources, applyPlan, actionLabels: labels };
+  return { endpoint, folderPath, runLabel, parsePlan, partialMessage, dueInWeek, taskSources, applyPlan, attachmentSnapshots, actionLabels: labels };
 });

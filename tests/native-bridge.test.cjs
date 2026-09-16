@@ -16,3 +16,13 @@ test('new project conversation binds persisted owner and rejects archived projec
 test('conversation snapshots retain project IDs independently of folders',()=>{const f=fixture();f.state.conversations.push({id:'chat',title:'Discussion',projectId:'p',folderId:'f',updatedAt:42});f.run({type:'reader'});const row=f.posted.at(-1).conversationLibrary[0];assert.equal(row.projectId,'p');assert.equal(row.folderId,'f');assert.equal(row.updatedAt,42);});
 
 test('background WebView rendering follows actual visibility changes',()=>{const f=fixture();assert.equal(f.classes.has('native-background-render'),false);f.env.document.hidden=true;f.listeners.get('visibilitychange')();assert.equal(f.classes.has('native-background-render'),true);f.env.document.hidden=false;f.listeners.get('visibilitychange')();assert.equal(f.classes.has('native-background-render'),false);});
+
+test('overview snapshot carries priority and updates dependency readiness without changing tasks',()=>{
+ const f=fixture(),task=f.state.tasks[0];task.priority='high';task.dependsOn=['before'];
+ const before={id:'before',projectId:task.projectId,status:'todo'};f.state.tasks.push(before);
+ f.run({type:'reader'});let current=f.posted.at(-1).tasks.find(t=>t.id===task.id);
+ assert.equal(current.priority,'high');assert.equal(current.waitingOnDependencies,true);
+ before.status='done';f.run({type:'reader'});current=f.posted.at(-1).tasks.find(t=>t.id===task.id);
+ assert.equal(current.waitingOnDependencies,false);assert.equal(task.status,'todo');
+ before.deletedAt=1;f.run({type:'reader'});assert.equal(f.posted.at(-1).tasks[0].waitingOnDependencies,true);
+});

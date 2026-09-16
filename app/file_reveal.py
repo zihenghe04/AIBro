@@ -1,11 +1,66 @@
 """Reveal existing, identity-bound workspace files with Finder. No shell strings."""
 import fcntl
+import hashlib
+import json
+import mimetypes
 import os
+import re
 import stat
 import subprocess
 import sys
 from pathlib import Path
 from local_projects import LocalProjectError
+
+
+def named_export(store, item, source_fd):
+    """Make a user-facing copy; ID-addressed originals remain stable for sync/recovery."""
+    path = store.file_path(item['id'])
+    metadata_path = path.with_suffix('.meta.json')
+    metadata = {}
+    if metadata_path.is_file() and not metadata_path.is_symlink():
+        try: metadata = json.loads(metadata_path.read_text())
+        except (ValueError, OSError): pass
+    name = str(item.get('name') or item.get('originalName') or metadata.get('name') or item['id'])
+    name = re.sub(r'[\\/:\x00-\x1f\x7f]', '_', name).strip(' .') or 'attachment'
+    # PDF magic is authoritative even if a prior AI rename dropped the extension.
+    header = os.pread(source_fd, 8, 0)
+    extension = '.pdf' if header.startswith(b'%PDF-') else mimetypes.guess_extension(item.get('mimeType') or metadata.get('mimeType') or '')
+    if extension and (not Path(name).suffix or header.startswith(b'%PDF-') and not name.lower().endswith('.pdf')):
+        name = (Path(name).stem if Path(name).suffix else name) + extension
+    while len(name.encode('utf-8')) > 200:
+        name = Path(name).stem[:-1] + Path(name).suffix
+    parent = store.directory
+    for part in ('exports', item['id']):
+        parent = parent / part
+        parent.mkdir(mode=0o700, exist_ok=True)
+        if parent.is_symlink() or not parent.is_dir(): raise LocalProjectError('导出目录不可用。', 409)
+    directory_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        # Never overwrite an exported file that the user has subsequently edited.
+        for index in range(1000):
+            candidate = name if index == 0 else f'{Path(name).stem} ({index + 1}){Path(name).suffix}'
+            try: target = os.open(candidate, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory_fd)
+            except FileExistsError:
+                existing = os.open(candidate, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+                try:
+                    if not stat.S_ISREG(os.fstat(existing).st_mode): raise LocalProjectError('导出文件路径不可用。', 409)
+                    def digest(fd):
+                        value = hashlib.sha256(); offset = 0
+                        while chunk := os.pread(fd, 1024 * 1024, offset): value.update(chunk); offset += len(chunk)
+                        return value.digest()
+                    if digest(existing) == digest(source_fd): return os.dup(existing)
+                finally: os.close(existing)
+                continue
+            try:
+                offset = 0
+                with os.fdopen(os.dup(target), 'wb') as output:
+                    while chunk := os.pread(source_fd, 1024 * 1024, offset): output.write(chunk); offset += len(chunk)
+                    output.flush(); os.fsync(output.fileno())
+                return target
+            except Exception:
+                os.close(target); os.unlink(candidate, dir_fd=directory_fd); raise
+        raise LocalProjectError('同名导出文件过多，请整理导出目录。', 409)
+    finally: os.close(directory_fd)
 
 
 def reveal_file(projects, store, payload, launch=None):
@@ -51,7 +106,11 @@ def reveal_file(projects, store, payload, launch=None):
     parent=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
     try:
         fd=os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
-        try: return reveal(fd)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode): raise LocalProjectError('原件不可用。', 404)
+            exported = named_export(store, item, fd)
+            try: return {**reveal(exported), 'exported': True}
+            finally: os.close(exported)
         finally: os.close(fd)
     except OSError: raise LocalProjectError('保存的原件已不存在，请重新导入。',404)
     finally: os.close(parent)

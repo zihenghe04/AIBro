@@ -1,6 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const S=require('../app/tool-scheduler'),D=require('../app/research-delegation'),K=require('../app/knowledge-access');
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
+test('neighbor requests keep their exact chunk version through scheduling',async()=>{
+ const r={type:'neighbors',chunkId:'chunk:one',version:'v2',radius:2};let received;
+ await S.create({run:{},execute:async request=>{received=request;return {entries:[]}}}).batch([r]);
+ assert.deepEqual(received,r);
+});
 test('independent reads overlap, commands remain barriers and result order is stable',async()=>{
  const run={},events=[];let active=0,peak=0;const s=S.create({run,checkpoint:async()=>{},execute:async r=>{events.push('start'+r.id);peak=Math.max(peak,++active);if(r.type==='terminal')assert.equal(active,1);await delay(r.id==='a'?15:2);active--;events.push('end'+r.id);return {id:r.id};}});
  const result=await s.batch([{type:'read',id:'a'},{type:'read',id:'b'},{type:'terminal',id:'c'},{type:'search',id:'d'}]);

@@ -93,8 +93,23 @@ async function run(){
  await evaluate('flushWorkspace();true');await until(()=>evaluate('!serverSaveInFlight&&!serverSaveQueued'),'indexed RAG persistence');
  await win.reload();await until(()=>evaluate('typeof storageHydrated!=="undefined"&&storageHydrated'),'index reload');
  assert.equal(await evaluate(`ContextRetrieval.searchIndex(state,{projectId:'rag-project',query:'zirconium'}).entries[0].recordId`),'rag-149');
+ // One real sendMessage flow reads two versions, retains both bodies, then waits
+ // for the ordinary approval path before trashing only the superseded source.
+ await evaluate(`ConversationModels.resolve=async config=>config;currentConversation().draftAttachmentIds=[];currentConversation().permissionMode='smart';state.imports.push({id:'cleanup-old',name:'Older.pdf',workspace:'科研',projectId:'rag-project',content:'OLD_VERSION_EVIDENCE'},{id:'cleanup-new',name:'Current.pdf',workspace:'科研',projectId:'rag-project',content:'NEW_VERSION_EVIDENCE'});window.cleanupCalls=0;AgentTransport.requestPlan=async options=>{const text=JSON.stringify(options.input);cleanupCalls++;if(cleanupCalls===1){if(!text.includes('delete_attachment'))throw Error('Missing delete capability');return JSON.stringify({knowledgeRequests:[{type:'read',recordType:'import',id:'cleanup-old'}],actions:[]});}if(!text.includes('OLD_VERSION_EVIDENCE'))throw Error('Lost old evidence');if(cleanupCalls===2)return JSON.stringify({knowledgeRequests:[{type:'read',recordType:'import',id:'cleanup-new'}],actions:[]});if(!text.includes('NEW_VERSION_EVIDENCE'))throw Error('Lost new evidence');return JSON.stringify({workspace:'科研',message:'Old source is superseded; ready for review.',actions:[{type:'delete_attachment',attachmentId:'cleanup-old'}]});};sendMessage({goal:'Delete the superseded synthetic attachment and retain the latest one'});true`);
+ await until(()=>evaluate('cleanupCalls===3&&!sendMessage.busy'),'cleanup plan');
+ assert.equal(await evaluate('state.agentRuns.at(-1).status'),'awaiting-approval');
+ assert.equal(await evaluate(`state.imports.some(x=>x.id==='cleanup-old')`),true);
+ await evaluate('approveRun(state.agentRuns.at(-1).id)');
+ assert.equal(await evaluate('state.agentRuns.at(-1).status'),'completed');
+ assert.equal(await evaluate(`state.imports.some(x=>x.id==='cleanup-old')`),false);
+ assert.equal(await evaluate(`state.imports.some(x=>x.id==='cleanup-new')`),true);
+ assert.equal(await evaluate(`state.trash.some(x=>x.type==='content'&&x.data.imports?.some(i=>i.id==='cleanup-old'))`),true);
+ await evaluate('flushWorkspace();true');await until(()=>evaluate('!serverSaveInFlight&&!serverSaveQueued'),'cleanup saved');
+ await win.reload();await until(()=>evaluate('typeof storageHydrated!=="undefined"&&storageHydrated'),'cleanup reload');
+ assert.equal(await evaluate(`state.imports.some(x=>x.id==='cleanup-old')`),false);
+ assert.equal(await evaluate(`state.trash.some(x=>x.data.imports?.some(i=>i.id==='cleanup-old'))`),true);
  assert.deepEqual(forbidden,[]);
- console.log(JSON.stringify({passed:true,checks:['real drag upload','oversized PDF rendered','corrupt attachment recoverable','retry excludes only selected attachment','draft preserved','failure deletion persists after reload','original files retained','supplemental turn sends 2 original plus 3 new files with the original goal','full review rereads originals','saved draft adopted without model call','on-demand knowledge read round trip','150 record indexed RAG round trip','derived index rebuilt after reload','no external requests'],screenshots:TEMP}));
+ console.log(JSON.stringify({passed:true,checks:['real drag upload','oversized PDF rendered','corrupt attachment recoverable','retry excludes only selected attachment','draft preserved','failure deletion persists after reload','original files retained','supplemental turn sends 2 original plus 3 new files with the original goal','full review rereads originals','saved draft adopted without model call','on-demand knowledge read round trip','150 record indexed RAG round trip','derived index rebuilt after reload','accumulated old/new evidence','attachment deletion approval and restart persistence','no external requests'],screenshots:TEMP}));
 }
 function finish(code){clearTimeout(deadline);win?.destroy();server?.kill();app.exit(code)}
 run().then(()=>finish(0)).catch(e=>{console.error(e.stack);finish(1)});

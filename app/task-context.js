@@ -96,7 +96,7 @@
     const ordered = [...candidates.values()].sort((a, b) => a.rank - b.rank || b.recency - a.recency || a.task.id.localeCompare(b.task.id));
     for (const { task, reason } of ordered) {
       const project = projects.get(task.projectId);
-      const essentials = { id: task.id, title: clip(task.title, 240), workspace: project?.workspace || task.workspace || null, projectId: task.projectId || null, status: task.status || 'todo', priority: task.priority || 'medium', dueAt: task.dueAt ?? null, startAt: task.startAt ?? null, relation: reason, dependsOn:list(task.dependsOn), blockedBy:list(task.dependsOn).filter(id=>!active(tasks.get(id))||tasks.get(id).status!=='done') };
+      const essentials = { id: task.id, title: clip(task.title, 240), workspace: project?.workspace || task.workspace || null, projectId: task.projectId || null, status: task.status || 'todo', priority: task.priority || 'medium', dueAt: task.dueAt ?? null, reminderMinutes: Object.hasOwn(task,"reminderMinutes") ? task.reminderMinutes : "inherit", startAt: task.startAt ?? null, relation: reason, dependsOn:list(task.dependsOn), blockedBy:list(task.dependsOn).filter(id=>!active(tasks.get(id))||tasks.get(id).status!=='done') };
       let row;
       for (const size of [600, 160, 0]) {
         const record = { ...essentials, description: clip(task.description, size), checklist: list(task.checklist).slice(0, size ? 10 : 0).map(item => typeof item === 'string' ? { text: clip(item, 100), done: false } : { id: item.id, text: clip(item.text || item.title, 100), done: !!item.done }), sourceAttachmentIds: list(task.sourceAttachmentIds).filter(validId).slice(0, size ? 8 : 0), updatedAt: task.updatedAt ?? null };

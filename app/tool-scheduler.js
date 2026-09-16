@@ -7,7 +7,7 @@
   const cancelled=()=>Object.assign(Error('已停止工具执行'),{code:'CANCELLED'});
   const label=type=>({task_list:'任务目录',list:'资料目录',search:'检索',neighbors:'相邻证据',read:'读取正文',read_page:'读取原件',read_file:'工作区文件',wiki_list:'Wiki 目录',memory_read:'项目记忆',delegate:'子代理',terminal:'终端',web_read:'网页读取',web_search:'网页搜索'})[type]||type;
   function safeRequest(request){
-    const out={};for(const key of ['type','id','recordType','query','offset','page','refKey','variant','argv','cwd','timeout','task','title','url'])if(request[key]!==undefined)out[key]=clone(request[key]);
+    const out={};for(const key of ['type','id','recordType','query','offset','page','refKey','variant','chunkId','version','radius','argv','cwd','timeout','task','title','url'])if(request[key]!==undefined)out[key]=clone(request[key]);
     return out;
   }
   function resultSnapshot(value){
