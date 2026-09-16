@@ -38,6 +38,13 @@ AI Bro 是一个本地优先的 Mac AI 工作区，把对话、文件、项目�
 
 iPhone / iPad，iOS 16 及以上。IPA 需要使用自己的开发者身份签名安装。
 
+### 上课前，少切一个 App。
+
+国科大课程助手把当前课程、下一节课和到课状态放在一起。到课后进行签到，核对学校返回的结果；还可以查看动态签到码、把课程加入日程，按需开启今日前台自动签到与课程提醒。
+
+<p align="center"><img src="launch/dist/assets/ios/courses.png" width="320" alt="课程助手实际 iOS 界面，全部使用虚构课程、教师与模拟签到状态" /></p>
+<p align="center"><sub>虚构演示数据 · 模拟签到状态，不是实际签到记录</sub></p>
+
 ## 产品特色
 
 下面的 GIF 来自真实应用操作，使用示例工作区。官网提供自动循环的轻量视频与放大查看，完整演示见[产品影片](https://zihenghe04.github.io/AIBro/#film)。

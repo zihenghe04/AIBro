@@ -31,6 +31,12 @@ Native SwiftUI / AppKit navigation, charts and calendars sit alongside a resizab
 
 For iPhone and iPad running iOS 16 or later. The IPA requires signing with your own developer identity. The mobile interface is currently in Chinese; the English website describes its workflows without substituting Chinese screenshots.
 
+### One less app before class
+
+The UCAS course assistant brings the current class, the next class and attendance status together. Check in when you arrive, review the school’s response, open a dynamic course QR code, or add a class to your agenda. Foreground attendance and course reminders are optional.
+
+[Explore the course assistant](https://zihenghe04.github.io/AIBro/?lang=en#ios-courses). The Chinese showcase uses fictional courses, teachers and simulated attendance states, with no personal records.
+
 ## Product features
 
 The animation above is a recording of the English app with example data. Explore the [English workflow guide](https://zihenghe04.github.io/AIBro/?lang=en#workspace) or watch the task demonstration on the website.
