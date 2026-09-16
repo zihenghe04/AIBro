@@ -1,0 +1,21 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+.DS_Store
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/App/CapApp-SPM/.build/
+
+# Temporary compiler outputs
+*.xcresult/
+
+build/
+DerivedData/
+**/xcuserdata/
+*.ipa
+*.p12
+*.mobileprovision
+.env
+.env.*

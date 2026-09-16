@@ -3,7 +3,7 @@
 <p align="center"><strong>Turn a conversation into work you can continue.</strong></p>
 <p align="center">Reviewable files. Durable projects. Ideas with a next step.</p>
 <p align="center"><a href="README.md">简体中文</a> · English</p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0">Get the Mac app</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en#film">Watch the demo</a> · <a href="CHANGELOG.md">Changelog</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0">Get the Mac app</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.0/AI-Bro-0.1.2-unsigned.ipa">Get the iOS app</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en#film">Watch the demo</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
 ![Updating a task in the English AI Bro workspace](launch/dist/assets/recordings/project-en.gif)
 
@@ -16,6 +16,20 @@ Native SwiftUI / AppKit navigation, charts and calendars sit alongside a resizab
 - **Learning:** organize slides and timetables, study alongside the source, and turn a review plan into scheduled tasks.
 - **Research:** connect papers with methods, experiments and questions. Build a Wiki of evidence, failed attempts and review feedback.
 - **Everyday projects:** capture an idea, shape it into a plan, and update existing tasks as the details change.
+
+## Take AI Bro with you
+
+**The iOS companion is available.** Capture on your phone and continue on your Mac, with research, coursework and everyday projects in context.
+
+- **Your day at a glance:** tasks, events and imported ICS timetables.
+- **Catch the idea:** save text, links, images and files, even offline; ask AI to help organize them later.
+- **Keep knowledge close:** browse projects and your research Wiki, edit Markdown, and review AI changes as a diff before accepting them.
+- **UCAS course assistant:** school sign-in, course lookup, attendance check-in and course QR codes.
+- **Continue across devices:** connect both devices to the same self-hosted sync service for notes, tasks, projects and conversations, with explicit conflict handling.
+
+[Download iOS 0.1.2 IPA](https://github.com/zihenghe04/AIBro/releases/download/v0.7.0/AI-Bro-0.1.2-unsigned.ipa) · [Installation and signing](mobile/docs/INSTALL.md) · [Connect your devices](mobile/docs/CONNECT_DEVICES.md) · [Mobile source](mobile/)
+
+For iPhone and iPad running iOS 16 or later. The IPA requires signing with your own developer identity. The mobile interface is currently in Chinese; the English website describes its workflows without substituting Chinese screenshots.
 
 ## Product features
 

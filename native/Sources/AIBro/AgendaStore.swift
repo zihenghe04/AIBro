@@ -13,10 +13,11 @@ struct AgendaPreferences: Codable, Equatable {
         guard (0...23).contains(briefingHour),(0...59).contains(briefingMinute),taskReminderMinutes == nil || (0...10080).contains(taskReminderMinutes!) else {throw AgendaError.message("提醒时间无效。")}
     }
 }
-struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var preferences=AgendaPreferences()}
+struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var preferences=AgendaPreferences();var sync:[String:AgendaSyncReceipt]?=nil}
 @MainActor final class AgendaStore: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     @Published private(set) var events:[AgendaEvent]=[]
     @Published var preferences=AgendaPreferences()
+    private(set) var syncReceipts:[String:AgendaSyncReceipt]=[:]
     @Published var error:String?
     @Published var notificationStatus="提醒未启用"
     @Published var queued=0
@@ -41,7 +42,7 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
                 let archive=try JSONDecoder().decode(AgendaArchive.self,from:Data(contentsOf:file!))
                 guard archive.version==1 else {throw AgendaError.message("日程数据版本不兼容，未覆盖原文件。")}
                 guard Set(archive.events.map(\.id)).count==archive.events.count else {throw AgendaError.message("日程记录存在重复标识")};for event in archive.events {try event.validate()}
-                try archive.preferences.validate();events=archive.events;preferences=archive.preferences
+                try archive.preferences.validate();events=archive.events;preferences=archive.preferences;syncReceipts=archive.sync ?? [:]
             }
             loaded=true
         }catch{self.error="日程读取失败：\(error.localizedDescription)";return}
@@ -51,8 +52,31 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
     }
     private func persist(_ items:[AgendaEvent],_ settings:AgendaPreferences) throws {
         guard loaded,let file else {throw AgendaError.message("日程存储尚未就绪，未写入。")}
-        let bytes=try JSONEncoder().encode(AgendaArchive(events:items,preferences:settings))
+        let bytes=try JSONEncoder().encode(AgendaArchive(events:items,preferences:settings,sync:syncReceipts))
         try bytes.write(to:file,options:.atomic)
+    }
+    func acknowledgeSync(_ changes:[AgendaSyncChange]) throws {
+        var next=events, receipts=syncReceipts
+        for change in changes {
+            let current=next.first{$0.id==change.after.id}
+            // A local edit during the network await is never overwritten.
+            if change.writeNote == nil && !AgendaWire.same(current,change.before) {continue}
+            if change.writeNote == nil {
+                if let index=next.firstIndex(where:{$0.id==change.after.id}) {next[index]=change.after}else{next.append(change.after)}
+            }
+            receipts[change.noteID]=change.receipt
+        }
+        guard loaded,let file else {throw AgendaError.message("日程存储尚未就绪")}
+        try JSONEncoder().encode(AgendaArchive(events:next,preferences:preferences,sync:receipts)).write(to:file,options:.atomic)
+        events=next;syncReceipts=receipts;reschedule()
+    }
+    func resolveSync(_ conflict:AgendaSyncConflict,useRemote:Bool) throws {
+        guard AgendaWire.same(events.first(where:{$0.id==conflict.local.id}),conflict.local) else {throw AgendaError.message("日程又有修改，请刷新后选择")}
+        var receipt=conflict.receipt
+        if useRemote {receipt.event=conflict.local}else{receipt.note=conflict.remoteNote}
+        let before=syncReceipts;syncReceipts[conflict.id]=receipt
+        do{try persist(events,preferences)}catch{syncReceipts=before;throw error}
+        onChanged?()
     }
     func save(_ event:AgendaEvent) throws {
         try event.validate();var next=events

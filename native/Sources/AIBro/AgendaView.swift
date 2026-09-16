@@ -57,6 +57,22 @@ struct AgendaView:View {
         if mode=="周" {let start=cal.dateInterval(of:.weekOfYear,for:focus)!.start;return (0..<7).map{cal.date(byAdding:.day,value:$0,to:start)!}}
         return [cal.startOfDay(for:focus)]
     }
+    private func syncFullDetails(_ event:AgendaEvent)->String {
+        let start=event.start.nativeFormatted(.dateTime.year().month().day().hour().minute())
+        let end=event.end.nativeFormatted(.dateTime.year().month().day().hour().minute())
+        let repeatRule="\(event.frequency) · \(event.interval) · \(event.weekdays)"
+        return [event.title,"\(start) → \(end) · \(event.timeZone)",event.location,event.details,
+                nativeUI("重复规则", "Recurrence")+": "+repeatRule,
+                nativeUI("提醒（分钟）", "Reminder (minutes)")+": "+(event.reminderMinutes.map(String.init) ?? "—"),
+                nativeUI("截止", "Until")+": "+(event.until?.nativeFormatted(.dateTime.year().month().day()) ?? "—"),
+                nativeUI("重复次数", "Count")+": "+(event.count.map(String.init) ?? "—"),
+                nativeUI("排除日期", "Excluded dates")+": "+event.excluded.map{$0.nativeFormatted(.dateTime.year().month().day().hour().minute())}.joined(separator:", ")].joined(separator:"\n")
+    }
+    private func syncConflictDescription(_ event:AgendaEvent)->String {
+        let date=event.start.nativeFormatted(.dateTime.month().day().hour().minute())
+        let detail=event.deleted ? nativeUI("已取消", "Cancelled") : event.location
+        return [nativeUI("同步版本", "Synced version"),event.title,date,detail].joined(separator:" · ")
+    }
     private func items(_ day:Date)->[AgendaOccurrence] {store.occurrences(from:cal.startOfDay(for:day),to:cal.date(byAdding:.day,value:1,to:cal.startOfDay(for:day))!).filter{(kind=="all" || $0.event.kind==kind) && (query.isEmpty || $0.event.title.localizedCaseInsensitiveContains(query))}}
     var body:some View {
         ScrollView {
@@ -65,6 +81,28 @@ struct AgendaView:View {
                     HStack(alignment:.center,spacing:24){agendaHeading;Spacer(minLength:16);headerActions}
                     VStack(alignment:.leading,spacing:16){agendaHeading;headerActions}
                 }.modifier(RowEntrance(order:0))
+                if !model.agendaSyncConflicts.isEmpty {
+                    VStack(alignment:.leading,spacing:10) {
+                        Text(nativeUI("以下日程在两端都有修改，请选择保留的版本。", "These events changed on both devices. Choose the version to keep.")).font(.callout)
+                        ForEach(model.agendaSyncConflicts) {conflict in
+                            VStack(alignment:.leading,spacing:8) {
+                                Text(conflict.local.title).font(.headline)
+                                Text("Mac · \(conflict.local.start.nativeFormatted(.dateTime.month().day().hour().minute())) · \(conflict.local.deleted ? nativeUI("已取消", "Cancelled") : conflict.local.location)").font(.caption)
+                                Text(syncConflictDescription(conflict.remote)).font(.caption)
+                                DisclosureGroup(nativeUI("查看两个版本的详情", "Compare full details")) {
+                                    Text("Mac\n"+syncFullDetails(conflict.local)).textSelection(.enabled)
+                                    Divider()
+                                    Text(nativeUI("同步版本", "Synced version")+"\n"+syncFullDetails(conflict.remote)).textSelection(.enabled)
+                                }.font(.caption)
+                                HStack {
+                                    Button(nativeUI("保留 Mac 版本", "Keep Mac version")){model.resolveAgendaSync(conflict,useRemote:false)}
+                                    Button(nativeUI("使用同步版本", "Use synced version")){model.resolveAgendaSync(conflict,useRemote:true)}
+                                }
+                            }
+                        }
+                    }.padding().background(StudioPalette.amber.opacity(0.1),in:RoundedRectangle(cornerRadius:14))
+                }
+                if !model.agendaSyncStatus.isEmpty {Text(model.agendaSyncStatus).font(.caption).foregroundStyle(.secondary)}
                 HStack{ForEach(["今日","周","月"],id:\.self){value in Button{withAnimation(reduceMotion ? nil:.easeInOut(duration:0.18)){mode=value;if value=="今日"{store.focusDate=Date()}}}label:{Text(NativeL10n.agendaMode(value)).padding(.horizontal,18).padding(.vertical,9).background(mode==value ? StudioPalette.jade.opacity(0.15):.clear,in:Capsule())}.buttonStyle(.plain)};Spacer();Button{shift(-1)}label:{Image(systemName:"chevron.left")};Text(store.focusDate.nativeFormatted(.dateTime.year().month().day())).font(.headline).monospacedDigit();Button{shift(1)}label:{Image(systemName:"chevron.right")};Button(nativeUI("今天", "Today")){store.focusDate=Date()}}.buttonStyle(LiftStyle())
                 HStack{AgendaChoice(title:nativeUI("日程类型", "Event type"),value:$kind,options:[("all",nativeUI("全部安排", "All events")),("course",nativeUI("课程", "Courses")),("meeting",nativeUI("会议", "Meeting")),("task",nativeUI("任务截止", "Task deadlines")),("event",nativeUI("其他日程", "Other events"))]).frame(width:155);TextField(nativeUI("搜索日程", "Search events"),text:$query).textFieldStyle(.roundedBorder);Button{trash=true}label:{Image(systemName:"archivebox")}.help(nativeUI("已取消日程", "Cancelled events"))}
                 if mode=="今日" {dayAgenda(store.focusDate)} else {

@@ -1,0 +1,15 @@
+{
+  "appId": "app.aibro.mobile",
+  "appName": "AI Bro",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#f6faf8"
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "body"
+    }
+  },
+  "loggingBehavior": "none"
+}

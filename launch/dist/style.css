@@ -55,3 +55,14 @@
 .scroll-reveal:focus-within,.demo-card.scroll-reveal:focus-within>.demo-copy,.demo-card.scroll-reveal:focus-within>.demo-media{opacity:1;transform:none}
 @media(prefers-reduced-motion:reduce){.scroll-reveal,.demo-card.scroll-reveal>.demo-copy,.demo-card.scroll-reveal>.demo-media{opacity:1!important;transform:none!important;transition:none!important}}
 .motion-off .scroll-reveal,.motion-off .demo-card.scroll-reveal>.demo-copy,.motion-off .demo-card.scroll-reveal>.demo-media{opacity:1;transform:none;transition:none}
+
+/* iOS: actual isolated Simulator captures, on the existing soft-green surface. */
+.ios-section{border-top:1px solid var(--line, #293129)}
+.ios-gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(24px,5vw,78px);padding:36px clamp(0px,3vw,40px) 20px;background:radial-gradient(ellipse at center,rgba(119,173,141,.11),transparent 70%)}
+.ios-gallery figure{margin:0;min-width:0}.phone-shot{padding:7px;background:#202723;border:1px solid #47584b;border-radius:clamp(30px,4vw,52px);box-shadow:0 24px 54px #0005;overflow:hidden}.phone-shot img{width:100%;height:auto;display:block;border-radius:clamp(24px,3.5vw,46px)}
+.ios-gallery figcaption{display:grid;gap:8px;margin-top:26px;text-align:center}.ios-gallery figcaption b{font-size:20px;font-weight:500}.ios-gallery figcaption span,.ios-demo-note{font-size:13px;color:var(--muted)}.ios-demo-note{text-align:center;margin:24px 0 48px}
+.ios-benefits{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:32px;margin:45px 0}.ios-benefits article>span{color:var(--accent);font-size:11px;letter-spacing:.12em}.ios-benefits h3{font-size:21px;font-weight:500;margin:16px 0 12px}.ios-benefits p{font-size:15px;line-height:1.85;color:var(--muted);margin:0}.ios-actions{display:flex;flex-wrap:wrap;gap:16px;align-items:center}.ios-actions small{color:var(--muted);font-size:12px}html[lang=en] .ios-gallery,html[lang=en] .ios-demo-note{display:none}
+@media(max-width:800px){.ios-benefits{grid-template-columns:repeat(2,minmax(0,1fr));gap:26px}.ios-gallery{gap:20px;padding:20px 0}.ios-gallery figcaption b{font-size:16px}.ios-gallery figcaption span{font-size:12px}}
+@media(max-width:560px){.ios-gallery{grid-template-columns:1fr;gap:40px}.ios-gallery figure{width:min(280px,100%);margin:auto}.ios-benefits{grid-template-columns:1fr}.ios-actions{align-items:flex-start;flex-direction:column}}
+
+@media(min-width:1000px){.download-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.download-grid article{padding:32px}}

@@ -1,0 +1,34 @@
+NOTICE
+======
+
+本项目（**UCAS-Sign-in**）在开发中参考并使用了以下开源项目的思路、接口约定
+与/或实现片段。根据 AGPL-3.0 的要求，特此声明：
+
+--------------------------------------------------------------------------------
+Upstream project
+--------------------------------------------------------------------------------
+
+  Name:       UCAS-Course-Sign-in
+  Author:     lccipher
+  Repository: https://github.com/lccipher/UCAS-Course-Sign-in
+  License:    GNU Affero General Public License v3.0 (AGPL-3.0)
+
+该上游项目用于国科大（UCAS）课程查询与签到二维码相关流程。本仓库在其基础上进行了
+面向 Android 客户端的改写与扩展（含桌面/负一屏小部件、本地加密会话、自动签到等）。
+
+Copyright notices from the upstream project, if any, are retained to the extent
+applicable. This combined work is distributed under the same AGPL-3.0 terms.
+
+--------------------------------------------------------------------------------
+License of this repository
+--------------------------------------------------------------------------------
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  See the file LICENSE for the full text of the AGPL-3.0.
+
+  Corresponding Source for binaries (including APKs) is intended to be available
+  from this project's public GitHub repository.

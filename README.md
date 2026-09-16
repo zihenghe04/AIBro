@@ -3,7 +3,7 @@
 <p align="center"><strong>把一次对话，变成可以继续的工作。</strong></p>
 <p align="center">文件有版本，项目有记忆，想法有下一步。</p>
 <p align="center">简体中文 · <a href="README.en.md">English</a></p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0">下载 Mac App</a> · <a href="https://zihenghe04.github.io/AIBro/">官网</a> · <a href="https://zihenghe04.github.io/AIBro/#workspace">功能演示</a> · <a href="CHANGELOG.md">更新日志</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.0">下载 Mac App</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.0/AI-Bro-0.1.2-unsigned.ipa">下载 iOS App</a> · <a href="https://zihenghe04.github.io/AIBro/">官网</a> · <a href="https://zihenghe04.github.io/AIBro/#workspace">功能演示</a> · <a href="CHANGELOG.md">更新日志</a></p>
 
 ![AI Bro 工作区总览](launch/dist/assets/recordings/zh/01-overview.gif)
 
@@ -16,6 +16,27 @@ AI Bro 是一个本地优先的 Mac AI 工作区，把对话、文件、项目�
 - **学习**：导入课件和课表，整理知识脉络，边看原件边补充笔记，把复习安排放进日程。
 - **科研**：从论文进入方法、实验和问题，把来源、失败经验与 review 反馈沉淀进 Wiki，带着积累继续研究。
 - **日常与项目**：随手记下想法，整理成计划、清单和日程；在后续对话里修改已有安排，而不是重新创建一遍。
+
+## 把 AI Bro 带在身边
+
+**iOS 版已提供下载。** 手机随手记录，电脑继续推进；科研、课程与生活，共用一份持续积累的上下文。
+
+<p align="center">
+<img src="launch/dist/assets/ios/today.png" width="220" alt="iOS 今日安排，虚构数据" />
+<img src="launch/dist/assets/ios/captures.png" width="220" alt="iOS 随记，虚构数据" />
+<img src="launch/dist/assets/ios/knowledge.png" width="220" alt="iOS 知识与项目，虚构数据" />
+</p>
+<p align="center"><sub>独立 iOS 模拟器实际截图 · 全部为虚构演示数据</sub></p>
+
+- **今天看什么、做什么**：任务、日程与 ICS 课表放在一起，出门前看一眼。
+- **灵感先记下来**：文字、链接、图片与文件随记，离线也能保存，再让 AI 协助整理。
+- **知识随身带**：浏览项目和科研 Wiki，阅读与编辑 Markdown；AI 修改先看 Diff，再决定是否采纳。
+- **国科大课程助手**：学校账号登录、课程查询、到课签到与课程二维码。
+- **手机记，电脑继续**：两端连接同一自托管同步服务，交换笔记、任务、项目与对话，并处理修改冲突。
+
+[下载 iOS 0.1.2 IPA](https://github.com/zihenghe04/AIBro/releases/download/v0.7.0/AI-Bro-0.1.2-unsigned.ipa) · [安装与签名](mobile/docs/INSTALL.md) · [连接 Mac 与同步服务](mobile/docs/CONNECT_DEVICES.md) · [移动端源码](mobile/)
+
+iPhone / iPad，iOS 16 及以上。IPA 需要使用自己的开发者身份签名安装。
 
 ## 产品特色
 

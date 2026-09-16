@@ -14,6 +14,10 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
     @Published var ready = false
     @Published var spaceContent = false
     let agenda = AgendaStore()
+    @Published var agendaSyncConflicts:[AgendaSyncConflict]=[]
+    @Published var agendaSyncStatus=""
+    var agendaSyncRunning=false
+    var agendaSyncTimer:Timer?
     @Published var agendaDraft:AgendaEvent?
     @Published var agendaLinkedDetail:AgendaOccurrence?
     var returningFromModal = false
@@ -58,10 +62,11 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
         appearance=UserDefaults.standard.string(forKey:"NativePreviewAppearance") ?? "system"
         web.navigationDelegate = self; web.uiDelegate = self
         agenda.onOpen = { [weak self] in self?.selection="agenda" }
-        agenda.onChanged = { [weak self] in self?.web.evaluateJavaScript("document.dispatchEvent(new Event('aibro-agenda-changed'))",completionHandler:nil) }
+        agenda.onChanged = { [weak self] in self?.requestAgendaSync();self?.web.evaluateJavaScript("document.dispatchEvent(new Event('aibro-agenda-changed'))",completionHandler:nil) }
         config.userContentController.add(self, name: "workspace")
         config.userContentController.add(self,name:"glassRegions")
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/conversation-library.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
+        if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/agenda-sync.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/agenda-ai.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/glass-regions.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js = try? String(contentsOf: root.appendingPathComponent("native/Resources/bridge.js"), encoding: .utf8) {
@@ -190,7 +195,11 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
             if value.modalOpen == true { sawModal=true }
             else if sawModal { returningFromModal=false;sawModal=false;spaceContent=false }
         }
-        if first { setAppearance(appearance) }
+        if first {
+            setAppearance(appearance)
+            requestAgendaSync()
+            agendaSyncTimer=Timer.scheduledTimer(withTimeInterval:10,repeats:true){[weak self]_ in Task{@MainActor in self?.requestAgendaSync()}}
+        }
         let navigationReady = pendingNavigation.map { target in value.view == target.view && (target.id == nil || (target.view == "project" ? value.projectId : value.conversationId) == target.id) } ?? true
         if navigationReady {pendingNavigation=nil}
         if navigationReady && !["overview","history","agenda","conversations","research-projects"].contains(selection ?? "") {
