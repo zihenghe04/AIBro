@@ -100,10 +100,11 @@ struct OverviewActions:View {
         }
     }
     func taskRow(_ task:ContentRecord,recommended:Bool)->some View {
-        Button {model.reveal("task",task.id)} label:{
-            HStack(alignment:.top,spacing:12) {
-                Image(systemName:summary.isBlocked(task) ? "pause.circle":summary.isOverdue(task) ? "clock.badge.exclamationmark":task.status=="in_progress" ? "circle.lefthalf.filled":"circle")
-                    .font(.system(size:16,weight:.light)).foregroundStyle(summary.isOverdue(task) ? StudioPalette.coral:StudioPalette.space(task.workspace)).padding(.top,2)
+        HStack(alignment:.top,spacing:0) {
+            TaskCompletionButton(model:model,task:task)
+                .padding(.leading,10).padding(.top,10)
+            Button {model.reveal("task",task.id)} label:{
+              HStack(alignment:.top,spacing:12) {
                 VStack(alignment:.leading,spacing:7) {
                     Text(task.title).font(.system(size:13,weight:.medium)).foregroundStyle(.primary).lineLimit(2)
                     HStack(spacing:5){Circle().fill(StudioPalette.space(task.workspace)).frame(width:4,height:4);Text(NativeL10n.space(task.workspace));Text("·");Text(deadlineText(task)).foregroundStyle(summary.isOverdue(task) ? StudioPalette.coral:.secondary)}.font(.system(size:10)).foregroundStyle(.secondary)
@@ -113,8 +114,11 @@ struct OverviewActions:View {
                 }
                 Spacer(minLength:0)
                 Image(systemName:"chevron.right").font(.system(size:9)).foregroundStyle(.tertiary).padding(.top,4)
-            }.padding(16).frame(maxWidth:.infinity,alignment:.leading).background(StudioPalette.panel,in:RoundedRectangle(cornerRadius:16)).overlay(RoundedRectangle(cornerRadius:16).strokeBorder(StudioPalette.line.opacity(0.45),lineWidth:0.5))
-        }.buttonStyle(LiftStyle()).help(nativeUI("打开任务详情", "Open task details"))
+              }.padding(.vertical,16).padding(.trailing,16).padding(.leading,6)
+                .frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle())
+            }.buttonStyle(LiftStyle()).help(nativeUI("打开任务详情", "Open task details"))
+        }.background(StudioPalette.panel,in:RoundedRectangle(cornerRadius:16))
+            .overlay(RoundedRectangle(cornerRadius:16).strokeBorder(StudioPalette.line.opacity(0.45),lineWidth:0.5))
     }
     func deadlineText(_ task:ContentRecord)->String {
         guard let date=summary.deadline(task) else{return nativeUI("未排期", "No deadline")}

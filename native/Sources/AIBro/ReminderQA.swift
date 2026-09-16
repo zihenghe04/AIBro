@@ -31,7 +31,7 @@ extension Workspace {
         _ = try await web.callAsyncJavaScript("const t=state.tasks.find(x=>x.id==='qa-reminder-live');t.dueAt=new Date(Date.now()+3600000).toISOString();t.updatedAt=Date.now();await saveDocumentDurably();renderAll();return true",arguments:[:],in:nil,contentWorld:.page)
         try await Task.sleep(nanoseconds:2_000_000_000)
         guard (await agenda.center.pendingNotificationRequests()).contains(where:{$0.identifier.contains("qa-reminder-live")}) else {throw AgendaError.message("Rescheduling failed")}
-        _ = try await web.callAsyncJavaScript("state.tasks.find(x=>x.id==='qa-reminder-live').status='done';await saveDocumentDurably();renderAll();return true",arguments:[:],in:nil,contentWorld:.page)
+        _ = try await web.callAsyncJavaScript("if(!window.NativeShell.perform({type:'complete-task',id:'qa-reminder-live'}))throw Error('Completion command failed');await saveDocumentDurably();const t=state.tasks.find(x=>x.id==='qa-reminder-live');if(t.status!=='done'||!t.completedAt)throw Error('Completion was not persisted');return true",arguments:[:],in:nil,contentWorld:.page)
         try await Task.sleep(nanoseconds:2_000_000_000)
         guard !(await agenda.center.pendingNotificationRequests()).contains(where:{$0.identifier.contains("qa-reminder-live")}) else {throw AgendaError.message("Completed task still has pending notification")}
         agenda.center.removeDeliveredNotifications(withIdentifiers:delivered.map{$0.request.identifier})

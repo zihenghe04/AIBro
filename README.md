@@ -3,7 +3,7 @@
 <p align="center"><strong>把一次对话，变成可以继续的工作。</strong></p>
 <p align="center">文件有版本，项目有记忆，想法有下一步。</p>
 <p align="center">简体中文 · <a href="README.en.md">English</a></p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.1">下载 Mac App</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.1/AI-Bro-0.1.3-unsigned.ipa">下载 iOS App</a> · <a href="https://zihenghe04.github.io/AIBro/">官网</a> · <a href="https://zihenghe04.github.io/AIBro/#workspace">功能演示</a> · <a href="CHANGELOG.md">更新日志</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.2">下载 Mac App</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.1/AI-Bro-0.1.3-unsigned.ipa">下载 iOS App</a> · <a href="https://zihenghe04.github.io/AIBro/">官网</a> · <a href="https://zihenghe04.github.io/AIBro/#workspace">功能演示</a> · <a href="CHANGELOG.md">更新日志</a></p>
 
 ![AI Bro 工作区总览](launch/dist/assets/recordings/zh/01-overview.gif)
 
@@ -106,7 +106,7 @@ iPhone / iPad，iOS 16 及以上。IPA 需要使用自己的开发者身份签�
 
 ## 开始使用
 
-1. 从 [GitHub Release](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.1) 下载 Mac App，按[安装指南](docs/DISTRIBUTION.md)完成安装。
+1. 从 [GitHub Release](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.2) 下载 Mac App，按[安装指南](docs/DISTRIBUTION.md)完成安装。
 2. 在设置中连接兼容 API，或使用本机官方 Codex CLI 登录；选择这次对话要使用的模型。
 3. 拖入文件、粘贴链接或用 `@` 引用资料，告诉 AI 你想得到的结果。
 4. 在阅读区检查原件、预览和修改，把资料、笔记与下一步任务归入项目。

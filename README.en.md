@@ -3,7 +3,7 @@
 <p align="center"><strong>Turn a conversation into work you can continue.</strong></p>
 <p align="center">Reviewable files. Durable projects. Ideas with a next step.</p>
 <p align="center"><a href="README.md">简体中文</a> · English</p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.1">Get the Mac app</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.1/AI-Bro-0.1.3-unsigned.ipa">Get the iOS app</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en#film">Watch the demo</a> · <a href="CHANGELOG.md">Changelog</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.7.2">Get the Mac app</a> · <a href="https://github.com/zihenghe04/AIBro/releases/download/v0.7.1/AI-Bro-0.1.3-unsigned.ipa">Get the iOS app</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website</a> · <a href="https://zihenghe04.github.io/AIBro/?lang=en#film">Watch the demo</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
 ![Updating a task in the English AI Bro workspace](launch/dist/assets/recordings/project-en.gif)
 
@@ -82,7 +82,7 @@ Choose the capabilities that fit the task. Connect a compatible custom API or lo
 
 ## Get started
 
-1. Download the Mac app from [GitHub Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.1) and follow the [installation guide](docs/DISTRIBUTION.md).
+1. Download the Mac app from [GitHub Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.7.2) and follow the [installation guide](docs/DISTRIBUTION.md).
 2. Connect a compatible API or local official Codex CLI sign-in, then select a model.
 3. Drop in a file, paste a link or `@` reference saved material. Describe the result you want.
 4. Inspect the source, preview and changes in the reader. Keep the notes, files and next steps in a project.

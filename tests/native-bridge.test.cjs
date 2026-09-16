@@ -26,3 +26,19 @@ test('overview snapshot carries priority and updates dependency readiness withou
  assert.equal(current.waitingOnDependencies,false);assert.equal(task.status,'todo');
  before.deletedAt=1;f.run({type:'reader'});assert.equal(f.posted.at(-1).tasks[0].waitingOnDependencies,true);
 });
+
+// Exercise the existing task mutation (including persistence and timestamps), not a mock toggle.
+test('native completion persists, updates counts, is idempotent and never opens details',()=>{
+ const f=fixture();f.env.save=()=>f.calls.push('save');f.env.renderAll=()=>f.calls.push('render');f.env.toast=()=>{};
+ const app=fs.readFileSync('app/app.js','utf8');
+ vm.runInNewContext(app.match(/function toggleTaskStatus\(taskId\) \{[^\n]+/)[0],f.env);
+ assert.equal(f.run({type:'complete-task',id:'t'}),true);
+ assert.equal(f.state.tasks[0].status,'done');assert.ok(f.state.tasks[0].completedAt);assert.ok(f.state.tasks[0].updatedAt);
+ assert.equal(f.posted.at(-1).taskCount,0);assert.deepEqual(f.calls,['save','render']);
+ const completedAt=f.state.tasks[0].completedAt;
+ assert.equal(f.run({type:'complete-task',id:'t'}),true);assert.equal(f.state.tasks[0].completedAt,completedAt);assert.equal(f.calls.length,2);
+ assert.equal(f.run({type:'reopen-task',id:'t'}),true);assert.equal(f.state.tasks[0].status,'todo');assert.equal(f.state.tasks[0].completedAt,null);assert.equal(f.posted.at(-1).taskCount,1);
+ for(const id of ['gone','missing'])assert.equal(f.run({type:'complete-task',id}),false);
+ f.state.tasks[0].archivedAt=1;assert.equal(f.run({type:'reopen-task',id:'t'}),false);
+ f.env.storageHydrated=false;assert.equal(f.run({type:'complete-task',id:'t'}),false);
+});

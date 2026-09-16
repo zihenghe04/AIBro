@@ -112,6 +112,7 @@ window.NativeShell={perform(command){if(typeof storageHydrated==='undefined'||!s
  switch(type){case'view':if(id==='history'){WorkstationRunHistory.open();break;}if(!['captures','wiki','agent','dashboard','overview','daily','courses','research','history','trash','settings'].includes(id))return false;showView(id,id);break;
  case'project':if(!state.projects.some(x=>x.id===id&&active(x)))return false;openProject(id);break;
  case'conversation':if(!state.conversations.some(x=>x.id===id&&active(x)))return false;openConversation(id);break;
+ case'complete-task':case'reopen-task':{const task=state.tasks.find(x=>x.id===id&&active(x));if(!task)return false;const done=type==='complete-task';if((task.status==='done')!==done)toggleTaskStatus(id);break;}
  case'task':if(!state.tasks.some(x=>x.id===id&&active(x)))return false;openTask(id);break;
  case'note':if(!state.notes.some(x=>x.id===id&&active(x)))return false;openNote(id);break;
  case'import':if(!state.imports.some(x=>x.id===id&&active(x)))return false;openImport(id);break;
