@@ -42,8 +42,14 @@ This is a local website update, not a published app release. Download links lead
 
 ## iOS companion (2026-09-16)
 
-`#ios` introduces captures, knowledge, UCAS course tools and self-hosted sync, with an iOS 0.1.2 download and signing guide. `assets/ios/` contains three actual iOS Simulator screenshots at 1206 × 2622. They were captured in a newly created simulator seeded exclusively with fictional data; no existing user workspace or credentials were loaded. The English page provides translated capability descriptions without substituting Chinese screenshots.
+`#ios` introduces captures, knowledge, UCAS course tools and self-hosted sync, with an iOS 0.1.2 download and signing guide. `assets/ios/` contains four actual iOS Simulator screenshots at 1206 × 2622. They were captured in a newly created simulator seeded exclusively with fictional data; no existing user workspace or credentials were loaded. The English page provides translated capability descriptions without substituting Chinese screenshots.
 
 ### Course assistant showcase
 
 `assets/ios/courses.png` is captured from the same isolated Simulator with fictional courses and teachers. An offline preview opens the unmodified course-assistant layout directly and labels its seeded attendance state as simulated. No school login or attendance request was made. The production app and IPA are unchanged. The Chinese page shows this image at `#ios-courses`; the English page describes the workflow without displaying Chinese UI.
+
+### Swipeable iOS gallery
+
+Today, captures, knowledge and the course assistant share one App Store-style horizontal strip. Native touch/trackpad scrolling, mouse dragging, previous/next buttons and Arrow/Home/End keys browse the same cards; scrolling snaps into place and respects reduced-motion preferences. Mobile keeps one card with a preview of the next. Add future screenshots as gallery figures rather than separate full-height sections. The existing `#ios-courses` link opens the fourth card.
+
+Validated in the browser at desktop and 390 px mobile widths: button navigation, native horizontal scrolling, mouse drag, keyboard navigation, mock image loading and English screenshot isolation. No page-wide horizontal overflow at mobile width.
