@@ -18,3 +18,17 @@
 #conversationOutputs .output-review{font-size:11px;white-space:nowrap}
 #conversationOutputs :focus-visible{outline:2px solid var(--line-strong);outline-offset:-2px}
 @media(prefers-reduced-motion:reduce){#conversationOutputs summary::before,#conversationOutputs button{transition:none}}
+
+/* Event proposals have their own spacing; file rows are not event layouts. */
+.agenda-proposal-card{padding:20px 22px;container-type:inline-size;max-width:720px}
+.agenda-proposal-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin-bottom:18px}
+.agenda-proposal-heading h3{margin:0;font-size:14px;line-height:1.5;font-weight:600}
+.agenda-proposal-heading>span{font-size:12px;line-height:1.5;color:var(--muted)}
+.agenda-proposal-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:14px 20px;min-width:0}
+.agenda-proposal-row+.agenda-proposal-row{margin-top:20px;padding-top:20px;border-top:1px solid var(--line)}
+.agenda-proposal-info{min-width:0;overflow-wrap:anywhere}
+.agenda-proposal-name{display:block;font-size:16px;font-weight:600;line-height:1.5}
+.agenda-proposal-info p{margin:5px 0 0;font-size:12px;line-height:1.7;color:var(--muted)}
+.agenda-proposal-card .agenda-proposal-review{flex-shrink:0;align-self:start;white-space:nowrap;margin:0;background:var(--panel-raised);color:var(--text)}
+.agenda-proposal-row>.agenda-proposal-quote{grid-column:1/-1;min-width:0;margin:0;padding:10px 14px;border-left:2px solid var(--line-strong);border-radius:0 8px 8px 0;background:var(--accent-soft);font-size:12px;line-height:1.75;color:var(--muted);overflow-wrap:anywhere;white-space:pre-wrap}
+@container(max-width:440px){.agenda-proposal-row{grid-template-columns:minmax(0,1fr);gap:12px}.agenda-proposal-review{grid-row:3;justify-self:start;min-height:38px}.agenda-proposal-quote{grid-row:2}}
