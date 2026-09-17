@@ -366,6 +366,9 @@ with tempfile.TemporaryDirectory(prefix='workstation-codex-test-') as temporary:
         assert all(item['dynamicTools'] == [] and item['runtimeWorkspaceRoots'] == [] and item['selectedCapabilityRoots'] == [] for item in starts)
         assert all(item['config'] == SAFE_CONFIG for item in starts)
         assert all(item['allowProviderModelFallback'] is False for item in starts)
+        assert all('knowledgeRequests' in item['developerInstructions'] and 'JSON requests are allowed' in item['developerInstructions'] for item in starts)
+        assert all('No direct filesystem' in item['developerInstructions'] for item in starts)
+        assert all('host executes only this final JSON' in item['developerInstructions'] for item in starts)
         turns = [entry['params'] for entry in audit if entry.get('method') == 'turn/start']
         assert all(item.get('summary') == 'auto' for item in turns), 'The local official channel must explicitly request public reasoning summaries'
         assert turns[0]['effort'] == 'high'

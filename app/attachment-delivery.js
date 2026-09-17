@@ -84,7 +84,20 @@
       const record = { attachmentId: id, name, originalName: string(item.originalName) || name, mimeType: type, originalBytes: storedSize, originalBytesSource: storedSize === null ? 'unavailable' : 'stored_original_metadata' };
       if (forceText === true || !(image || pdf || (!auth && office))) {
         const reason = forceText === true ? 'user_selected_text' : auth && office ? 'auth_office_requires_text' : 'text_or_unsupported_file';
-        metadata.push({ ...record, readMode: 'text', reason, textAvailable: !!textAvailable(item) }); textAttachments.push(item); continue;
+        let textItem = item;
+        // Older imports retained config originals without extracting text. Read
+        // only the explicitly attached saved original; never evaluate YAML.
+        if (!textAvailable(item) && /\.(yaml|yml|toml)$/i.test(record.originalName) && item.fileStored && typeof getBlob === 'function') {
+          progress(`正在读取 ${name}…`);
+          const blob = validateBlob(await adapted(getBlob, [item], signal, item, 'ORIGINAL_READ_FAILED', `《${name}》原件读取`), item, `《${name}》原件`);
+          const buffer = await abortable(signal, () => blob.arrayBuffer());
+          if (buffer.byteLength !== blob.size) throw new AttachmentDeliveryError('附件实际字节数与原件不一致。', 'INVALID_ORIGINAL', item);
+          let content;
+          try { content = new TextDecoder('utf-8', { fatal: true }).decode(buffer); if (content.includes('\0')) throw Error('binary'); }
+          catch (_) { throw new AttachmentDeliveryError(`《${name}》不是有效的 UTF-8 文本，请检查文件编码。`, 'INVALID_TEXT', item); }
+          textItem = { ...item, content, contentTruncated: false };
+        }
+        metadata.push({ ...record, readMode: 'text', reason, textAvailable: !!textAvailable(textItem) }); textAttachments.push(textItem); continue;
       }
       if (auth && pdf) {
         progress(`正在读取 ${name}…`);

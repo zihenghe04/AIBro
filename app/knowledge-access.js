@@ -63,7 +63,11 @@
    const fresh=requested.filter(([key])=>!evidence.has(key));
    // Detect cycles across alternating tools, JSON property order and batching.
    stalled=fresh.length||requested.some(([key])=>!previousIncluded.has(key))?0:stalled+1;
-   if(stalled>=2)throw Object.assign(Error('模型重复请求已返回的资料而未推进，已停止循环，尚未执行整理操作。读取记录已保留，可继续对话。'),{code:'KNOWLEDGE_STALLED'});
+   if(stalled>=2){
+    const repeatedCapabilities=requested.every(([,r])=>r.type==='capabilities');
+    const detail=repeatedCapabilities?'模型重复请求已加载的操作说明（'+requested.map(([,r])=>r.name).join('、')+'），未提交后续计划':'模型重复请求已返回的资料而未推进';
+    throw Object.assign(Error(detail+'，已停止循环，尚未执行整理操作。读取记录已保留，可继续对话。'),{code:'KNOWLEDGE_STALLED'});
+   }
    const read=async request=>{check();try{return await onExecute(request);}catch(error){if(error.code==='CANCELLED')throw error;return {error:error.message};}};
    const requests=fresh.map(([,request])=>request);
    const values=requests.length?(batch?await batch(requests):await (async()=>{const out=[];for(const req of requests)out.push(await read(req));return out;})()):[];
@@ -97,7 +101,7 @@
     if(imagesIncluded)blocks.unshift(...entry.images);
     retained.unshift({...text,...(entry.images.length?{imagesIncluded}: {})});
    }
-   const ledger=[...evidence].map(([key,{request,result:r,readOrder}])=>({readOrder,type:request.type,recordType:r.type||request.recordType||null,id:r.id||request.id||null,query:request.query||null,variant:r.variant||request.variant||null,page:r.page??null,offset:r.offset??request.offset??0,end:typeof r.text==='string'?(r.offset||0)+r.text.length:null,totalChars:r.totalChars??null,nextOffset:r.nextOffset??null,error:r.error||null,evidenceIncluded:included.has(key)})).sort((a,b)=>a.readOrder-b.readOrder);
+   const ledger=[...evidence].map(([key,{request,result:r,readOrder}])=>({readOrder,type:request.type,...(request.type==='capabilities'?{name:request.name}:{}),recordType:r.type||request.recordType||null,id:r.id||request.id||null,query:request.query||null,variant:r.variant||request.variant||null,page:r.page??null,offset:r.offset??request.offset??0,end:typeof r.text==='string'?(r.offset||0)+r.text.length:null,totalChars:r.totalChars??null,nextOffset:r.nextOffset??null,error:r.error||null,evidenceIncluded:included.has(key)})).sort((a,b)=>a.readOrder-b.readOrder);
    const ledgerView=[];let ledgerChars=0;for(const item of [...ledger].reverse()){const n=JSON.stringify(item).length;if(ledgerChars+n>8000)break;ledgerView.unshift(item);ledgerChars+=n;}
    const omitted=ledger.filter(x=>!x.evidenceIncluded).length;
    previousIncluded=included;

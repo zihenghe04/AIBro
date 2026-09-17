@@ -1224,7 +1224,7 @@ class Handler(SimpleHTTPRequestHandler):
                             if page_text.strip(): pages.append({'page': index, 'text': page_text[:12000]})
                         text = '\n\n'.join(f"[工作表 {p['page']}]\n{p['text']}" for p in pages)
             elif suffix in ('.png', '.jpg', '.jpeg', '.webp', '.gif'): warning = '图片原件已保留，支持视觉的模型可直接读取。'
-            elif suffix in ('.txt', '.md', '.csv', '.json', '.log', '.html'): text = data.decode('utf-8-sig', 'replace')
+            elif suffix in ('.txt', '.md', '.csv', '.json', '.log', '.html', '.yaml', '.yml', '.toml'): text = data.decode('utf-8-sig', 'replace')
             else: warning = '该格式已保存原件。旧版 PPT/DOC 请另存为 PPTX/DOCX 后再解析。'
             self.send_json({'name': name, 'content': text[:60000], 'pages': pages[:500], 'parser': 'local', 'warning': warning})
         except Exception as exc: self.send_json({'error': str(exc)}, 422)

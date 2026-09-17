@@ -243,6 +243,21 @@ class FetchHTTPTests(unittest.TestCase):
         return {'raw':raw,'size':len(raw),'mimeType':mime,'name':'fixture.pdf' if mime=='application/pdf' else 'fixture.txt',
                 'url':'https://example.com/paper','finalUrl':'https://example.com/paper/v1','charset':'utf-8'}
 
+    def test_config_uploads_extract_literal_text_without_execution_or_state_changes(self):
+        content = 'interface:\n  display_name: 示例助手\ncommand: "$(touch should-not-exist)"\n'
+        for name in ('openai.yaml', 'config.yml', 'settings.toml'):
+            connection = http.client.HTTPConnection('127.0.0.1', self.httpd.server_port, timeout=5)
+            try:
+                connection.request('POST', '/__parse', body=content.encode(), headers={'X-Filename':name})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                result = json.loads(response.read())
+                self.assertEqual(result['content'], content)
+                self.assertEqual(result['warning'], '')
+                self.assertEqual(self.store.load(), self.before)
+            finally:
+                connection.close()
+
     def test_native_pdf_saves_original_without_parser_base64_or_workspace_mutation(self):
         with mock.patch.object(self.module, 'fetch_public_url', return_value=self.downloaded()) as fetch, mock.patch.object(self.module.subprocess, 'run', side_effect=AssertionError('Native PDF must not extract text')):
             status, result = self.post({'url':'https://example.com/paper','native':True})

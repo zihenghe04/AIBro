@@ -57,3 +57,22 @@ test('oversized text remains readable through an explicit context cursor instead
  let turn=0;const content='start '+('large source '.repeat(3000))+' end';
  await K.continuePlan('{"knowledgeRequests":[{"type":"read","id":"large"}]}',{evidenceChars:4000,execute:async()=>({id:'large',offset:0,text:content,totalChars:content.length,nextOffset:null}),ask:async text=>{turn++;assert.match(text,/contextTruncated/);assert.match(text,/start/);assert.match(text,/nextOffset":\d+/);return '{"actions":[]}';}});assert.equal(turn,1);
 });
+
+test('capability fields survive cached retries and the model can then submit a final plan',async()=>{
+ const C=require('../app/agent-context');
+ const c=C.create({fullInstruction:'你是个人助手。动作类型与字段：create_knowledge_item(title,content,sourceAttachmentIds)。',history:{text:''}});
+ const request=JSON.stringify({knowledgeRequests:[{type:'capabilities',name:'knowledge'}],actions:[]});
+ let reads=0,turns=0;
+ const output=await K.continuePlan(request,{execute:r=>{reads++;return c.capability(r.name);},ask:async input=>{
+  assert.match(input,/create_knowledge_item\(title,content,sourceAttachmentIds\)/);
+  if(++turns===1)return request;
+  assert.match(input,/已复用结果/);
+  return JSON.stringify({message:'归档提案',actions:[{type:'create_knowledge_item',title:'示例',content:'示例正文',sourceAttachmentIds:['mock']}]});
+ }});
+ assert.equal(reads,1);assert.equal(turns,2);assert.equal(JSON.parse(output).actions.length,1);
+});
+test('persistent capability repetition stops with a specific error, without executing mutations',async()=>{
+ const plan=JSON.stringify({knowledgeRequests:[{type:'capabilities',name:'knowledge'}]});let reads=0;
+ await assert.rejects(K.continuePlan(plan,{execute:async()=>{reads++;return {loaded:true,instructions:'schema'};},ask:async()=>plan}),e=>e.code==='KNOWLEDGE_STALLED'&&/重复请求已加载的操作说明（knowledge）/.test(e.message));
+ assert.equal(reads,1);
+});

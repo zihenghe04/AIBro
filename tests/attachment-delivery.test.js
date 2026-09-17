@@ -159,3 +159,16 @@ test('actual original blob bytes override stale stored sizes and remain separate
  assert.equal(result.metadata[1].originalBytes,original.size);assert.equal(result.metadata[1].originalBytesSource,'actual_original_blob');assert.equal(result.coverage.originalBytes,10103672+original.size);assert.equal(result.coverage.transmittedOriginalBytes,original.size);assert.equal(result.coverage.renderedImageBytes,5);assert.equal(result.coverage.imageBytes,5+original.size);
  assert.equal(result.stageLabel,'已读取 2 份资料 · 1 页');
 });
+
+test('previously unparsed YAML originals are readable on retry without reupload or workspace mutation',async()=>{
+ const item={id:'mock-config',name:'openai.yaml',originalName:'openai.yaml',fileStored:true,content:'',status:'original-only'};
+ const content='interface:\n  display_name: 示例助手\n';const before=JSON.stringify(item);
+ const result=await Delivery.prepare([item],{provider:'openai-auth',getBlob:async()=>new Blob([content])});
+ assert.equal(result.textAttachments[0].content,content);assert.equal(result.metadata[0].textAvailable,true);
+ assert.deepEqual(result.coverage.textUnavailable,[]);assert.equal(JSON.stringify(item),before);
+});
+test('config original fallback rejects binary or invalid UTF-8 and respects cancellation',async()=>{
+ const item={id:'mock',name:'config.yml',fileStored:true};
+ for(const bytes of [[255],[65,0,66]])await assert.rejects(Delivery.prepare([item],{getBlob:async()=>new Blob([new Uint8Array(bytes)])}),{code:'INVALID_TEXT'});
+ const controller=new AbortController();controller.abort();await assert.rejects(Delivery.prepare([item],{signal:controller.signal}),{code:'CANCELLED'});
+});
