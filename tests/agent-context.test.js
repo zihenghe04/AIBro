@@ -29,3 +29,9 @@ test('library overview exposes available spaces and projects without dumping bod
  const s={projects:[{id:'p',name:'示例课程',workspace:'课程'},{id:'q',name:'其他项目',workspace:'科研'}],notes:[{id:'n',projectId:'p',content:'PRIVATE_BODY'},{id:'hidden',projectId:'p',deletedAt:1,content:'deleted'},{id:'other',projectId:'q',content:'foreign'}]};
  const map=C.overview(s,{workspace:'课程'});assert.equal(map.totals.notes,1);assert.equal(map.entries[0].name,'示例课程');assert.doesNotMatch(JSON.stringify(map),/PRIVATE_BODY|foreign|其他项目/);
 });
+
+test('current agenda capability overrides stale history but remains unavailable without a native editor',()=>{
+ const options={history:{text:'目前不支持重复日程'},fullInstruction:'用户可以直接在对话中创建单次或重复日程。 AGENDA_SCHEMA'};
+ const native=C.create({...options,hasAgenda:true});assert.match(native.instructions(),/历史助手答复可能来自旧版本/);assert.doesNotMatch(native.instructions(),/AGENDA_SCHEMA/);native.capability('agenda');assert.match(native.instructions(),/AGENDA_SCHEMA/);
+ const web=C.create(options);assert.match(web.instructions(),/当前端未提供原生日程编辑器/);assert.throws(()=>web.capability('agenda'),/当前端未提供/);assert.deepEqual(web.loaded(),[]);
+});

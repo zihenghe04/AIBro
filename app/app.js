@@ -2483,7 +2483,7 @@ async function sendMessage(options = {}) {
     if (window.WorkstationSkills?.instructions) instruction += `\n\n当前启用的工作流技能：\n${WorkstationSkills.instructions(state, conversation)}`;
     const retrievalQuery = [goal, ...attachmentsBefore.map(item => item.name)].join('\n');
     const retrievalOptions = { projectId: run.projectId, workspace: run.contextWorkspace, query: retrievalQuery, allowedTaskIds: [], requireProjectMatch: attachmentsBefore.length > 0 || paperWorkflow };
-    const route = window.AgentRouting?.decide({goal,hasAgenda:!!window.workstationDesktop?.agendaProposal,attachments:attachmentsBefore,references:fileContext.snapshots,skillId:conversation.skillId,webSearch:run.webSearch,localContext:localContext.text,tasks:state.tasks,workspace:run.contextWorkspace,projectId:run.projectId,now:new Date(run.requestedAt)}) || {mode:'full',skipRetrieval:false,compact:false};
+    const route = window.AgentRouting?.decide({goal,hasAgenda:!!window.workstationDesktop?.agendaProposal,attachments:attachmentsBefore,references:fileContext.snapshots,skillId:conversation.skillId,localContext:localContext.text,tasks:state.tasks,workspace:run.contextWorkspace,projectId:run.projectId,now:new Date(run.requestedAt)}) || {mode:'full',skipRetrieval:false,compact:false};
     if(!route.compact&&window.ConversationCompaction){
       try {run.historyCompaction=await ConversationCompaction.compact(conversation,{currentMessageId:run.userMessageId,signal:attachmentSignal,onStart:()=>stage('整理较早对话，保留原文与来源'),ask:input=>AgentTransport.requestPlan({provider,base,model,effort,token,input,webSearch:false,signal:attachmentSignal})});if(run.historyCompaction.compacted)save();}
       catch(error){if(attachmentSignal.aborted||error.code==='CANCELLED')throw error;run.historyCompaction={compacted:false,error:error.message};stage('较早对话保留原文，可按需回查','done');}
@@ -2520,11 +2520,13 @@ async function sendMessage(options = {}) {
     if(run.captureNoteIds.length)instruction += '\n本轮引用中包含原始随记，ID：'+JSON.stringify(run.captureNoteIds)+'。原始随记只读，不得改写、删除或合并掉。整理结果请创建独立主笔记并使用不同标题；系统会保留来源关联。区分原文事实、推断和待验证想法，引用具体随记标题或ID。行动项必须有原文依据，日期不明确时留空，不臆造提醒时间。';
     if(run.captureNoteIds.length&&window.workstationDesktop?.agendaProposal)instruction += '\n如用户希望提炼日程且来源明确记有日期与时间，可在最终 JSON 增加 agendaProposals:[{title,sourceNoteId,quote:"随记中相关准确原话",start:"带时区偏移的 ISO 日期时间",end:"带时区偏移的 ISO 日期时间",timeZone:"IANA时区",frequency:"none|daily|weekly|monthly",interval:1,weekdays:[1至7，周日为1],count:可选次数,until:可选截止ISO时间,reminderMinutes:可选提前分钟,location,details}]。最多12条；日期、时间、时区或重复规则没有依据时不猜测，改为待确认问题。这里只生成提案，由用户审阅原生编辑器后保存。不要声称已安排或提醒已启用。';
 
-    if(window.workstationDesktop?.agendaProposal)instruction += '\n用户可以直接在对话中创建单次或重复日程。最终JSON可含 agendaProposals:[{title,sourceMessageId,quote,start,end,timeZone,frequency:"none|daily|weekly|monthly",interval,weekdays,reminderMinutes,location,details}]；sourceMessageId='+JSON.stringify(run.userMessageId)+'，quote必须引用当前用户消息中的准确原话。当前用户消息='+JSON.stringify(goal)+'。start必须是带时区的ISO时间；周日为1。未给结束时间则end=null，由编辑器显示1小时默认时长供确认；未给提醒时间则reminderMinutes=null。不把每周日程降级成一次性create_task。混合请求先读取所需资料再生成日程，缺少决定性日期需澄清。只生成待审阅提案，不声称已保存或已提醒。当前时间='+new Date(run.requestedAt).toISOString()+'，本地时区='+Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if(window.workstationDesktop?.agendaProposal)instruction += '\n用户可以直接在对话中创建单次或重复日程。最终JSON可含 agendaProposals:[{title,sourceMessageId,quote,start,end,timeZone,frequency:"none|daily|weekly|monthly",interval,weekdays,reminderMinutes,location,details}]；sourceMessageId='+JSON.stringify(run.userMessageId)+'，quote必须引用当前用户消息中的准确原话。当前用户消息='+JSON.stringify(goal)+'。start必须是带时区的ISO时间；周日为1。未给结束时间则end=null，由编辑器显示1小时默认时长供确认；未给提醒时间则reminderMinutes=null。未指定重复结束条件时count=null、until=null，持续重复，不拆成有限次单独日程。不把每周日程降级成一次性create_task。混合请求先读取所需资料再生成日程，缺少决定性日期需澄清。只生成待审阅提案，不声称已保存或已提醒。当前时间='+new Date(run.requestedAt).toISOString()+'，本地时区='+Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     run.attachmentSnapshots=Core.attachmentSnapshots(state,{projectId:run.projectId,workspace:run.contextWorkspace});
     const fullInstruction=instruction;
     if(window.AgentContext){agentContext=AgentContext.create({fullInstruction,history:historyContext,now:new Date(run.requestedAt).toISOString(),timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,userMessageId:run.userMessageId,projectId:run.projectId,workspace:run.contextWorkspace,hasAgenda:!!window.workstationDesktop?.agendaProposal,projectList,taskContext:run.taskContext?.text||'',library:AgentContext.overview(state,{projectId:run.projectId,workspace:run.contextWorkspace})});run.contextRoute.policy='on-demand';}
+    // Preserve the known event schema if a compact reply needs escalation or format repair.
+    if(route.mode==='schedule')agentContext?.capability('agenda');
     const requestInput = route.compact ? AgentRouting.prompt(route,{goal,workspace:run.workspace,projectId:run.projectId,now:new Date(run.requestedAt).toISOString(),timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,userMessageId:run.userMessageId}) : buildRequestInput();
     run.timings.requestCharacters=JSON.stringify(requestInput).length;
     run.timings.fullContextCharacters=JSON.stringify(buildRequestInput()).length;
@@ -2534,7 +2536,7 @@ async function sendMessage(options = {}) {
     let responseOutput;
     run.timings.modelStartedAt=Date.now();
     try {
-      responseOutput = await AgentTransport.requestPlan({ provider, base, model, effort, token, webSearch: run.webSearch, input: requestInput, signal: activeRunController.signal, onDelta, onPhase: setPhase, onActivity, onSources });
+      responseOutput = await AgentTransport.requestPlan({ provider, base, model, effort, token, webSearch: !route.compact && run.webSearch, input: requestInput, signal: activeRunController.signal, onDelta, onPhase: setPhase, onActivity, onSources });
       run.timings.initialResponseAt=Date.now();
       if(window.AgentRouting?.needsFull(route,responseOutput || rawOutput)) {
         assertRunActive(run);run.contextRoute.escalated=true;

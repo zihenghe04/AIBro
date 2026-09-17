@@ -14,10 +14,11 @@ AgentTransport.requestPlan=async request=>{sent.push(request.input);if(sent.leng
 await sendMessage({goal:'查找示例课程作业要求，并在截止前半小时提醒我'});
 const mixed=state.agentRuns.at(-1);check(mixed.status==='completed','Mixed request: '+mixed.error);check(state.tasks.some(t=>t.title==='QA 提交示例报告'&&t.reminderMinutes===30),'Real persisted task with reminder');check(sent.length===2,'One search round');
 const report={mixed:{status:mixed.status,requests:sent.length,firstCharacters:sent[0].length,finalCharacters:sent[1].length,searches:mixed.knowledgeSearches.length}};
-chat.workspace='日常';chat.projectId=null;chat.messages=[];sent=[];
-AgentTransport.requestPlan=async request=>{sent.push(request.input);const run=state.agentRuns.at(-1);return JSON.stringify({workspace:'日常',message:'请审阅每周组会日程。',actions:[],agendaProposals:[{title:'QA 每周组会',sourceMessageId:run.userMessageId,quote:run.goal,start:'2026-10-01T14:30:00+08:00',end:null,timeZone:'Asia/Shanghai',frequency:'weekly',interval:1,weekdays:[5],reminderMinutes:null,location:'腾讯会议：123-4567-8901'}]});};
+chat.workspace='auto';chat.projectId=null;chat.messages=[{id:'qa-stale-reply',role:'assistant',text:'目前仍无法设置每周四的重复提醒。',at:Date.now()-1000}];sent=[];
+$('#apiBase').value='https://api.openai.com/v1';
+AgentTransport.requestPlan=async request=>{sent.push(request.input);check(!request.webSearch,'Standalone event does not need web tools');check(!request.input.includes('目前仍无法设置'),'Stale refusal excluded from standalone request');check(request.input.includes('frequency=weekly'),'Current recurrence schema provided');const run=state.agentRuns.at(-1);return JSON.stringify({workspace:'日常',message:'请审阅每周组会日程。',actions:[],agendaProposals:[{title:'QA 每周组会',sourceMessageId:run.userMessageId,quote:run.goal,start:'2026-10-01T14:30:00+08:00',end:null,timeZone:'Asia/Shanghai',frequency:'weekly',interval:1,weekdays:[5],reminderMinutes:null,location:'腾讯会议：123-4567-8901'}]});};
 await sendMessage({goal:'#腾讯会议：123-4567-8901 我每周四下午两点半都要参加这个组会'});
-const recurring=state.agentRuns.at(-1);check(recurring.status==='completed','Recurring request: '+recurring.error);check(recurring.agendaProposals.length===1,'Proposal generated');check(sent.length===1,'Self-contained event uses one compact request');
+const recurring=state.agentRuns.at(-1);check(recurring.status==='completed','Recurring request: '+recurring.error);check(recurring.webSearch===true,'Regression uses web-capable provider');check(recurring.contextRoute.mode==='schedule','Standalone event route');check(recurring.agendaProposals.length===1,'Proposal generated');check(sent.length===1,'Self-contained event uses one compact request');
 await saveDocumentDurably();renderConversation();
 const button=document.querySelector('[data-agenda-proposal]');check(button&&!button.disabled,'Real review button available');button.click();
 AgentTransport.requestPlan=original;VectorKnowledge.searchRequest=search;

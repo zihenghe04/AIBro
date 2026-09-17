@@ -5,7 +5,8 @@ test('mixed and context-dependent requests always retain retrieval',()=>{
 });
 test('self-contained reminders are compact but attached and skill context prevents shortcut',()=>{
  const input={goal:'明天下午两点提醒我买牛奶',now};const route=R.decide(input);assert.equal(route.mode,'reminder');assert.equal(route.reminder.reminderMinutes,0);
- for(const extra of [{attachments:[{}]},{references:[{}]},{skillId:'paper'},{webSearch:true},{localContext:'source'}])assert.equal(R.decide({...input,...extra}).mode,'full');
+ for(const extra of [{attachments:[{}]},{references:[{}]},{skillId:'paper'},{localContext:'source'}])assert.equal(R.decide({...input,...extra}).mode,'full');
+ assert.equal(R.decide({...input,webSearch:true}).mode,'reminder','Available web tools do not imply an external-context request');
  const prompt=R.prompt(route,{goal:input.goal,now:now.toISOString()});assert.ok(prompt.length<1800);
 });
 test('completion requires one active task in scope and preserves ID',()=>{
@@ -14,7 +15,14 @@ test('completion requires one active task in scope and preserves ID',()=>{
 });
 test('explicit weekly meeting is compact only where native review exists',()=>{
  const goal='#腾讯会议：123-4567-8901 我每周四下午两点半都要参加这个组会';
- assert.equal(R.decide({goal,hasAgenda:true}).mode,'schedule');assert.equal(R.decide({goal}).mode,'full');
+ assert.equal(R.decide({goal,hasAgenda:true,webSearch:true}).mode,'schedule');assert.equal(R.decide({goal}).mode,'full');
+ for(const prefix of ['联网确认一下，','去网页看看，','Browse online first: '])assert.equal(R.decide({goal:prefix+goal,hasAgenda:true}).mode,'full');
+});
+test('recurring prompt puts the proposal at the root and rejects the observed nested model output',()=>{
+ const goal='每周四下午两点半参加组会',route=R.decide({goal,hasAgenda:true});
+ const prompt=R.prompt(route,{goal,userMessageId:'m'});assert.match(prompt,/"actions":\[\],"agendaProposals":\[/);assert.match(prompt,/agendaProposals 是根对象字段/);
+ assert.equal(R.needsFull(route,{workspace:'科研',message:'请审阅',actions:[{agendaProposals:[{title:'组会'}]}]}),true);
+ assert.equal(R.needsFull(route,{workspace:'科研',message:'请审阅',actions:[],agendaProposals:[{title:'组会'}]}),false);
 });
 test('unexpected model requests escalate before mutations; valid exact proposal remains light',()=>{
  const r=R.decide({goal:'明天下午两点提醒我买牛奶',now});

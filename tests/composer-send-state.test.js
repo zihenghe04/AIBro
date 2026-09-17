@@ -217,3 +217,48 @@ test('unloaded mutations are rechecked against real schemas before any execution
  let calls=0;const h=onDemandHarness({request:async()=>{calls++;return JSON.stringify({workspace:'课程',message:'准备创建',actions:[{type:'create_task',title:'synthetic',projectId:'p',workspace:'课程'}]});}});
  await h.send({goal:'帮我安排一个学习任务'});const r=h.state.agentRuns.at(-1);assert.equal(r.status,'completed',r.error);assert.equal(calls,2);assert.equal(r.toolCalls[0].request.name,'tasks');assert.ok(r.contextMetrics.loadedCapabilities.includes('tasks'));
 });
+
+test('web-capable provider with old unsupported replies still creates one reviewed recurring proposal',async()=>{
+ const goal='#腾讯会议：123-4567-8901 我每周四下午两点半都要参加这个组会';
+ const h=onDemandHarness({web:true,request:async req=>{
+  assert.equal(req.webSearch,false);assert.doesNotMatch(req.input,/目前仍无法设置|OLD_UNRELATED_NOTE/);
+  const data=JSON.parse(req.input.split('本轮输入（JSON 数据）：')[1]);
+  return JSON.stringify({workspace:'日常',message:'请审阅每周组会日程。',actions:[],agendaProposals:[{title:'示例组会',sourceMessageId:data.userMessageId,quote:data.goal,start:'2026-10-01T14:30:00+08:00',end:null,timeZone:'Asia/Shanghai',frequency:'weekly',interval:1,weekdays:[5],reminderMinutes:null,location:'腾讯会议：123-4567-8901'}]});
+ }});
+ for(const [key,file] of [['AgentRouting','agent-routing'],['AgendaProposals','agenda-proposals']])h.c[key]=h.c.window[key]=require('../app/'+file);
+ h.c.apiCredentialState={hasKey:false};h.c.window.workstationDesktop={agendaProposal:()=>{throw Error('Saving must wait for user review');}};
+ h.node('#apiBase').value='https://api.openai.com/v1';
+ const c=h.state.conversations[0];c.workspace='auto';c.projectId=null;c.messages=[{id:'old-user',role:'user',text:goal},{id:'old-answer',role:'assistant',text:'目前仍无法设置每周四的重复提醒。'}];
+ h.state.notes.push({id:'unrelated',title:'其他资料',content:'OLD_UNRELATED_NOTE'});
+ await h.send({goal});const r=h.state.agentRuns.at(-1);
+ assert.equal(r.status,'completed',r.error);assert.equal(r.webSearch,true,'Provider capability retained');assert.equal(r.contextRoute.mode,'schedule');assert.equal(r.contextRoute.escalated,undefined);assert.equal(h.requests.length,1);assert.equal(r.knowledgeSearches?.length||0,0);
+ assert.equal(r.agendaProposals.length,1);assert.equal(r.agendaProposals[0].frequency,'weekly');assert.deepEqual(Array.from(r.agendaProposals[0].weekdays),[5]);assert.equal(r.agendaProposals[0].count,null);assert.equal(r.agendaProposals[0].until,null);assert.equal(h.state.tasks.length,0);assert.equal(c.messages[1].text,'目前仍无法设置每周四的重复提醒。','Historical transcript remains intact');
+});
+
+test('mixed recurring event still reads evidence and loads agenda rules with web-capable providers',async()=>{
+ let calls=0;const h=onDemandHarness({web:true,request:async req=>{
+  assert.equal(req.webSearch,true);
+  if(++calls===1){assert.match(req.input,/历史助手答复可能来自旧版本/);return JSON.stringify({knowledgeRequests:[{type:'search',query:'示例课程讨论时间'},{type:'capabilities',name:'agenda'}],actions:[]});}
+  assert.match(req.input,/COURSE_EVIDENCE Thursday 14:30/);assert.match(req.input,/frequency:"none\|daily\|weekly\|monthly"/);
+  const run=h.state.agentRuns.at(-1);
+  return JSON.stringify({workspace:'课程',message:'根据课程安排生成待审阅日程。',actions:[],agendaProposals:[{title:'示例课程讨论',sourceMessageId:run.userMessageId,quote:run.goal,start:'2026-10-01T14:30:00+08:00',end:null,timeZone:'Asia/Shanghai',frequency:'weekly',interval:1,weekdays:[5],reminderMinutes:15}]});
+ }});
+ for(const [key,file] of [['AgentRouting','agent-routing'],['AgendaProposals','agenda-proposals']])h.c[key]=h.c.window[key]=require('../app/'+file);
+ h.c.apiCredentialState={hasKey:false};h.c.window.workstationDesktop={agendaProposal(){}};h.node('#apiBase').value='https://api.openai.com/v1';
+ h.state.notes.push({id:'course-times',workspace:'课程',projectId:'p',title:'示例课程讨论时间',content:'COURSE_EVIDENCE Thursday 14:30'});
+ await h.send({goal:'查找示例课程讨论时间，帮我安排每周讨论日程，提前15分钟提醒'});const r=h.state.agentRuns.at(-1);
+ assert.equal(r.status,'completed',r.error);assert.equal(r.contextRoute.mode,'full');assert.equal(calls,2);assert.equal(r.knowledgeSearches.length,1);assert.equal(r.agendaProposals.length,1);assert.ok(r.contextMetrics.loadedCapabilities.includes('agenda'));
+});
+
+test('recurring format fallback preserves current agenda schema before reconsulting older conversation',async()=>{
+ let calls=0;const h=onDemandHarness({web:true,request:async req=>{
+  if(++calls===1)return JSON.stringify({workspace:'科研',message:'请审阅',actions:[{agendaProposals:[{title:'组会'}]}]});
+  assert.match(req.input,/用户可以直接在对话中创建单次或重复日程/);assert.match(req.input,/历史助手答复可能来自旧版本/);
+  const run=h.state.agentRuns.at(-1);return JSON.stringify({workspace:'科研',message:'请审阅后保存。',actions:[],agendaProposals:[{title:'示例组会',sourceMessageId:run.userMessageId,quote:run.goal,start:'2026-10-01T14:30:00+08:00',end:null,timeZone:'Asia/Shanghai',frequency:'weekly',weekdays:[5]}]});
+ }});
+ for(const [key,file] of [['AgentRouting','agent-routing'],['AgendaProposals','agenda-proposals']])h.c[key]=h.c.window[key]=require('../app/'+file);
+ h.c.apiCredentialState={hasKey:false};h.c.window.workstationDesktop={agendaProposal(){}};h.node('#apiBase').value='https://api.openai.com/v1';
+ const c=h.state.conversations[0];c.projectId=null;c.messages=[{id:'old',role:'assistant',text:'暂不支持重复日程'}];
+ await h.send({goal:'每周四下午两点半参加组会'});const r=h.state.agentRuns.at(-1);
+ assert.equal(r.status,'completed',r.error);assert.equal(calls,2);assert.equal(r.contextRoute.escalated,true);assert.deepEqual(Array.from(r.contextMetrics.loadedCapabilities),['agenda']);assert.equal(r.agendaProposals.length,1);assert.equal(r.knowledgeSearches?.length||0,0);
+});
