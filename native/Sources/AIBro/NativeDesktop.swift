@@ -5,11 +5,14 @@ import WebKit
 @MainActor final class NativeDesktop:NSObject,WKScriptMessageHandlerWithReply {
     weak var workspace:Workspace?
     private let credentialQueue=DispatchQueue(label:"app.aibro.credentials")
+    private let vectorQueue=DispatchQueue(label:"app.aibro.vector-index",qos:.utility)
+    let vectors:NativeVectorStore
     let credentials:NativeCredentials
     let prefsFile:URL
     var preferences:[String:String]
     static let preferenceKeys=Set(["workstation-api-base","workstation-api-model","workstation-openai-model","workstation-provider","aibro-embedding-settings-v1","ai-bro-language","workstation-ui"])
     init(data:URL,production:Bool) {
+        vectors=NativeVectorStore(folder:data)
         prefsFile=data.appendingPathComponent("native-preferences.json")
         preferences=(try? Data(contentsOf:prefsFile)).flatMap{try? JSONDecoder().decode([String:String].self,from:$0)} ?? [:]
         let old=production ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ai-workstation-studio"):nil
@@ -26,6 +29,19 @@ import WebKit
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage,replyHandler:@escaping(Any?,String?)->Void) {
         guard let origin=workspace?.origin, message.frameInfo.isMainFrame,let url=message.frameInfo.request.url,url.scheme=="http",url.host==origin.host,url.port==origin.port,let body=message.body as? [String:Any],let command=body["command"] as? String else{replyHandler(nil,"拒绝非工作区请求");return}
         do {
+            if command=="vector-index",let action=body["action"] as? String,let profile=body["profile"] as? String {
+                let store=vectors
+                vectorQueue.async {
+                    do {
+                        let result:Any
+                        if action=="load" {result=try store.load(profile)}
+                        else if action=="write",let puts=body["puts"] as? [[String:Any]],let removes=body["removes"] as? [String] {
+                            try store.write(profile,puts:puts,removes:removes);result=["ok":true]
+                        } else {throw NativeVectorStore.Failure.invalidRecord}
+                        DispatchQueue.main.async{replyHandler(result,nil)}
+                    } catch {DispatchQueue.main.async{replyHandler(nil,"本机向量索引操作失败，请重试")}}
+                };return
+            }
             if command=="agenda-notifications" {
                 Task { @MainActor in
                     guard let store=self.workspace?.agenda else {replyHandler(nil,"日程尚未就绪");return}

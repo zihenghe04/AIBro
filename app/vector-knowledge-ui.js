@@ -118,7 +118,7 @@
       <div class="setting-actions"><button class="primary" id="embeddingUpdate" data-i18n>立即更新向量索引</button><button class="secondary" id="embeddingStop" hidden data-i18n>停止更新</button></div>
       <progress id="embeddingProgress" hidden style="width:100%"></progress><p id="embeddingCounts" class="muted"></p><p id="embeddingStatus" class="setting-help" role="status" aria-live="polite"></p>`;
     $('settings').append(card);
-    engine=root.VectorIndex.create({getState:hooks.getState,store:root.VectorIndex.indexedDBStore(),embed,onProgress:value=>{progress=value;paint();}});
+    engine=root.VectorIndex.create({getState:hooks.getState,store:root.workstationDesktop?.vectorIndex || root.VectorIndex.indexedDBStore(),embed,onProgress:value=>{progress=value;paint();}});
     try{const saved=JSON.parse(root.localStorage.getItem(STORAGE)||'null');if(saved)config=root.VectorIndex.configuration(saved);}catch{report('Embedding 配置无法读取，请重新保存');}
     if(config){$('embeddingBase').value=config.base;$('embeddingModel').value=config.model;$('embeddingDimensions').value=config.dimensions||'';$('embeddingEnabled').checked=config.enabled;$('embeddingAuto').checked=config.autoUpdate;$('embeddingNoKey').checked=config.noKey;}
     $('embeddingKeyHelp').textContent=root.workstationDesktop?t('Key 独立加密保存在此 Mac；留空保留已保存的 Key。'):t('浏览器模式仅在本次会话保留 Key；重开后需重新填写。');

@@ -20,7 +20,7 @@
     "release:mac": "node scripts/release-native.js",
     "demo:record": "electron scripts/record-demo.cjs",
     "demo:render": "python3 scripts/render-demo.py",
-    "test:native": "./scripts/test-native-localization.sh && ./scripts/test-native-desktop.sh && ./scripts/test-native-agenda.sh",
+    "test:native": "./scripts/test-native-localization.sh && ./scripts/test-native-desktop.sh && ./scripts/test-native-agenda.sh && sh ./scripts/test-native-vector-store.sh",
     "start:native": "./scripts/run-native-preview.sh",
     "build:native": "./scripts/run-native-preview.sh --build-only"
   },

@@ -8,4 +8,5 @@
  Storage.prototype.removeItem=function(key){originalRemove.call(this,key);if(this===localStorage&&keys.has(key))rpc({command:'preferences',key}).catch(()=>{});};
  const credentials=channel=>Object.fromEntries(['status','read','save','remove'].map(action=>[action,options=>rpc({command:'credentials',channel,action,options:options||{}})]));
  window.workstationDesktop={isDesktop:true,platform:'darwin',agendaProposal:proposal=>rpc({command:'agenda-proposal',proposal}),agendaDraft:id=>rpc({command:'agenda-draft',id}),agendaOpen:id=>rpc({command:'agenda-open',id}),agendaRelated:()=>rpc({command:'agenda-related'}),agendaNotifications:enable=>rpc({command:'agenda-notifications',enable:enable===true}),apiCredentials:credentials('api'),embeddingCredentials:credentials('embedding'),setLanguage:value=>rpc({command:'language',value}),setAppearance:value=>rpc({command:'appearance',value}),openAuthURL:url=>rpc({command:'auth',url})};
+ window.workstationDesktop.vectorIndex={load:profile=>rpc({command:'vector-index',action:'load',profile}),write:(profile,puts=[],removes=[])=>rpc({command:'vector-index',action:'write',profile,puts,removes})};
 })();

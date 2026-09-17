@@ -1,5 +1,9 @@
 // Only loaded by AIBRO_NATIVE_QA_CONTEXT in an isolated native workspace.
 const check=(value,message)=>{if(!value)throw Error(message);};
+const vectorProfile='a'.repeat(64),vectorStore=workstationDesktop.vectorIndex;
+check(!!vectorStore,'Native vector persistence bridge available');
+await vectorStore.write(vectorProfile,[{id:'qa-vector',hash:'b'.repeat(64),vector:[1,0.5],updatedAt:1234}],[]);
+check((await vectorStore.load(vectorProfile)).length===1,'Vector bridge round trip');
 const chat={id:'qa-context-chat',title:'按需上下文测试',workspace:'课程',projectId:'qa-course',permissionMode:'auto',messages:[],attachments:[],draftAttachmentIds:[],modelConfig:{provider:'api',model:'synthetic-model',effort:''}};
 state.conversations.push(chat);state.currentConversationId=chat.id;
 state.notes.push({id:'qa-assignment-context',title:'示例课程作业要求',workspace:'课程',projectId:'qa-course',kind:'课程笔记',content:'QA_ASSIGNMENT_EVIDENCE: 2026-10-02 17:00 提交示例报告。',sourceAttachmentIds:[],createdAt:Date.now(),updatedAt:Date.now()});
@@ -17,4 +21,4 @@ const recurring=state.agentRuns.at(-1);check(recurring.status==='completed','Rec
 await saveDocumentDurably();renderConversation();
 const button=document.querySelector('[data-agenda-proposal]');check(button&&!button.disabled,'Real review button available');button.click();
 AgentTransport.requestPlan=original;VectorKnowledge.searchRequest=search;
-return {...report,recurring:{requests:sent.length,characters:sent[0].length,proposalId:recurring.agendaProposals[0].id},workspaceData:'synthetic only'};
+return {...report,nativeVectorStore:true,recurring:{requests:sent.length,characters:sent[0].length,proposalId:recurring.agendaProposals[0].id},workspaceData:'synthetic only'};

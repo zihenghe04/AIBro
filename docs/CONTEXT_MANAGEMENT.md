@@ -23,6 +23,8 @@ Recent messages, validated checkpoint excerpts and actual operation results are 
 
 Embedding profiles and chunk encoding are unchanged, so current vectors remain usable. Queries reuse a bounded query-vector cache; unchanged chunk hashes are reused. Documents changed or deleted during embedding are excluded from stale results. If the embedding service fails, BM25 fallback is reported explicitly.
 
+The native Mac shell now stores vectors in `vector-index.sqlite3` inside its workspace data directory, using transactional writes on a serial background queue. It no longer relies on the nonpersistent WebView's IndexedDB or its random backend port. Browser/Electron storage continues to use IndexedDB. Existing native versions could lose their ephemeral index on restart; a lost index needs one rebuild, while documents and embedding credentials remain separate and intact. Native persistence tests reopen the database in a separate process and native QA exercises the actual bridge with synthetic vectors.
+
 This release uses local rank fusion and source diversification, not a newly added neural reranker or ANN database. Existing vector similarity search remains exact and linear over eligible vectors. Large-corpus ANN indexing and separately configured rerankers should be introduced only with retrieval evaluations and a migration plan. Token counts here are provider-neutral estimates, not provider billing measurements; native PDF/image input has separate delivery limits.
 
 ## References and adaptation
