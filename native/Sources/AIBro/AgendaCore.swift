@@ -159,7 +159,7 @@ enum AgendaImport {
     // in the editor. Each row is one teaching slot, repeated in chosen weeks.
     static func courses(_ text:String, semester:Date, zone:String) -> AgendaImportResult {
         var result=AgendaImportResult();var cal=Calendar(identifier:.gregorian);cal.timeZone=TimeZone(identifier:zone) ?? .current
-        guard TimeZone(identifier:zone) != nil,let base=cal.date(from:Calendar.current.dateComponents([.year,.month,.day],from:semester)),cal.component(.weekday,from:base)==2 else {return .init(warnings:["学期必须从第一周周一开始，且时区有效。"])}
+        guard TimeZone(identifier:zone) != nil,let base=cal.date(from:cal.dateComponents([.year,.month,.day],from:semester)),cal.component(.weekday,from:base)==2 else {return .init(warnings:["学期必须从第一周周一开始，且时区有效。"])}
         let rows=csv(text)
         guard rows.count>1 else {return .init(warnings:["请使用课程 CSV 模板，至少填写一行。"])}
         for (offset,row) in rows.dropFirst().enumerated() {
