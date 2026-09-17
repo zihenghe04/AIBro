@@ -36,6 +36,7 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
     let production:Bool
     var desktop:NativeDesktop?
     var sessionLock:Int32 = -1
+    private var startupBegan = Date()
     override init() {
         production=Bundle.main.object(forInfoDictionaryKey:"AIBroProduction") as? Bool == true
         root = ProcessInfo.processInfo.environment["AIBRO_SOURCE_ROOT"].map{URL(fileURLWithPath:$0)} ?? (production ? Bundle.main.resourceURL! : URL(fileURLWithPath:FileManager.default.currentDirectoryPath))
@@ -82,6 +83,7 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
         do {
             let data = dataDirectory
             try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+            startupBegan=Date();recordStartupStatus("loading")
             if production {
                 sessionLock=Darwin.open(data.appendingPathComponent("native-session.lock").path,O_CREAT|O_RDWR,0o600)
                 guard sessionLock >= 0,flock(sessionLock,LOCK_EX|LOCK_NB)==0 else{throw AgendaError.message("AI Bro 已在运行，请返回现有窗口。")}
@@ -109,6 +111,13 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
                   let port = Int(text), port > 0, let url = URL(string:"http://127.0.0.1:\(port)/") else { throw CocoaError(.fileReadCorruptFile) }
             origin = url; web.load(URLRequest(url: url))
         } catch { self.error = "无法启动 AI Bro：\(error.localizedDescription)"; backend?.terminate(); backend = nil }
+    }
+    // Local diagnostics contain readiness/counts only, never workspace text or credentials.
+    private func recordStartupStatus(_ status:String) {
+        var value:[String:Any] = ["status":status,"version":Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "preview","updatedAt":Date().timeIntervalSince1970,"elapsedSeconds":Date().timeIntervalSince(startupBegan)]
+        if let snapshot {value["projects"]=snapshot.projects.count;value["tasks"]=snapshot.tasks?.count ?? 0;value["notes"]=snapshot.noteCount;value["sources"]=snapshot.sourceCount;value["conversations"]=snapshot.conversations.count}
+        let path=dataDirectory.appendingPathComponent("native-startup-status.json")
+        if let bytes=try? JSONSerialization.data(withJSONObject:value,options:[.sortedKeys]) {try? bytes.write(to:path,options:.atomic);try? FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:path.path)}
     }
     func command(_ type: String, _ id: String = "") {
         guard ready else { return }
@@ -200,6 +209,7 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
             else if sawModal { returningFromModal=false;sawModal=false;spaceContent=false }
         }
         if first {
+            recordStartupStatus("ready")
             setAppearance(appearance)
             requestAgendaSync()
             agendaSyncTimer=Timer.scheduledTimer(withTimeInterval:10,repeats:true){[weak self]_ in Task{@MainActor in self?.requestAgendaSync()}}

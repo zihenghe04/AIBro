@@ -139,10 +139,10 @@ async function hydratePersistentState() {
   } else if (needsRemoteHydration) {
     normalizeStateShape(remote);
     state._migrationId = remote._migrationId; state._revision = Number(remote._revision || 0);
-    if (remote._apiBase) localStorage.setItem('workstation-api-base', remote._apiBase);
+    try { if (remote._apiBase) localStorage.setItem('workstation-api-base', remote._apiBase); } catch (_) {}
     // Credentials are never restored from shared workspace snapshots. Desktop
     // credentials belong to the native encrypted store, not the JSON mirror.
-    if (remote._apiModel) localStorage.setItem('workstation-api-model', remote._apiModel);
+    try { if (remote._apiModel) localStorage.setItem('workstation-api-model', remote._apiModel); } catch (_) {}
     // Recreate IndexedDB blobs from the migration payload so PDFs and images
     // remain previewable even though localStorage intentionally omits them.
     await Promise.all(state.imports.map(async item => {
@@ -151,7 +151,11 @@ async function hydratePersistentState() {
       if (blob) await fileStorePut(item.id, blob);
     }));
     repairRelationships();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, imports: state.imports.map(item => ({ ...item, dataUrl: item.dataUrl && item.dataUrl.length > 200000 ? null : item.dataUrl })) }));
+    // The native database is authoritative; WebView localStorage is a small,
+    // optional cache. A quota failure must not strand a fully loaded workspace.
+    if (!window.workstationDesktop?.nativeWorkspacePersistence) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, imports: state.imports.map(item => ({ ...item, dataUrl: item.dataUrl && item.dataUrl.length > 200000 ? null : item.dataUrl })) })); } catch (_) {}
+    }
   }
   try{const health=await (await fetch('/__health',{cache:'no-store'})).json();executionInstanceId=health.instanceId||null;}catch{}
   storageHydrated = true;
@@ -216,7 +220,9 @@ function repairRelationships() {
     const linked = resolveProject(conversation.projectId, conversation.project, conversation.workspace);
     if (linked && !conversation.projectId && conversation.workspace !== 'auto') { conversation.projectId = linked.id; changed = true; }
   });
-  if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (changed && !globalThis.window?.workstationDesktop?.nativeWorkspacePersistence) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (_) {}
+  }
 }
 function ensureConversation() {
   if (!Array.isArray(state.conversations)) state.conversations = [];
@@ -271,7 +277,7 @@ async function preserveDraftAndLoadLatest(button) {
     if (version !== localEditVersion) throw new Error('保存草稿期间有新修改，请再试一次。');
     normalizeStateShape(remote); delete state._pendingLocalSave;
     serverConflict = false; serverSaveQueued = false;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (!window.workstationDesktop?.nativeWorkspacePersistence) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (_) {} }
     $('#syncConflictNotice')?.remove(); applyUiPreferences(); renderAll(); renderSettings();
     toast(result.recoverySaved ? '已保存冲突草稿并加载最新工作区；可在设置中下载草稿。' : '工作区已同步');
   } catch (error) { toast(error.message); }
@@ -329,7 +335,7 @@ function persistServerSnapshot() {
       state._revision = Number(data.revision); serverConflict = false;
       if (localEditVersion === savingVersion) delete state._pendingLocalSave;
       window.VectorKnowledge?.workspaceSaved();
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, imports: state.imports.map(item => ({ ...item, dataUrl: item.dataUrl && item.dataUrl.length > 200000 ? null : item.dataUrl })) })); } catch (_) {}
+      if (!window.workstationDesktop?.nativeWorkspacePersistence) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, imports: state.imports.map(item => ({ ...item, dataUrl: item.dataUrl && item.dataUrl.length > 200000 ? null : item.dataUrl })) })); } catch (_) {} }
     } else if (response.status === 409) { serverConflict = true; showSyncConflict(); }
     else { serverSaveQueued = true; serverSaveFailure = '本机数据库暂时无法保存'; }
   }).catch(() => { serverSaveQueued = true; serverSaveFailure = '与本机数据库连接中断'; }).finally(() => {
@@ -360,6 +366,7 @@ async function saveDocumentDurably() {
 const save = () => {
   ensureConversation();
   if (!initializingUI) { state._pendingLocalSave = true; localEditVersion += 1; }
+  if (!globalThis.window?.workstationDesktop?.nativeWorkspacePersistence) {
   // Keep a complete snapshot for the local service. Browser localStorage gets
   // a lightweight copy because large PDFs/images belong in IndexedDB.
   const serverSnapshot = { ...state, imports: state.imports.map(item => ({ ...item })), _apiBase: localStorage.getItem('workstation-api-base') || '', _apiModel: localStorage.getItem('workstation-api-model') || '' };
@@ -379,6 +386,7 @@ const save = () => {
       snapshot.imports.forEach(item => { if (item.dataUrl) item.dataUrl = null; });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
     } catch (_) { console.warn('工作站数据保存失败：浏览器存储空间不足', error); }
+  }
   }
   if (storageHydrated) { serverSaveQueued = true; clearTimeout(serverSaveTimer); serverSaveTimer = setTimeout(persistServerSnapshot, 180); }
 };
@@ -3273,7 +3281,7 @@ async function applyCloudRevision(revision) {
   if (cloudHostBusy() || localEditVersion !== version || state._pendingLocalSave || serverSaveInFlight || serverConflict) return false;
   if (Number(snapshot._revision || 0) < Number(state._revision || 0)) return false;
   adoptCloudSnapshot(snapshot);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, imports: state.imports.map(item => ({ ...item, dataUrl: item.dataUrl?.length > 200000 ? null : item.dataUrl })) })); } catch (_) {}
+  if (!window.workstationDesktop?.nativeWorkspacePersistence) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, imports: state.imports.map(item => ({ ...item, dataUrl: item.dataUrl?.length > 200000 ? null : item.dataUrl })) })); } catch (_) {} }
   renderAll(); return true;
 }
 window.CloudSyncUI?.init({

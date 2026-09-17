@@ -88,6 +88,34 @@ test('dirty startup snapshot survives hydration from a newer remote revision', a
   assert.ok(descendants(notice).some(item => item.tagName === 'BUTTON' && /导出/.test(item.textContent)));
 });
 
+test('workspace hydration completes when the optional browser cache exceeds quota', async () => {
+  const remote=payload('Large local database task', 9);
+  remote.agentRuns=[{id:'synthetic-run',status:'completed',output:'x'.repeat(6*1024*1024)}];
+  const h=harness({storageHydrated:false,fetch:async url=>response(url==='/__state'?remote:{instanceId:'fixture'})});
+  h.c.localStorage.setItem=()=>{throw Object.assign(new Error('Storage quota exceeded'),{name:'QuotaExceededError'});};
+  h.c.console={warn(){},error(){}};
+  await h.api.hydratePersistentState();
+  assert.equal(h.c.storageHydrated,true);
+  assert.equal(h.c.state.tasks[0].title,remote.tasks[0].title);
+  assert.equal(h.c.state.agentRuns[0].output.length,6*1024*1024);
+  assert.equal(h.c.state._revision,9);
+});
+
+test('native workspace bypasses browser cache and still saves the complete database snapshot', async () => {
+  const remote=payload('Native database task',9);remote.agentRuns=[{id:'complete-ledger',output:'synthetic evidence'}];
+  const h=harness({storageHydrated:false,fetch:async(url,init)=>response(init.method==='POST'?{revision:10}:url==='/__state'?remote:{instanceId:'fixture'})});
+  h.c.window.workstationDesktop={nativeWorkspacePersistence:true};
+  let cacheWrites=0;h.c.localStorage.setItem=key=>{if(key===h.c.STORAGE_KEY){cacheWrites++;throw new Error('Native must not mirror full workspace');}};
+  await h.api.hydratePersistentState();
+  await drain();const firstEditRequest=h.requests.length;
+  h.c.state.tasks[0].title='Edited after startup';h.api.save();h.api.persistServerSnapshot();await drain();
+  assert.equal(cacheWrites,0);
+  const posted=JSON.parse(h.requests.slice(firstEditRequest).find(r=>r.init.method==='POST').init.body);
+  assert.equal(posted.tasks[0].title,'Edited after startup');
+  assert.equal(posted.agentRuns[0].output,'synthetic evidence');
+  assert.equal(h.c.state._pendingLocalSave,undefined);
+});
+
 test('old successful response cannot clear newer local edits and subsequent save uses acknowledged revision', async () => {
   const first = deferred(), second = deferred(); let post = 0;
   const h = harness({ fetch: () => ++post === 1 ? first.promise : second.promise });
