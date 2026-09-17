@@ -131,9 +131,12 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
     }
     func reviewAgendaProposal(_ proposal:[String:Any]) throws {
         guard ready,agendaDraft == nil,let id=proposal["id"] as? String,id.hasPrefix("agenda_"),id.count<200,
-              let documentID=proposal["documentID"] as? String,let document=snapshot?.documents?.first(where:{$0.id==documentID && $0.kind=="note"}),
               let title=proposal["title"] as? String,title.count<=200,let start=proposal["start"] as? Double,let end=proposal["end"] as? Double,start.isFinite,end.isFinite,
               let timeZone=proposal["timeZone"] as? String else{throw AgendaError.message("日程提案或来源不可用。")}
+        let documentID=proposal["documentID"] as? String ?? ""
+        let document=snapshot?.documents?.first(where:{$0.id==documentID && $0.kind=="note"})
+        let messageSource=proposal["sourceMessageId"] as? String
+        guard document != nil || (messageSource?.isEmpty == false && (proposal["conversationId"] as? String)?.isEmpty == false) else {throw AgendaError.message("日程来源不可用。")}
         if let existing=agenda.events.first(where:{$0.id==id}) {
             guard !existing.deleted else{throw AgendaError.message("此日程已取消，原提案不会自动重新创建。")}
             try openLinkedAgenda(id);return
@@ -142,7 +145,9 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
         event.frequency=proposal["frequency"] as? String ?? "none";event.interval=proposal["interval"] as? Int ?? 1;event.weekdays=proposal["weekdays"] as? [Int] ?? []
         event.count=proposal["count"] as? Int;if let until=proposal["until"] as? Double {event.until=Date(timeIntervalSince1970:until/1000)}
         event.reminderMinutes=proposal["reminderMinutes"] as? Int;event.location=proposal["location"] as? String ?? "";event.details=(proposal["details"] as? String ?? "")+"\n\n来源随记："+(proposal["quote"] as? String ?? "")
-        event.documentID=documentID;event.documentKind="note";event.projectID=document.projectId;event.source="随记"
+        event.documentID=documentID;event.documentKind=document == nil ? "":"note";event.projectID=document?.projectId ?? "";event.source=document == nil ? "对话":"随记"
+        if document == nil {event.details=(proposal["details"] as? String ?? "")+"\n\n来源消息："+(proposal["quote"] as? String ?? "")}
+        if proposal["endEstimated"] as? Bool == true {event.details += "\n结束时间未指定，默认时长1小时，请在保存前确认。"}
         try event.validate();selection="agenda";agendaDraft=event
     }
     func openLinkedAgenda(_ id:String) throws {
@@ -226,6 +231,7 @@ struct Snapshot: Decodable { let conversationLibrary:[ConversationEntry]?;let co
             _ = try await web.evaluateJavaScript(seed)
             try await Task.sleep(nanoseconds:800_000_000)
             guard snapshot?.projects.first?.id == "native-qa" else { throw CocoaError(.validationMissingMandatoryProperty) }
+            if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_CONTEXT"] == "1" {try await contextQA(destination);return}
             if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_OVERVIEW"] == "1" {
                 let fixture=try String(contentsOf:root.appendingPathComponent("native/Resources/qa-overview.js"),encoding:.utf8)
                 _ = try await web.evaluateJavaScript(fixture)

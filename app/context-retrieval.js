@@ -264,9 +264,11 @@
     const offset=options.offset === undefined ? 0 : Number(options.offset);
     if (!Number.isSafeInteger(offset)||offset<0) throw Error('Invalid knowledge cursor');
     // This is a transport page, not a corpus cap. No per-record or character cutoff.
-    const entries=options.all ? ranked.slice(offset) : ranked.slice(offset,offset+20);
+    const Window=typeof module==='object'&&module.exports?require('./context-window'):globalThis.ContextWindow;
+    const page=Window&&options.maxTokens!==undefined?Window.page(Window.diversify(ranked),{offset,maxTokens:options.maxTokens}):null;
+    const entries=options.all ? ranked.slice(offset) : page?page.entries:ranked.slice(offset,offset+20);
     const textRecords = scoped.filter(x=>(index.records.get(`${x.type}:${x.record.id}`)?.rows || []).some(row=>!!row.entry.text)).length;
-    const coverage={strategy:'local-bm25',originalFiles:scoped.filter(x=>x.type==='import').length,eligibleRecords:scoped.length,textIndexedRecords:textRecords,metadataOnlyRecords:scoped.length-textRecords,indexedChunks:rows.length,matchedRecords:new Set(ranked.map(r=>`${r.type}:${r.recordId}`)).size,totalChunks:ranked.length,returnedChunks:entries.length,returnedRecords:new Set(entries.map(r=>`${r.type}:${r.recordId}`)).size,offset,nextOffset:offset+entries.length<ranked.length?offset+entries.length:null,truncated:false};
+    const coverage={strategy:'local-bm25',originalFiles:scoped.filter(x=>x.type==='import').length,eligibleRecords:scoped.length,textIndexedRecords:textRecords,metadataOnlyRecords:scoped.length-textRecords,indexedChunks:rows.length,matchedRecords:new Set(ranked.map(r=>`${r.type}:${r.recordId}`)).size,totalChunks:ranked.length,returnedChunks:entries.length,returnedRecords:new Set(entries.map(r=>`${r.type}:${r.recordId}`)).size,offset,nextOffset:offset+entries.length<ranked.length?offset+entries.length:null,...(page?{estimatedTokens:page.estimatedTokens,tokenBudget:page.tokenBudget}:{}),truncated:false};
     return {entries,coverage};
   }
   function listIndex(state = {}, options = {}) {

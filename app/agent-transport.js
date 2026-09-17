@@ -123,6 +123,7 @@
         if (provider === 'openai-auth') body.effort = effort;
         else body.reasoning = { effort };
       }
+      onPhase?.('waiting');
       response = await wait(fetch(url, { method: 'POST', signal: controller.signal, headers, body: JSON.stringify(body) }));
       if (!response.ok) {
         let errorBody = '';
@@ -144,7 +145,6 @@
         onDelta?.(output); if (controller.signal.aborted) throw interruptionError(); return output;
       }
       if (!response.body) { const error = new Error('API 没有提供可读取的事件流，本次未执行操作。'); error.code = 'STREAM_INCOMPLETE'; throw error; }
-      onPhase?.('reasoning');
       reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let output = '';
       let streamFormat = null, completed = false;
       const outputParts = new Map();

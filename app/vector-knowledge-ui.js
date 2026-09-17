@@ -99,7 +99,7 @@
   async function searchRequest(state,scope,request,signal){
     if(request.type!=='search')return null;
     if(!config?.enabled)return null;
-    const r=await retrieve(state,{...scope,allowedTaskIds:[],query:request.query||'',offset:request.offset??0},signal);
+    const r=await retrieve(state,{...scope,allowedTaskIds:[],query:request.query||'',offset:request.offset??0,maxTokens:request.maxTokens??4000},signal);
     return {type:'search',strategy:r.coverage.strategy,total:r.coverage.totalChunks,offset:r.coverage.offset,nextOffset:r.coverage.nextOffset,coverage:r.coverage,entries:r.entries.map(e=>({type:e.type,id:e.recordId,chunkId:e.id,title:e.title,projectId:e.projectId,sourceAttachmentIds:e.sourceAttachmentIds,page:e.page,segment:e.segment,chunkOffset:e.offset,chunkEnd:e.end,heading:e.heading,version:e.version,excerpt:e.text,score:e.score})),contentRead:false};
   }
   function init(options){

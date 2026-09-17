@@ -54,3 +54,10 @@ test('invalid provider vectors fail explicitly',()=>{
  for(const vectors of [[],[[0,0]],[[NaN,2]],[[1,2],[1]],['base64'],[[Infinity]]])assert.throws(()=>V.validate(vectors,2));
  assert.throws(()=>V.validate([[1,2]],1,3));assert.equal(V.validate([[1,0],[0,1]],2),2);
 });
+
+test('hybrid search uses a payload budget and reaches all 180 sources with cached query vector',async()=>{
+ const s=state();s.notes=Array.from({length:180},(_,i)=>({id:'n'+i,projectId:'p',title:'Transport '+i,content:'automobile vehicle '+i}));
+ const {engine,calls}=setup(s);await engine.update(cfg());const before=calls.length;let offset=0;const seen=[];
+ do{const r=await engine.search(cfg(),'汽车',{projectId:'p',maxTokens:4000},offset);seen.push(...r.entries.map(e=>e.recordId));offset=r.coverage.nextOffset;assert.ok(r.coverage.estimatedTokens<=4000);}while(offset!==null);
+ assert.equal(new Set(seen).size,180);assert.equal(calls.length,before+1,'one query embedding across every page');
+});

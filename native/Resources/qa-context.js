@@ -1,0 +1,20 @@
+// Only loaded by AIBRO_NATIVE_QA_CONTEXT in an isolated native workspace.
+const check=(value,message)=>{if(!value)throw Error(message);};
+const chat={id:'qa-context-chat',title:'按需上下文测试',workspace:'课程',projectId:'qa-course',permissionMode:'auto',messages:[],attachments:[],draftAttachmentIds:[],modelConfig:{provider:'api',model:'synthetic-model',effort:''}};
+state.conversations.push(chat);state.currentConversationId=chat.id;
+state.notes.push({id:'qa-assignment-context',title:'示例课程作业要求',workspace:'课程',projectId:'qa-course',kind:'课程笔记',content:'QA_ASSIGNMENT_EVIDENCE: 2026-10-02 17:00 提交示例报告。',sourceAttachmentIds:[],createdAt:Date.now(),updatedAt:Date.now()});
+$('#apiBase').value='https://context-qa.invalid/v1';$('#apiKey').value='synthetic';$('#model').value='synthetic-model';
+const original=AgentTransport.requestPlan,search=VectorKnowledge.searchRequest;let sent=[];
+VectorKnowledge.searchRequest=async()=>null;
+AgentTransport.requestPlan=async request=>{sent.push(request.input);if(sent.length===1){check(!request.input.includes('QA_ASSIGNMENT_EVIDENCE'),'No eager source text');check(request.input.includes('资料概览'),'Library map available');return JSON.stringify({knowledgeRequests:[{type:'search',query:'示例课程作业要求'},{type:'capabilities',name:'tasks'}],actions:[]});}check(request.input.includes('QA_ASSIGNMENT_EVIDENCE'),'Retrieved exact evidence');return JSON.stringify({workspace:'课程',message:'根据示例作业要求准备提醒。',actions:[{type:'create_task',title:'QA 提交示例报告',workspace:'课程',projectId:'qa-course',dueAt:'2026-10-02T17:00:00+08:00',reminderMinutes:30,sourceAttachmentIds:[]}]});};
+await sendMessage({goal:'查找示例课程作业要求，并在截止前半小时提醒我'});
+const mixed=state.agentRuns.at(-1);check(mixed.status==='completed','Mixed request: '+mixed.error);check(state.tasks.some(t=>t.title==='QA 提交示例报告'&&t.reminderMinutes===30),'Real persisted task with reminder');check(sent.length===2,'One search round');
+const report={mixed:{status:mixed.status,requests:sent.length,firstCharacters:sent[0].length,finalCharacters:sent[1].length,searches:mixed.knowledgeSearches.length}};
+chat.workspace='日常';chat.projectId=null;chat.messages=[];sent=[];
+AgentTransport.requestPlan=async request=>{sent.push(request.input);const run=state.agentRuns.at(-1);return JSON.stringify({workspace:'日常',message:'请审阅每周组会日程。',actions:[],agendaProposals:[{title:'QA 每周组会',sourceMessageId:run.userMessageId,quote:run.goal,start:'2026-10-01T14:30:00+08:00',end:null,timeZone:'Asia/Shanghai',frequency:'weekly',interval:1,weekdays:[5],reminderMinutes:null,location:'腾讯会议：123-4567-8901'}]});};
+await sendMessage({goal:'#腾讯会议：123-4567-8901 我每周四下午两点半都要参加这个组会'});
+const recurring=state.agentRuns.at(-1);check(recurring.status==='completed','Recurring request: '+recurring.error);check(recurring.agendaProposals.length===1,'Proposal generated');check(sent.length===1,'Self-contained event uses one compact request');
+await saveDocumentDurably();renderConversation();
+const button=document.querySelector('[data-agenda-proposal]');check(button&&!button.disabled,'Real review button available');button.click();
+AgentTransport.requestPlan=original;VectorKnowledge.searchRequest=search;
+return {...report,recurring:{requests:sent.length,characters:sent[0].length,proposalId:recurring.agendaProposals[0].id},workspaceData:'synthetic only'};

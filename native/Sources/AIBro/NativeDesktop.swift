@@ -36,7 +36,7 @@ import WebKit
             if command=="agenda-proposal",let proposal=body["proposal"] as? [String:Any]{try workspace?.reviewAgendaProposal(proposal);replyHandler(["ok":true],nil);return}
             if command=="agenda-draft",let id=body["id"] as? String {try workspace?.draftAgenda(id);replyHandler(["ok":true],nil);return}
             if command=="agenda-open",let id=body["id"] as? String {try workspace?.openLinkedAgenda(id);replyHandler(["ok":true],nil);return}
-            if command=="agenda-related" {let events=workspace?.agenda.events.filter{!$0.deleted && !$0.documentID.isEmpty} ?? [];replyHandler(events.map{["id":$0.id,"title":$0.title,"documentID":$0.documentID,"start":$0.start.timeIntervalSince1970*1000] as [String:Any]},nil);return}
+            if command=="agenda-related" {let events=workspace?.agenda.events.filter{!$0.deleted && (!$0.documentID.isEmpty || $0.id.hasPrefix("agenda_"))} ?? [];replyHandler(events.map{["id":$0.id,"title":$0.title,"documentID":$0.documentID,"start":$0.start.timeIntervalSince1970*1000] as [String:Any]},nil);return}
             if command=="credentials",let channel=body["channel"] as? String,let action=body["action"] as? String {
                 let options=body["options"] as? [String:Any] ?? [:]
                 // Security APIs can wait for user authorization. Keep the main thread responsive.

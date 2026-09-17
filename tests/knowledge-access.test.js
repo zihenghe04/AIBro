@@ -48,3 +48,12 @@ test('unreadable Wiki cache is excluded from search, initial context and explici
   await assert.rejects(K.execute(s,{projectId:'p',explicitReferences:[{type:'note',id:'broken'}]},{type:'read',id:'broken'}));
   await assert.rejects(F.libraryRef(s,'note','broken'));
 });
+
+test('a productive scan can exceed 64 rounds without an arbitrary corpus limit',async()=>{
+ let i=0;await K.continuePlan(JSON.stringify({knowledgeRequests:[{type:'read',id:'a',offset:0}]}),{execute:async r=>({id:'a',offset:r.offset,text:'page '+r.offset,nextOffset:r.offset+1}),ask:async()=>++i<70?JSON.stringify({knowledgeRequests:[{type:'read',id:'a',offset:i}]}):'{"actions":[]}'});assert.equal(i,70);
+});
+
+test('oversized text remains readable through an explicit context cursor instead of being dropped forever',async()=>{
+ let turn=0;const content='start '+('large source '.repeat(3000))+' end';
+ await K.continuePlan('{"knowledgeRequests":[{"type":"read","id":"large"}]}',{evidenceChars:4000,execute:async()=>({id:'large',offset:0,text:content,totalChars:content.length,nextOffset:null}),ask:async text=>{turn++;assert.match(text,/contextTruncated/);assert.match(text,/start/);assert.match(text,/nextOffset":\d+/);return '{"actions":[]}';}});assert.equal(turn,1);
+});

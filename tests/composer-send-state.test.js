@@ -177,3 +177,43 @@ test('an explicit API conversation with no model fails without silently selectin
  const h=harness();h.c.ConversationModels.configuration=()=>({provider:'api',model:'',effort:''});h.state.conversations[0].modelConfig={provider:'api',model:'',effort:''};
  await h.send();assert.equal(h.requests.length,0);assert.equal(h.state.agentRuns[0].status,'failed');assert.match(h.state.agentRuns[0].error,/模型名称/);assert.equal(h.state.tasks.length,0);
 });
+
+test('explicit reminder skips retrieval and sends compact context without changing model effort',async()=>{
+ const h=harness({request:async request=>{const data=JSON.parse(request.input.split('本轮输入（JSON 数据）：')[1]);return JSON.stringify({workspace:'日常',message:'已处理',actions:[{type:'create_task',...data.reminder,workspace:'日常',projectId:null}]});}});
+ const routing=require('../app/agent-routing');h.c.AgentRouting=h.c.window.AgentRouting=routing;
+ const c=h.state.conversations[0];c.projectId=null;c.workspace='日常';c.attachments=[];c.draftAttachmentIds=[];
+ let retrieved=0;h.c.window.VectorKnowledge={retrieve:async()=>{retrieved++;return{text:'UNRELATED_EVIDENCE',entries:[],coverage:{}}}};h.c.VectorKnowledge=h.c.window.VectorKnowledge;
+ await h.send({goal:'明天下午两点提醒我买牛奶'});
+ assert.equal(retrieved,0);assert.equal(h.requests.length,1);assert.ok(h.requests[0].input.length<1800);assert.ok(!h.requests[0].input.includes('UNRELATED_EVIDENCE'));
+ const run=h.state.agentRuns.at(-1);assert.equal(run.contextRoute.mode,'reminder');assert.equal(run.status,'completed');assert.ok(run.timings.requestCharacters<run.timings.fullContextCharacters);
+});
+test('compact request escalates to retrieved full context before executing any plan',async()=>{
+ let calls=0;const h=harness({request:async request=>{calls++;if(calls===1)return JSON.stringify({needsFullContext:true,actions:[]});assert.ok(request.input.includes('NEEDED_EVIDENCE'));return JSON.stringify({workspace:'日常',message:'有依据的答复',actions:[]});}});
+ const routing=require('../app/agent-routing');h.c.AgentRouting=h.c.window.AgentRouting=routing;
+ const c=h.state.conversations[0];c.projectId=null;c.workspace='日常';c.attachments=[];c.draftAttachmentIds=[];
+ let retrieved=0;h.c.VectorKnowledge=h.c.window.VectorKnowledge={retrieve:async()=>{retrieved++;return{text:'NEEDED_EVIDENCE',entries:[],coverage:{strategy:'fixture'}}}};
+ await h.send({goal:'明天下午两点提醒我买牛奶'});
+ assert.equal(retrieved,1);assert.equal(calls,2);assert.equal(h.state.agentRuns.at(-1).contextRoute.escalated,true);assert.equal(h.state.agentRuns.at(-1).status,'completed');
+});
+
+function onDemandHarness(options={}){
+ const h=harness(options);for(const [key,file] of [['AgentContext','agent-context'],['ContextWindow','context-window'],['KnowledgeAccess','knowledge-access'],['ToolScheduler','tool-scheduler']])h.c[key]=h.c.window[key]=require('../app/'+file);
+ h.c.saveDocumentDurably=async()=>{};h.c.window.VectorKnowledge={retrieve:async()=>{throw Error('Unexpected eager retrieval');},searchRequest:async()=>null};
+ const c=h.state.conversations[0];c.attachments=[];c.draftAttachmentIds=[];return h;
+}
+test('ordinary conversation does not search or send universal operation schemas',async()=>{
+ const h=onDemandHarness();await h.send({goal:'你好，今天想聊聊学习方法'});
+ const r=h.state.agentRuns.at(-1);assert.equal(r.status,'completed',r.error);assert.equal(h.requests.length,1);assert.equal(r.contextRoute.policy,'on-demand');assert.doesNotMatch(h.requests[0].input,/rename_attachment\(attachmentId|Office 本机文件|retainedCharacters/);assert.equal(r.retrievalCoverage.strategy,'not-requested');
+});
+test('mixed course search and reminder loads capabilities and evidence before a final action',async()=>{
+ let call=0;const h=onDemandHarness({request:async req=>{
+  if(++call===1)return JSON.stringify({knowledgeRequests:[{type:'search',query:'机器学习作业截止'},{type:'capabilities',name:'tasks'}],actions:[]});
+  assert.match(req.input,/Friday 17:00/);assert.match(req.input,/create_task\(title/);
+  return JSON.stringify({workspace:'课程',message:'依据课程要求准备提醒',actions:[{type:'create_task',title:'提交机器学习作业',dueAt:'2026-09-25T17:00:00+08:00',reminderMinutes:30,workspace:'课程',projectId:'p'}]});
+ }});h.state.notes.push({id:'assignment',projectId:'p',workspace:'课程',title:'机器学习作业截止',content:'Friday 17:00'});
+ await h.send({goal:'找到机器学习作业要求，并按截止时间提前半小时提醒我'});const r=h.state.agentRuns.at(-1);assert.equal(r.status,'completed',r.error);assert.equal(call,2);assert.equal(r.toolCalls.length,2);assert.equal(r.toolCalls.find(x=>x.type==='capabilities').request.name,'tasks');assert.equal(r.knowledgeSearches.length,1);
+});
+test('unloaded mutations are rechecked against real schemas before any execution',async()=>{
+ let calls=0;const h=onDemandHarness({request:async()=>{calls++;return JSON.stringify({workspace:'课程',message:'准备创建',actions:[{type:'create_task',title:'synthetic',projectId:'p',workspace:'课程'}]});}});
+ await h.send({goal:'帮我安排一个学习任务'});const r=h.state.agentRuns.at(-1);assert.equal(r.status,'completed',r.error);assert.equal(calls,2);assert.equal(r.toolCalls[0].request.name,'tasks');assert.ok(r.contextMetrics.loadedCapabilities.includes('tasks'));
+});

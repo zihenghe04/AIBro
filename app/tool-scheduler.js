@@ -1,13 +1,13 @@
 /* One durable ledger for read tools, provider tools and controlled commands. */
 (function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;else root.ToolScheduler=api;})(globalThis,root=>{
   'use strict';
-  const reads=new Set(['task_list','list','search','neighbors','read','read_page','read_file','wiki_list','memory_read','delegate']);
+  const reads=new Set(['task_list','list','search','neighbors','read','read_page','read_file','wiki_list','memory_read','delegate','capabilities','history_search','history_read','library_overview','evidence_log']);
   const pending=new Set(['queued','running','awaiting-approval']);
   const clone=x=>JSON.parse(JSON.stringify(x));
   const cancelled=()=>Object.assign(Error('已停止工具执行'),{code:'CANCELLED'});
-  const label=type=>({task_list:'任务目录',list:'资料目录',search:'检索',neighbors:'相邻证据',read:'读取正文',read_page:'读取原件',read_file:'工作区文件',wiki_list:'Wiki 目录',memory_read:'项目记忆',delegate:'子代理',terminal:'终端',web_read:'网页读取',web_search:'网页搜索'})[type]||type;
+  const label=type=>({evidence_log:'读取账本',library_overview:'资料概览',capabilities:'操作说明',history_search:'搜索对话',history_read:'读取对话',task_list:'任务目录',list:'资料目录',search:'检索',neighbors:'相邻证据',read:'读取正文',read_page:'读取原件',read_file:'工作区文件',wiki_list:'Wiki 目录',memory_read:'项目记忆',delegate:'子代理',terminal:'终端',web_read:'网页读取',web_search:'网页搜索'})[type]||type;
   function safeRequest(request){
-    const out={};for(const key of ['type','id','recordType','query','offset','page','refKey','variant','chunkId','version','radius','argv','cwd','timeout','task','title','url'])if(request[key]!==undefined)out[key]=clone(request[key]);
+    const out={};for(const key of ['type','id','recordType','query','offset','page','refKey','variant','chunkId','version','radius','argv','cwd','timeout','task','title','url','name','messageId','maxTokens','runId'])if(request[key]!==undefined)out[key]=clone(request[key]);
     return out;
   }
   function resultSnapshot(value){

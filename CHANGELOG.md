@@ -1,3 +1,26 @@
+## 0.7.3 — 2026-09-17
+
+### 对话上下文与按需检索
+
+- 对话先提供空间、项目和资料类型的轻量概览；不再默认检索并塞入 20 段知识库正文。
+- Agent 可自行选择不检索，或分批搜索、改写查询、读取原文、相邻片段和 PDF 页面；保留已有 embedding，继续使用向量与 BM25 混合检索。
+- 搜索按单次上下文预算分页，取消默认的累计读取轮数上限；通过来源分散排序减少长文档的连续片段占满前排结果。
+- 操作规则按需加载；“查课程要求并设置提醒”可以先取得证据再生成操作，保留现有来源、权限和范围校验。
+- 长对话支持带原消息来源的增量摘要、历史搜索和分页原文读取；完整对话保留，过时摘要会失效。
+- 读取过程保留工作摘要和完整账本，移出上下文的证据可以再次读取；重复请求仍会检测并停止无进展循环。
+- 界面区分等待模型响应、模型思考和接收结果，不再将网络等待全部显示为思考。
+
+### 日程
+
+- 可直接从对话生成单次或重复日程提案，例如每周四 14:30 的组会，并保留会议号。
+- 日程在原生编辑器确认后保存；未指定结束时间时明确显示默认 1 小时时长供调整。
+
+### English
+
+- On-demand knowledge retrieval with a compact library map, existing hybrid embeddings/BM25 search, budgeted pagination and no default productive-read round limit.
+- Progressive loading of operation schemas, recoverable conversation history, source-validated compaction checkpoints and durable read ledgers.
+- Direct conversational recurring-event proposals, reviewed and saved in the native calendar.
+
 ## 0.7.2 — 2026-09-16
 
 - Mac 总览「今天与接下来」和日常、课程、科研的任务列表支持直接点击左侧圆圈完成任务；点击任务文字仍打开详情。

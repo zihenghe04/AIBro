@@ -18,9 +18,12 @@
     if(dimensions!==null&&(!Number.isSafeInteger(dimensions)||dimensions<1))throw Error('向量维度必须为正整数或留空');
     return {base:url.href,model,dimensions,enabled:value.enabled===true,autoUpdate:value.autoUpdate===true,noKey:value.noKey===true};
   }
+  const hashes=new Map();
   async function hash(text) {
+    if(hashes.has(text))return hashes.get(text);
     const bytes=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
-    return [...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('');
+    const value=[...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('');
+    hashes.set(text,value);if(hashes.size>4096)hashes.delete(hashes.keys().next().value);return value;
   }
   const profile=cfg=>hash(JSON.stringify([cfg.base,cfg.model,cfg.dimensions,'chunks-v2-headings']));
   const content=e=>`${e.title || ''}\n${e.heading || ''}\n${e.text || ''}`.trim();
@@ -107,8 +110,10 @@
       const now=new Map((await snapshot(getState(),{...scope,query})).map(e=>[e.id,e.hash]));
       const original=new Map(items.map(e=>[e.id,e.hash]));check(signal);
       const ranked=[...fused.values()].filter(e=>now.has(e.id)&&now.get(e.id)===original.get(e.id)).sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id));
-      const entries=ranked.slice(offset,offset+20).map(({input,hash,similarity,...e})=>e);
-      return {entries,coverage:{...lexical.coverage,strategy:'hybrid-rrf',semanticStatus,vectorReady:eligible.length,vectorTotal:items.length,totalChunks:ranked.length,returnedChunks:entries.length,returnedRecords:new Set(entries.map(e=>`${e.type}:${e.recordId}`)).size,offset,nextOffset:offset+entries.length<ranked.length?offset+entries.length:null}};
+      const Window=typeof module==='object'&&module.exports?require('./context-window'):globalThis.ContextWindow;
+      const page=Window&&scope.maxTokens!==undefined?Window.page(Window.diversify(ranked.map(({input,hash,similarity,...e})=>e)),{offset,maxTokens:scope.maxTokens}):null;
+      const entries=(page?page.entries:ranked.slice(offset,offset+20)).map(({input,hash,similarity,...e})=>e);
+      return {entries,coverage:{...lexical.coverage,strategy:'hybrid-rrf',semanticStatus,vectorReady:eligible.length,vectorTotal:items.length,totalChunks:ranked.length,returnedChunks:entries.length,returnedRecords:new Set(entries.map(e=>`${e.type}:${e.recordId}`)).size,offset,nextOffset:offset+entries.length<ranked.length?offset+entries.length:null,...(page?{estimatedTokens:page.estimatedTokens,tokenBudget:page.tokenBudget}: {})}};
     }
     return {status,update,search};
   }
