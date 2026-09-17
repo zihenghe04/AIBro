@@ -25,7 +25,7 @@ function harness() {
     return elements.get(selector);
   };
   const context = vm.createContext({
-    state, $, Date, Number, uid: prefix => `${prefix}-${++sequence}`,
+    window: {}, state, $, Date, Number, uid: prefix => `${prefix}-${++sequence}`,
     currentConversation: () => state.conversations.find(item => item.id === state.currentConversationId),
     workspaceName: value => ['课程', '科研'].includes(value) ? value : '日常',
     save: () => calls.push(['save']), renderAll: () => calls.push(['render']),
@@ -46,7 +46,7 @@ function harness() {
     state.conversations.push(conversation);
     return conversation;
   };
-  return { state, calls, $, add, continue: context.continueProjectConversation };
+  return { state, calls, $, add, create: context.newConversation, continue: context.continueProjectConversation };
 }
 
 test('continue opens the latest active conversation in the exact project without copying its content', () => {
@@ -135,4 +135,26 @@ test('recency uses createdAt when updatedAt is missing or invalid, with determin
   h.continue('a'); assert.equal(h.state.currentConversationId, 'zero-update');
   h.add('iso-date', { updatedAt: '2026-09-12T12:00:00Z' });
   h.continue('a'); assert.equal(h.state.currentConversationId, 'iso-date');
+});
+
+
+test('ten new-conversation clicks reuse a blank conversation; messages and drafts are preserved', () => {
+  const h = harness();
+  for(let i=0;i<10;i++) h.create();
+  assert.equal(h.state.conversations.length,1);
+  h.$('#agentInput').value='unsent draft';h.create();
+  assert.equal(h.state.conversations.length,2);
+  assert.equal(h.state.conversations[0].draft,'unsent draft');
+  const blank=h.state.conversations[1];blank.messages.push({role:'user',text:'sent'});h.create();
+  assert.equal(h.state.conversations.length,3);
+  for(let i=0;i<10;i++)h.create();
+  assert.equal(h.state.conversations.length,3);
+});
+test('new conversations never reuse attachments, references, archived records or a different scope', () => {
+  for(const fields of [{attachments:['pdf']},{draftAttachmentIds:['pending']},{draftFileReferences:[{type:'note',id:'n'}]},{archived:true},{skillId:'paper'},{title:'named draft'}]) {
+    const h=harness();Object.assign(h.state.conversations[0],fields);h.create();
+    assert.equal(h.state.conversations.length,2,JSON.stringify(fields));
+  }
+  const h=harness();h.create('课程','a');h.create('科研','b');h.create('课程','a');
+  assert.equal(h.state.conversations.length,3);assert.equal(h.state.conversations.find(c=>c.id===h.state.currentConversationId).projectId,'a');
 });

@@ -1,5 +1,18 @@
 // Only loaded by AIBRO_NATIVE_QA_CONTEXT in an isolated native workspace.
 const check=(value,message)=>{if(!value)throw Error(message);};
+// Exercise real new-conversation entry points and durable preferences.
+ConversationModels.remember(state,{provider:'openai-auth',model:'synthetic-account-model',effort:'high'});
+newConversation();
+const blankId=state.currentConversationId,blankCount=state.conversations.length;
+for(let click=0;click<10;click++) $('#newTask').click();
+check(state.currentConversationId===blankId && state.conversations.length===blankCount,'Repeated clicks reuse blank chat');
+check(currentConversation().modelConfig.provider==='openai-auth' && currentConversation().modelConfig.effort==='high','New chat inherits complete selection');
+$('#agentInput').value='QA unsent draft';newConversation();
+check(state.conversations.find(c=>c.id===blankId).draft==='QA unsent draft','Existing draft preserved');
+check(state.currentConversationId!==blankId,'Draft gets a separate new conversation');
+await saveDocumentDurably();
+const savedPreferences=await(await fetch('/__state')).json();
+check(ConversationModels.forNewConversation(savedPreferences,{}).model==='synthetic-account-model','Preference persists to real backend');
 const vectorProfile='a'.repeat(64),vectorStore=workstationDesktop.vectorIndex;
 check(!!vectorStore,'Native vector persistence bridge available');
 await vectorStore.write(vectorProfile,[{id:'qa-vector',hash:'b'.repeat(64),vector:[1,0.5],updatedAt:1234}],[]);
@@ -22,4 +35,4 @@ const recurring=state.agentRuns.at(-1);check(recurring.status==='completed','Rec
 await saveDocumentDurably();renderConversation();
 const button=document.querySelector('[data-agenda-proposal]');check(button&&!button.disabled,'Real review button available');button.click();
 AgentTransport.requestPlan=original;VectorKnowledge.searchRequest=search;
-return {...report,nativeVectorStore:true,recurring:{requests:sent.length,characters:sent[0].length,proposalId:recurring.agendaProposals[0].id},workspaceData:'synthetic only'};
+return {...report,blankConversationReuse:true,durableModelPreference:true,nativeVectorStore:true,recurring:{requests:sent.length,characters:sent[0].length,proposalId:recurring.agendaProposals[0].id},workspaceData:'synthetic only'};

@@ -49,7 +49,7 @@
   function reusable(item, url) {
     return active(item) && item.status !== 'parse-error' && (item.fileStored || String(item.content || '').trim()) && [item.url, item.finalUrl].some(value => sourceURL(value) === url);
   }
-  async function acquire({ goal, imports = [], attachments = [], signal, fetch: fetcher, assertActive = () => {}, onSource = () => {}, stage = () => {}, permissionMode, confirmRead, onTool = () => {} }) {
+  async function acquire({ goal, imports = [], attachments = [], signal, fetch: fetcher, assertActive = () => {}, onSource = () => {}, stage = () => {}, permissionMode, confirmRead, onTool = () => {}, onFailure }) {
     const urls = links(goal);
     const check = () => { if (signal?.aborted) throw cancelled(); assertActive(); };
     check();
@@ -70,11 +70,11 @@
       if (item) stage(`复用已保存的资料：${item.name}`, 'done');
       else {
         stage(`正在读取 ${url}`);
-        const response = await fetcher('/__fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, native: true }), signal });
+        const response = await fetcher('/__fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, native: true }), signal }).catch(error => { if (error instanceof TypeError) error.recoverableRead = true; throw error; });
         const parsed = await response.json().catch(() => ({})); check();
-        if (!response.ok) throw new Error(`链接读取失败：${url}\n${parsed.error || `HTTP ${response.status}`}。可直接重试；已保存的资料会复用。`);
+        if (!response.ok) throw Object.assign(new Error(`链接读取失败：${url}\n${parsed.error || `HTTP ${response.status}`}`), { code: parsed.code || 'WEB_READ_FAILED', recoverableRead: true });
         if (!parsed.id || !(parsed.fileStored || parsed.storedLocally)) throw new Error('网页原件尚未保存，请重启更新后的工作站再重试。');
-        if (parsed.mimeType !== 'application/pdf' && !/^image\//.test(parsed.mimeType || '') && !String(parsed.content || '').trim()) throw new Error(`链接没有可读取的正文：${url}。未将空白内容作为分析来源。`);
+        if (parsed.mimeType !== 'application/pdf' && !/^image\//.test(parsed.mimeType || '') && !String(parsed.content || '').trim()) throw Object.assign(new Error(`链接没有可读取的正文：${url}。未将空白内容作为分析来源。`), { code: 'EMPTY_CONTENT', recoverableRead: true });
         const now = Date.now();
         item = { id: parsed.id, name: parsed.name || url, originalName: parsed.name || url,
           url, finalUrl: parsed.finalUrl || parsed.url || url, mimeType: parsed.mimeType || 'text/html',
@@ -91,7 +91,14 @@
       if (!items.some(entry => entry.id === item.id)) items.push(item);
       if (created) stage(`已保存原件：${item.name}`, 'done');
       onTool({...activity,status:'completed',text:item.name||url});
-      }catch(error){onTool({...activity,status:error.code==='CANCELLED'||signal?.aborted?'cancelled':'failed',text:error.message});throw error;}
+      }catch(error){
+        onTool({...activity,status:error.code==='CANCELLED'||signal?.aborted?'cancelled':'failed',text:error.message});
+        check();
+        if (onFailure && error.recoverableRead && error.code !== 'CANCELLED') {
+          await onFailure({url,code:error.code || 'NETWORK_ERROR',error:error.message});
+          stage('此链接暂未读取，将继续处理本条消息中的其他内容', 'done');
+        } else throw error;
+      }
     }
     return items;
   }

@@ -262,3 +262,14 @@ test('recurring format fallback preserves current agenda schema before reconsult
  await h.send({goal:'每周四下午两点半参加组会'});const r=h.state.agentRuns.at(-1);
  assert.equal(r.status,'completed',r.error);assert.equal(calls,2);assert.equal(r.contextRoute.escalated,true);assert.deepEqual(Array.from(r.contextMetrics.loadedCapabilities),['agenda']);assert.equal(r.agendaProposals.length,1);assert.equal(r.knowledgeSearches?.length||0,0);
 });
+
+
+test('unreadable link reaches model as explicit missing evidence without failing the whole turn',async()=>{
+ const h=harness({web:true,fetch:async()=>({ok:false,status:422,json:async()=>({error:'document unavailable',code:'DOCUMENT_UNAVAILABLE'})})});
+ h.state.conversations[0].attachments=[];h.state.conversations[0].draftAttachmentIds=[];
+ await h.send({goal:'读取 https://demo.example/notes 并告诉我读取状态'});
+ const run=h.state.agentRuns.at(-1);
+ assert.equal(run.status,'completed',run.error);assert.equal(run.webReadFailures.length,1);
+ assert.match(h.requests[0].input,/DOCUMENT_UNAVAILABLE/);assert.match(h.requests[0].input,/正文未读取/);
+ assert.equal(run.attachmentIds.length,0);
+});

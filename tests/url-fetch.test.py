@@ -126,6 +126,25 @@ class PublicDownloadTests(unittest.TestCase):
             with self.subTest(code=code), self.assertRaises(fetcher.PublicFetchError) as caught: self.fetch(responses)
             self.assertEqual(caught.exception.code, code)
 
+    def test_guest_cookie_allows_return_to_same_url_without_cross_site_leak(self):
+        result, calls = self.fetch([
+            Response(status=302, headers={'Location': '/paper.pdf', 'Set-Cookie': 'guest=synthetic; Path=/; Secure; HttpOnly'}),
+            Response(status=302, headers={'Location': 'https://other.example/document'}),
+            Response(),
+        ])
+        self.assertEqual(calls[1][0][-1], 'guest=synthetic')
+        self.assertEqual(len(calls[2][0]), 6, 'No cookie forwarded to unrelated origin')
+        self.assertEqual(result['raw'], PDF)
+        _, fresh = self.fetch([Response()])
+        self.assertEqual(len(fresh[0][0]), 6, 'No cookies retained between downloads')
+
+    def test_host_only_guest_cookie_is_not_sent_to_subdomain(self):
+        _, calls = self.fetch([
+            Response(status=302, headers={'Location': 'https://sub.example.com/document', 'Set-Cookie': 'guest=synthetic; Path=/; Secure'}),
+            Response(),
+        ])
+        self.assertEqual(len(calls[1][0]), 6)
+
     def test_exact_byte_limit_succeeds_and_both_declared_and_streamed_oversize_reject(self):
         result, _ = self.fetch([Response()], max_bytes=len(PDF)); self.assertEqual(result['raw'], PDF)
         for headers in ({'Content-Type': 'application/pdf', 'Content-Length': str(len(PDF))}, {'Content-Type': 'application/pdf'}):
@@ -159,6 +178,23 @@ class PublicDownloadTests(unittest.TestCase):
         response = Response(body=b'original', headers={'Content-Type':'text/plain\r\n X-Injected: true', 'Content-Disposition':'attachment; filename="../../secret.txt"'})
         result, _ = self.fetch([response], url='https://example.com/download')
         self.assertEqual(result['name'], 'secret.txt'); self.assertEqual(result['mimeType'], 'application/octet-stream')
+
+
+class MindnoteTests(unittest.TestCase):
+    def test_embedded_json_keeps_hierarchy_without_executing_script(self):
+        payload = {'code': 0, 'data': {'title': '模拟课程', 'collab_client_vars': {'nodes': [
+            {'text': [{'text': '第一章'}], 'children': [{'text': [{'text': '向量'}, {'text': '空间'}], 'images': ['mock-image']}]}]}}}
+        source = '<script>window.DATA = { clientVars: Object(' + json.dumps(payload) + '), meta: Object({}) }; throw new Error("never execute");</script>'
+        result = fetcher.extract_feishu_mindnote(source, 'https://demo.feishu.cn/mindnotes/Mock')
+        self.assertEqual(result['content'], '模拟课程\n- 第一章\n  - 向量空间')
+        self.assertIn('1 张图片', result['warning'])
+        self.assertIsNone(fetcher.extract_feishu_mindnote(source, 'https://feishu.cn.evil.example/mindnotes/Mock'))
+
+    def test_login_shell_denied_and_malformed_data_never_count_as_document_content(self):
+        for source in ['<title>Log in</title>', 'window.DATA = {clientVars: Object({"code":403})}', 'window.DATA = {clientVars: Object(notJSON)}']:
+            with self.assertRaises(fetcher.PublicFetchError) as error:
+                fetcher.extract_feishu_mindnote(source, 'https://demo.feishu.cn/mindnotes/Mock')
+            self.assertEqual(error.exception.code, 'DOCUMENT_UNAVAILABLE')
 
 
 class FetchHTTPTests(unittest.TestCase):

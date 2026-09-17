@@ -78,3 +78,16 @@ test('a saved web image is passed as a native attachment without requiring text 
  const items=await Web.acquire({goal:'请分析 https://example.org/diagram.png',fetch:async()=>({ok:true,json:async()=>({id:'image',name:'diagram.png',mimeType:'image/png',fileStored:true,size:12})})});
  assert.equal(items[0].mimeType,'image/png');assert.equal(items[0].status,'original-only');assert.equal(items[0].analysis.status,'pending');
 });
+
+
+test('recoverable unreadable links are reported and remaining sources still acquire without inventing content',async()=>{
+  const failures=[],saved=[];let n=0;
+  const items=await Web.acquire({goal:'https://a.example/ https://b.example/',fetch:async()=>++n===1?{ok:false,json:async()=>({error:'permission required',code:'DOCUMENT_UNAVAILABLE'})}:response('b'),onFailure:f=>failures.push(f),onSource:s=>saved.push(s)});
+  assert.equal(failures.length,1);assert.equal(failures[0].code,'DOCUMENT_UNAVAILABLE');assert.equal(items.length,1);assert.equal(saved.length,1);assert.equal(items[0].id,'b');
+});
+test('cancellation and persistence failures remain fatal even with graceful web-read handling',async()=>{
+  const controller=new AbortController();let failures=0;
+  await assert.rejects(Web.acquire({goal:'https://a.example/',signal:controller.signal,fetch:async()=>{controller.abort();return response();},onFailure:()=>failures++}));
+  await assert.rejects(Web.acquire({goal:'https://a.example/',fetch:async()=>response(),onSource:()=>{throw new TypeError('disk failure');},onFailure:()=>failures++}),/disk failure/);
+  assert.equal(failures,0);
+});

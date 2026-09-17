@@ -1,7 +1,11 @@
 """Bounded public HTTP downloads with DNS pinning and per-redirect validation."""
 import email.message
 import http.client
+import http.cookiejar
+import urllib.request
+from types import SimpleNamespace
 import ipaddress
+import json
 import mimetypes
 from pathlib import PurePosixPath
 import re
@@ -101,12 +105,14 @@ class _PinnedConnection(http.client.HTTPConnection):
         raise last_error or OSError('No usable public address')
 
 
-def _open(url, host, port, addresses, timeout, user_agent):
+def _open(url, host, port, addresses, timeout, user_agent, cookie=None):
     parsed = urllib.parse.urlsplit(url)
     connection = _PinnedConnection(host, port, addresses, timeout, parsed.scheme == 'https')
     try:
+        headers = {'User-Agent': user_agent, 'Accept': 'application/pdf,text/html,text/plain,*/*;q=0.8', 'Accept-Encoding': 'identity'}
+        if cookie: headers['Cookie'] = cookie
         connection.request('GET', urllib.parse.urlunsplit(('', '', parsed.path, parsed.query, '')),
-                           headers={'User-Agent': user_agent, 'Accept': 'application/pdf,text/html,text/plain,*/*;q=0.8', 'Accept-Encoding': 'identity'})
+                           headers=headers)
         return connection, connection.getresponse()
     except Exception:
         connection.close()
@@ -154,19 +160,28 @@ def fetch_public_url(url, *, max_bytes=MAX_BYTES, timeout=45, total_timeout=180,
         raise ValueError('Invalid download byte limit')
     original, _, _ = _url(url)
     current, visited = original, set()
+    # Anonymous cookies live only for this download. Never borrow browser login.
+    jar = http.cookiejar.CookieJar(policy=http.cookiejar.DefaultCookiePolicy(
+        strict_ns_domain=http.cookiejar.DefaultCookiePolicy.DomainStrictNonDomain))
     deadline = time.monotonic() + total_timeout
     for hop in range(MAX_REDIRECTS + 1):
         current, host, port = _url(current)
-        if current in visited:
+        cookie_request = urllib.request.Request(current)
+        jar.add_cookie_header(cookie_request)
+        cookie = cookie_request.get_header('Cookie')
+        visit = (current, cookie)
+        if visit in visited:
             raise PublicFetchError('网页发生循环重定向。', 'REDIRECT_LOOP', 502)
-        visited.add(current)
+        visited.add(visit)
         addresses = _resolve(host, port)
         connection = response = None
         try:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError()
-            connection, response = _open(current, host, port, addresses, min(timeout, remaining), user_agent)
+            args = (current, host, port, addresses, min(timeout, remaining), user_agent)
+            connection, response = _open(*args, cookie) if cookie else _open(*args)
+            jar.extract_cookies(SimpleNamespace(info=lambda: response.headers), cookie_request)
             if response.status in (301, 302, 303, 307, 308):
                 location = response.headers.get('Location')
                 if not location:
@@ -226,3 +241,41 @@ def fetch_public_url(url, *, max_bytes=MAX_BYTES, timeout=45, total_timeout=180,
                 response.close()
             if connection is not None:
                 connection.close()
+
+
+def extract_feishu_mindnote(source, url):
+    """Read public mindnote bootstrap JSON, without executing untrusted scripts."""
+    parsed = urllib.parse.urlsplit(url)
+    if not ((parsed.hostname or '').endswith(('.feishu.cn', '.larksuite.com'))
+            and re.fullmatch(r'/mindnotes/[A-Za-z0-9]+/?', parsed.path)):
+        return None
+    match = re.search(r'window\.DATA\s*=\s*\{\s*clientVars\s*:\s*Object\(\s*', source)
+    if not match:
+        raise PublicFetchError('飞书未返回可读取的思维笔记正文，请检查分享权限，或导出后添加。', 'DOCUMENT_UNAVAILABLE', 422)
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(source, match.end())
+        data = payload.get('data', {})
+        if payload.get('code') != 0 or data.get('code', 0) != 0 or data.get('permission_status_code', 0) != 0:
+            raise ValueError()
+        nodes = data.get('collab_client_vars', {}).get('nodes')
+        if not isinstance(nodes, list) or not nodes:
+            raise ValueError()
+        title = str(data.get('title') or '飞书思维笔记')
+        lines, images = [title], 0
+        stack = [(node, 0) for node in reversed(nodes)]
+        while stack:
+            node, depth = stack.pop()
+            if not isinstance(node, dict) or depth > 100:
+                raise ValueError()
+            runs = node.get('text', [])
+            text = ''.join(str(run.get('text', '')) for run in runs if isinstance(run, dict)) if isinstance(runs, list) else str(runs or '')
+            if text.strip(): lines.append('  ' * depth + '- ' + text.strip())
+            images += len(node.get('images') or [])
+            children = node.get('children', [])
+            if not isinstance(children, list): raise ValueError()
+            stack.extend((child, depth + 1) for child in reversed(children))
+        if len(lines) == 1: raise ValueError()
+        return {'name': title, 'content': '\n'.join(lines), 'parser': 'feishu-mindnote',
+                'warning': f'正文含 {images} 张图片；图片内容尚未提取。' if images else ''}
+    except (ValueError, TypeError, AttributeError, RecursionError):
+        raise PublicFetchError('飞书未提供可读取的思维笔记正文，请检查分享权限或导出文件。', 'DOCUMENT_UNAVAILABLE', 422) from None

@@ -235,3 +235,20 @@ test('stale model requests cannot overwrite catalogue from a more recently opene
   assert.equal(h.el('conversationAccountModel').options.some(option => option.value === 'account-default'), true);
   assert.equal(h.el('conversationAccountModel').options.some(option => option.value === 'stale-only'), false);
 });
+
+
+test('new conversation inherits latest used provider, model and effort across restart without changing old conversations', async () => {
+  const h=harness();await h.open();await h.provider('openai-auth');
+  h.el('conversationAccountModel').value='account-fast';await h.el('conversationAccountModel').fire('change');h.el('conversationEffort').value='medium';await h.submit();
+  const restored=JSON.parse(JSON.stringify(h.state));
+  assert.deepEqual(plain(h.api.forNewConversation(restored,h.defaults)),{provider:'openai-auth',model:'account-fast',effort:'medium'});
+  h.api.remember(restored,{provider:'api',model:'another',effort:'high'});
+  assert.equal(h.api.forNewConversation(restored,h.defaults).model,'another');
+  assert.equal(restored.conversations[0].modelConfig.model,'account-fast');
+  assert.equal(restored.conversations[1].modelConfig,undefined);
+});
+test('existing workspace migrates most recent used model instead of fixed connection defaults',()=>{
+  const h=harness();h.state.conversations[0].messages=[{at:10,modelConfig:{provider:'api',model:'old',effort:'low'}}];
+  h.state.conversations[1].messages=[{at:20,modelConfig:{provider:'openai-auth',model:'account-fast',effort:'medium'}}];
+  assert.equal(h.api.forNewConversation(h.state,h.defaults).model,'account-fast');
+});

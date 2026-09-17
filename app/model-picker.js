@@ -11,6 +11,22 @@
     const source = conversation?.modelConfig || defaults;
     return { provider: source.provider === 'openai-auth' ? 'openai-auth' : 'api', model: String(source.model || '').trim(), effort: source.effort && source.effort !== 'auto' ? String(source.effort) : '' };
   }
+  function remember(state, config) {
+    if (!state) return;
+    state.settings ||= {};
+    state.settings.recentConversationModel = configuration({ modelConfig: config });
+  }
+  function forNewConversation(state, defaults = {}) {
+    if (state?.settings?.recentConversationModel) return configuration({ modelConfig: state.settings.recentConversationModel });
+    // Migrate existing workspaces from their latest chosen/used configuration.
+    const candidates = (state?.conversations || []).flatMap(c => {
+      if (c.deleted || c.deletedAt) return [];
+      const result = (c.messages || []).filter(m => m.modelConfig).map(m => ({ config: m.modelConfig, at: Number(m.at) || 0 }));
+      if (c.modelConfig) result.push({ config: c.modelConfig, at: Number(c.updatedAt || c.createdAt) || 0 });
+      return result;
+    }).sort((a, b) => b.at - a.at);
+    return configuration(candidates.length ? { modelConfig: candidates[0].config } : null, defaults);
+  }
   function effortsFor(models, model) {
     const entry = model ? models.find(x => idOf(x) === model) : models.find(x => x.isDefault);
     return (entry?.supportedReasoningEfforts || []).map(x => typeof x === 'string' ? x : x.reasoningEffort).filter(x => typeof x === 'string' && x);
@@ -105,6 +121,7 @@
     if (value.provider === 'openai-auth' && (loading || modelError || (value.model && !models.some(x => idOf(x) === value.model)))) { hooks.toast?.('该模型当前不可用，请重新选择。'); return; }
     conversation.modelChoices = { ...drafts };
     setSelection(conversation, value);
+    remember(hooks.getState?.(), value);
     hooks.save?.(); $('modelPicker').close(); sync(); hooks.toast?.('当前对话的模型已更新');
   }
   function sync() {
@@ -147,10 +164,10 @@
       previousProvider = provider;
     });
     $('conversationAccountModel').addEventListener('change', () => paintEfforts($('conversationEffort').value));
-    $('resetModelSelection').addEventListener('click', () => { const conversation = target(); if (conversation) { delete conversation.modelConfig; hooks.save?.(); } $('modelPicker').close(); sync(); });
+    $('resetModelSelection').addEventListener('click', () => { const conversation = target(); if (conversation) { delete conversation.modelConfig; remember(hooks.getState?.(), defaults()); hooks.save?.(); } $('modelPicker').close(); sync(); });
     $('modelPickerSettings').addEventListener('click', () => { $('modelPicker').close(); hooks.openSettings?.(); });
     root.addEventListener('resize', position);
     sync();
   }
-  return { init, configuration, setSelection, effortsFor, describe, current, resolve, sync };
+  return { init, configuration, setSelection, remember, forNewConversation, effortsFor, describe, current, resolve, sync };
 });

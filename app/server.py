@@ -20,7 +20,7 @@ from project_jobs import ProjectJobs
 from sync_store import SyncStore, all_imports, DIGEST
 from sync_merge import merge_local_snapshot, MergeConflict
 from cloud_sync import CloudSync, CloudSyncError
-from public_url_fetch import PublicFetchError, fetch_public_url
+from public_url_fetch import PublicFetchError, fetch_public_url, extract_feishu_mindnote
 
 ASSET_DIR = Path(os.environ.get('AI_WORKSTATION_ASSET_DIR', Path(__file__).resolve().parent)).resolve()
 ASSET_MANIFEST = json.loads((ASSET_DIR / 'asset-manifest.json').read_text())
@@ -1103,7 +1103,11 @@ class Handler(SimpleHTTPRequestHandler):
                     text = '\n'.join(re.sub(r'\s+', ' ', line).strip() for line in text.splitlines() if line.strip())
                     if title: result['name'] = html.unescape(re.sub(r'<[^>]+>', '', title[1])).strip()[:180] or result['name']
                 else: text = source
-                result.update({'content': text[:60000], 'parser': 'web', 'truncated': len(text) > 60000})
+                mindnote = extract_feishu_mindnote(source, fetched['url']) if mime in ('text/html', 'application/xhtml+xml') else None
+                if mindnote:
+                    text = mindnote['content']
+                    result.update(mindnote)
+                result.update({'content': text[:60000], 'parser': 'feishu-mindnote' if mindnote else 'web', 'truncated': len(text) > 60000})
             # The original is independent of workspace records. The caller
             # commits this generated ID only after its own scope checks pass.
             identifier = 'att_' + secrets.token_hex(16)
