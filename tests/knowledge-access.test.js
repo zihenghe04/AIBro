@@ -23,7 +23,7 @@ test('multi-page evidence and PDF images survive later read and search turns',as
 
 test('alternating reads and rebatched default-equivalent requests execute once and stop without progress',async()=>{
  const plan=r=>JSON.stringify({knowledgeRequests:r,actions:[]});let calls=0,turn=0,notifications=0;
- const cycles=[[{type:'search',query:'a'}],[{type:'read',id:'n'}],[{id:'n',offset:0,recordType:'note',variant:'current',type:'read'},{offset:0,type:'list',query:'ignored'}],[{query:'a',offset:0,type:'search'}]];
+ const cycles=[[{type:'search',query:'a'}],[{type:'read',id:'n'}],[{id:'n',offset:0,recordType:'note',variant:'current',type:'read'},{offset:0,type:'list',query:'   '}],[{query:'a',offset:0,type:'search'}]];
  await assert.rejects(K.continuePlan(plan([{type:'list'}]),{execute:async()=>{calls++;return {text:'saved',nextOffset:null}},onResult:()=>notifications++,ask:async text=>{
   if(turn===3)assert.match(text,/已复用结果/);
   return plan(cycles[turn++]);

@@ -1,5 +1,5 @@
 /* Durable project context. Generated execution facts and proposed decisions stay distinct. */
-(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ProjectMemory=api;})(globalThis,()=>{
+(function(root,factory){const api=factory(typeof module==='object'&&module.exports?require('./context-retrieval'):root.ContextRetrieval);if(typeof module==='object'&&module.exports)module.exports=api;else root.ProjectMemory=api;})(globalThis,Retrieval=>{
  'use strict';
  const active=x=>x&&!x.archived&&!x.deletedAt&&!x.wikiFileError;
  const list=x=>Array.isArray(x)?x:[];
@@ -69,12 +69,23 @@
   }
   const plan=refreshPlan(state,project.id);if(plan)changed.push(plan);return changed;
  }
- function context(state,projectId,{offset=0,limit=16000}={}){
-  if(!member(state,projectId))return {text:'',entries:[],nextOffset:null};
-  const notes=list(state.notes).filter(n=>active(n)&&n.projectId===projectId&&n.projectMemoryType).sort((a,b)=>(a.projectMemoryType==='long'?-1:b.projectMemoryType==='long'?1:0)||Number(b.updatedAt||0)-Number(a.updatedAt||0));
-  const all=notes.map(n=>`[note:${n.id}] ${n.title}\n${n.content}`).join('\n\n');
+ const activityNotice='项目日记包含用户提问、执行记录及人工补充，不等于原始材料中的事实；核对结论时应读取对应原文。';
+ function context(state,projectId,{offset=0,limit=16000,purpose='explicit',scope={projectId}}={}){
   if(!Number.isSafeInteger(offset)||offset<0)throw Error('无效记忆分页位置');
-  return {text:all.slice(offset,offset+limit),entries:notes.map(n=>({id:n.id,title:n.title,type:n.projectMemoryType,pendingDraft:!!n.aiDraft})),offset,totalChars:all.length,nextOffset:offset+limit<all.length?offset+limit:null};
+  if(!Number.isSafeInteger(limit)||limit<1)throw Error('无效记忆分页长度');
+  if(!['automatic','explicit'].includes(purpose))throw Error('无效记忆读取用途');
+  const empty=()=>({purpose,text:'',entries:[],offset,totalChars:0,nextOffset:null});
+  // The same current read boundary governs ordinary sources and project
+  // memory. Filtering raw notes here would bypass private owners/tombstones.
+  if(!projectId||!Retrieval?.readableRecords||!Retrieval.readScopeCurrent(state,scope))return empty();
+  const notes=Retrieval.readableRecords(state,{...scope,query:'',allowedTaskIds:[]})
+   .filter(({type,record:n})=>type==='note'&&n.projectId===projectId&&n.projectMemoryType&&(purpose==='explicit'||['long','plan'].includes(n.projectMemoryType)))
+   .map(({record})=>record).sort((a,b)=>(a.projectMemoryType==='long'?-1:b.projectMemoryType==='long'?1:0)||Number(b.updatedAt||0)-Number(a.updatedAt||0));
+  // An outstanding aiDraft does not invalidate the approved content beside
+  // it. Never substitute that draft, nor strip user-written daily paragraphs.
+  const all=notes.map(n=>`[note:${n.id}] ${n.title}${n.projectMemoryType==='daily'?'\n'+activityNotice:''}\n${n.content}`).join('\n\n');
+  return {purpose,text:all.slice(offset,offset+limit),entries:notes.map(n=>({id:n.id,title:n.title,type:n.projectMemoryType,projectMemoryType:n.projectMemoryType,pendingDraft:!!n.aiDraft})),
+   ...(notes.some(n=>n.projectMemoryType==='daily')?{evidenceNotice:activityNotice}:{}),offset,totalChars:all.length,nextOffset:offset+limit<all.length?offset+limit:null};
  }
- return {id,find,ensure,context,settle,validateUpdates,refreshPlan};
+ return {id,find,ensure,context,settle,validateUpdates,refreshPlan,activityNotice};
 });

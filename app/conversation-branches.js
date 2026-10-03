@@ -9,8 +9,9 @@
   //
   // 结构上刻意保持 conversation.messages 是**当前活动路径**的线性数组——渲染、上下文组装、
   // 压缩、审阅全部照旧；被换下去或分出去的路径存放在 conversation.branches 里。
-  // 这样"树"是可见、可切换的，但不会把整条链路改成图遍历。
+  // 新存档保留分叉前的完整历史。旧版尾段仅在原始前缀可验证时恢复，不猜测来源。
   const MAIN = 'main';
+  const FULL = 'full-v1';
 
   function branchList(conversation) {
     const list = conversation && Array.isArray(conversation.branches) ? conversation.branches : [];
@@ -30,21 +31,85 @@
   function activeMeta(conversation) {
     const meta = conversation && conversation.activeBranch;
     if (meta && typeof meta.id === 'string' && meta.id.trim()) {
-      return { id: meta.id, fromMessageId: meta.fromMessageId ?? null, createdAt: meta.createdAt || (conversation.createdAt || 0) };
+      return { id: meta.id, fromMessageId: meta.fromMessageId ?? null, createdAt: meta.createdAt || (conversation.createdAt || 0),
+        ...(meta.historyFormat !== undefined ? { historyFormat: meta.historyFormat } : {}) };
     }
     return { id: currentId(conversation), fromMessageId: null, createdAt: (conversation && conversation.createdAt) || 0 };
   }
 
-  // 从某条消息处另起分支：该消息之后的内容整体存为分支，当前路径在此截断。
+  // Old branches stored only the messages after their fork point. Rebuild a
+  // complete path only when an ancestor in this same conversation proves its
+  // exact prefix. Different possible prefixes, missing anchors, duplicate IDs,
+  // cycles, or unknown history formats fail without mutating any saved data.
+  function historyResolver(conversation) {
+    const active = { ...activeMeta(conversation), messages: conversation?.messages || [] };
+    const nodes = [active, ...branchList(conversation).filter(item => item.id !== active.id)];
+    const cache = new Map();
+    const validMessages = messages => Array.isArray(messages) && messages.every(item => item && typeof item.id === 'string' && item.id)
+      && new Set(messages.map(item => item.id)).size === messages.length;
+    const exact = (left, right) => {
+      if (left.length !== right.length) return false;
+      try { return left.every((message, index) => message.id === right[index].id && JSON.stringify(message) === JSON.stringify(right[index])); }
+      catch { return false; }
+    };
+    function resolve(node, visiting = new Set()) {
+      if (cache.has(node)) return cache.get(node);
+      if (!validMessages(node.messages)) return { error: 'history-invalid' };
+      if (node.historyFormat !== undefined && node.historyFormat !== FULL) return { error: 'history-unsupported' };
+      if (node.historyFormat === FULL || (node.id === MAIN && node.fromMessageId == null)) {
+        const result = { messages: node.messages.slice() }; cache.set(node, result); return result;
+      }
+      if (visiting.has(node) || typeof node.fromMessageId !== 'string' || !node.fromMessageId) return { error: 'history-missing' };
+      const next = new Set(visiting); next.add(node);
+      let prefix = null;
+      for (const candidate of nodes) {
+        if (candidate === node || !Array.isArray(candidate.messages) || !candidate.messages.some(item => item?.id === node.fromMessageId)) continue;
+        if (next.has(candidate)) return { error: 'history-missing' };
+        const parent = resolve(candidate, next);
+        if (parent.error) return parent;
+        const index = parent.messages.findIndex(item => item.id === node.fromMessageId);
+        const value = parent.messages.slice(0, index + 1);
+        if (prefix && !exact(prefix, value)) return { error: 'history-ambiguous' };
+        prefix = value;
+      }
+      if (!prefix) return { error: 'history-missing' };
+      const ownAnchor = node.messages.findIndex(item => item.id === node.fromMessageId);
+      // A previously parked full path must agree with its proven ancestor;
+      // never concatenate a guessed prefix over conflicting saved messages.
+      if (ownAnchor >= 0 && !exact(node.messages.slice(0, ownAnchor + 1), prefix)) return { error: 'history-ambiguous' };
+      const messages = ownAnchor >= 0 ? node.messages.slice() : prefix.concat(node.messages);
+      if (!validMessages(messages)) return { error: 'history-invalid' };
+      return { messages };
+    }
+    return {
+      active: () => resolve(active),
+      branch(id) {
+        const matches = nodes.filter(node => node !== active && node.id === id);
+        return matches.length === 1 ? resolve(matches[0]) : { error: matches.length ? 'history-ambiguous' : 'not-found' };
+      }
+    };
+  }
+
+  // 归档使用独立的可持久化快照，避免当前路径的重试附件/删除标记修改旧分支。
+  function copyHistory(messages) { return JSON.parse(JSON.stringify(messages)); }
+
+  // 从某条消息处另起分支：完整旧路径存为分支，当前路径在此截断。
   // 返回新值供调用方写回（本函数不改动入参）。
   function fork(conversation, messageId, id, now) {
-    const messages = Array.isArray(conversation && conversation.messages) ? conversation.messages : [];
-    const index = messages.findIndex(item => item && item.id === messageId);
+    const resolved = historyResolver(conversation).active();
+    if (resolved.error) return resolved;
+    const messages = resolved.messages;
+    if (messages.some(item => item.live)) return { error: 'running' };
+    if (!id || id === currentId(conversation) || branchList(conversation).some(branch => branch.id === id)) return { error: 'duplicate-branch' };
+    const index = messages.findIndex(item => item && item.id === messageId && !item.deletedAt);
     if (index < 0) return { error: 'not-found' };
     const tail = messages.slice(index + 1);
     if (!tail.length) return { error: 'empty' };
-    const branch = { id, fromMessageId: messageId, messages: tail, createdAt: now, at: now };
-    return { keep: messages.slice(0, index + 1), branch, activeBranch: activeMeta(conversation) };
+    let saved;
+    try { saved = copyHistory(messages); } catch { return { error: 'history-invalid' }; }
+    const branch = { id, fromMessageId: messageId, messages: saved, historyFormat: FULL, createdAt: now, at: now };
+    return { keep: messages.slice(0, index + 1), branch, afterCount: tail.length,
+      activeBranch: { ...activeMeta(conversation), historyFormat: FULL } };
   }
 
   // 切换路径：当前路径（连同它的来源元数据）存回 branches，目标分支的元数据被搬到 activeBranch。
@@ -55,11 +120,19 @@
     if (!targetId || targetId === active.id) return { error: 'same' };
     const target = list.find(item => item.id === targetId);
     if (!target) return { error: 'not-found' };
-    const parked = { id: active.id, fromMessageId: active.fromMessageId, createdAt: active.createdAt, messages: (conversation && conversation.messages) || [], at: now };
+    const resolver = historyResolver(conversation), sourceHistory = resolver.active(), targetHistory = resolver.branch(targetId);
+    if (sourceHistory.error) return sourceHistory;
+    if (targetHistory.error) return targetHistory;
+    if (sourceHistory.messages.some(item => item.live) || targetHistory.messages.some(item => item.live)) return { error: 'running' };
+    let source, destination;
+    try { source = copyHistory(sourceHistory.messages); destination = copyHistory(targetHistory.messages); }
+    catch { return { error: 'history-invalid' }; }
+    const parked = { id: active.id, fromMessageId: active.fromMessageId, createdAt: active.createdAt,
+      messages: source, historyFormat: FULL, at: now };
     return {
       activeBranchId: target.id,
-      activeBranch: { id: target.id, fromMessageId: target.fromMessageId ?? null, createdAt: target.createdAt || now },
-      messages: target.messages,
+      activeBranch: { id: target.id, fromMessageId: target.fromMessageId ?? null, createdAt: target.createdAt || now, historyFormat: FULL },
+      messages: destination,
       branches: [...list.filter(item => item.id !== target.id), parked]
     };
   }
@@ -74,11 +147,13 @@
     return text.length > 24 ? `${text.slice(0, 24)}…` : text;
   }
 
-  // 分支标题：优先用该分支的首条用户消息（人写的，最能说明这条分支在做什么），
+  // 分支标题：优先用分叉后首条用户消息（避免每条路径都显示相同的公共开头），
   // 没有就用首条消息；都没有就如实说"空分支"，不编造内容。
   function label(branch) {
     const messages = Array.isArray(branch && branch.messages) ? branch.messages : [];
-    const first = messages.find(item => item && item.role === 'user') || messages[0];
+    const anchor = branch?.fromMessageId && messages.findIndex(item => item?.id === branch.fromMessageId);
+    const own = typeof anchor === 'number' && anchor >= 0 ? messages.slice(anchor + 1) : messages;
+    const first = own.find(item => item && item.role === 'user') || own[0];
     const text = snapshot(first);
     return text || '空分支';
   }

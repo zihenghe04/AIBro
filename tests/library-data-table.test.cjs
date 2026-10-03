@@ -160,6 +160,25 @@ test('LibraryDataTable forwards exact button anchors, typed action keys, explici
   assert.equal(calls.length, 6, 'Busy guard also protects direct invocation');
 });
 
+test('source names expose a distinct named button without folding the folder into its accessible action', async () => {
+  const { patchHalaskaDataTable } = await patchModule, h = tableHarness(patchHalaskaDataTable(raw));
+  const row = { ...sourceRows()[1], title: '换乘等待的主观成本 · <演示研究札记>.pdf', folder: '原始资料/演示' };
+  for (const [language, label] of [['zh-CN', `打开资料：${row.title}`], ['en', `Open source: ${row.title}`]]) {
+    const { LibraryDataTable, TableAction } = libraryHarness(h.DataTable, language, { useRef: () => ({ current: null }), useLayoutEffect() {} });
+    const table = LibraryDataTable({ rows: [row], projectScoped: true, onOpen() {} }).props.children;
+    const action = table.props.getRowCells(row)[0], nativeAction = TableAction(action.props).props.children;
+    assert.equal(nativeAction.props.type, 'button', 'Native button supplies Tab, Enter and Space activation without custom key handlers');
+    assert.equal(nativeAction.props['aria-label'], label);
+    assert.equal(nativeAction.props.title, row.title);
+    assert.equal(nativeAction.props.disabled, false);
+    assert.equal(byType(action, 'span').find(node => node.props.className === 'library-data-name').props['aria-hidden'], 'true', 'Only the explicitly labelled action is exposed, not duplicate filename/folder descendants');
+    const html = renderToStaticMarkup(React.createElement(LibraryDataTable, { rows: [row], projectScoped: true, onOpen() {} }));
+    assert.match(html, /<button[^>]*aria-label="(?:打开资料：|Open source: )换乘等待的主观成本 · &lt;演示研究札记&gt;\.pdf"/);
+    assert.match(html, /<small>原始资料\/演示<\/small>/, 'Folder and full name remain visible');
+    assert.doesNotMatch(html, /aria-label="[^"\n]*原始资料\/演示/);
+  }
+});
+
 test('selection adapter sets the actual mixed property and action selectors belong to the Kit button', async () => {
   const refs = [], effects = [], calls = [];
   const button = { attrs: {}, setAttribute(name, value) { this.attrs[name] = value; } };

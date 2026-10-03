@@ -27,6 +27,9 @@ from local_document_drafts import LocalDocumentDraftStore
 from document_media import DocumentMedia, MediaError, MAX_UPLOAD_BODY as MAX_IMAGE_UPLOAD_BODY
 from local_document_media import LocalDocumentMedia
 from public_url_fetch import PublicFetchError, fetch_public_url, extract_feishu_mindnote
+import bookmark_fetch
+import bookmark_metadata
+from external_notifications import ExternalNotifications, handle_request as handle_external_notifications
 
 ASSET_DIR = Path(os.environ.get('AI_WORKSTATION_ASSET_DIR', Path(__file__).resolve().parent)).resolve()
 ASSET_MANIFEST = json.loads((ASSET_DIR / 'asset-manifest.json').read_text())
@@ -59,6 +62,8 @@ MAX_PDF_SEARCH_MATCHES = 200
 MAX_PDF_SEARCH_RECTS = 256
 MAX_PDF_SEARCH_RESPONSE_BYTES = 1024 * 1024
 MAX_PDF_READ_TEXT_CHARS = 12000
+MAX_PDF_INDEX_BATCH_CHARS = 100000
+MAX_PDF_INDEX_BATCH_PAGES = 10
 PDF_PREVIEW_LOCK = threading.Lock()
 
 class PDFResponseCache:
@@ -1014,6 +1019,9 @@ class WorkspaceStore:
             return result
 
 SERVICE_INSTANCE = secrets.token_hex(16)
+EXTERNAL_NOTIFICATIONS = ExternalNotifications(
+    os.environ.get('AI_WORKSTATION_NOTIFICATION_DIR'),
+    os.environ.get('AI_WORKSTATION_NATIVE_NOTIFICATION_TOKEN', ''))
 STORE = WorkspaceStore(DATA_DIR)
 COMPARISON_DRAFTS = ComparisonDraftStore(DATA_DIR, STORE.load)
 NOTE_DRAFTS = NoteDraftStore(DATA_DIR, STORE.load)
@@ -1286,6 +1294,13 @@ class Handler(SimpleHTTPRequestHandler):
             if not re.fullmatch(r'[0-9]{1,8}', page_value): raise ValueError('页码必须是从 1 开始的整数')
             page_number = int(page_value)
             text_offset = 0
+            expected_source = parameter('source', '') if read_text else ''
+            batch_value = parameter('batch', '0') if read_text else '0'
+            if batch_value not in ('0', '1'):
+                self.send_json({'error': 'PDF 批量读取参数无效', 'code': 'INVALID_BATCH'}, 400); return
+            index_batch = batch_value == '1'
+            if expected_source and not re.fullmatch(r'[0-9a-f]{64}', expected_source):
+                self.send_json({'error': 'PDF 原件版本参数无效', 'code': 'INVALID_SOURCE_VERSION'}, 400); return
             if read_text:
                 offset_value = parameter('offset', '0')
                 if not re.fullmatch(r'[0-9]{1,16}', offset_value) or int(offset_value) > 9007199254740991:
@@ -1321,6 +1336,29 @@ class Handler(SimpleHTTPRequestHandler):
                         raise ValueError('PDF 页面尺寸无效')
                     if info:
                         return json_response({'pageCount': document.page_count, 'width': width, 'height': height})
+                    if read_text and index_batch:
+                        parts, remaining = [], MAX_PDF_INDEX_BATCH_CHARS
+                        next_page, next_offset = page_number, text_offset
+                        while next_page <= document.page_count and len(parts) < MAX_PDF_INDEX_BATCH_PAGES and remaining > 0:
+                            source_page = document.load_page(next_page - 1)
+                            content = source_page.get_text('text', sort=True, flags=fitz.TEXTFLAGS_TEXT & ~fitz.TEXT_PRESERVE_IMAGES)
+                            total_chars = len(content)
+                            if next_offset > total_chars: raise ValueError('文字游标超过本页文字长度')
+                            chunk = content[next_offset:next_offset + remaining]
+                            end = next_offset + len(chunk)
+                            continuation = end if end < total_chars else None
+                            parts.append({'page': next_page, 'offset': next_offset, 'text': chunk,
+                                          'totalChars': total_chars, 'nextOffset': continuation})
+                            remaining -= len(chunk)
+                            if continuation is not None:
+                                next_offset = continuation; break
+                            next_page += 1; next_offset = 0
+                        complete = next_page > document.page_count
+                        return json_response({'parts': parts, 'pageCount': document.page_count,
+                                              'nextPage': None if complete else next_page,
+                                              'nextOffset': None if complete else next_offset,
+                                              'sourceHash': source_digest.hex(), 'readMode': 'extracted_text',
+                                              'imagesIncluded': False, 'cursorUnit': 'unicode_codepoints'})
                     if read_text:
                         # Text-only evidence has no selection-geometry restriction:
                         # rotated/vertical text must not disappear with its overlay.
@@ -1334,7 +1372,8 @@ class Handler(SimpleHTTPRequestHandler):
                         result = {'page': page_number, 'pageCount': document.page_count, 'offset': text_offset,
                                   'text': chunk, 'totalChars': total_chars, 'nextOffset': end if end < total_chars else None,
                                   'originalRead': True, 'readMode': 'extracted_text', 'imagesIncluded': False,
-                                  'textAvailable': available, 'cursorUnit': 'unicode_codepoints'}
+                                  'textAvailable': available, 'cursorUnit': 'unicode_codepoints',
+                                  'sourceHash': source_digest.hex()}
                         if not available:
                             result.update(code='PDF_TEXT_UNAVAILABLE', warning='本页没有可提取的文字，可能是扫描页或空白页；尚未读取图像，也未执行 OCR。')
                         return json_response(result)
@@ -1373,10 +1412,13 @@ class Handler(SimpleHTTPRequestHandler):
                     if metadata.st_size > MAX_FILE: raise ValueError('单个附件不能超过 64 MB')
                     source_bytes = original.read(MAX_FILE + 1)
                     if len(source_bytes) > MAX_FILE: raise ValueError('单个附件不能超过 64 MB')
+                source_digest = hashlib.sha256(source_bytes).digest()
+                if expected_source and source_digest.hex() != expected_source:
+                    self.send_json({'error': 'PDF 原件已变化，请重新建立文字索引。', 'code': 'PDF_SOURCE_CHANGED'}, 409); return
                 # Hash actual securely opened bytes on every request. Stat-only
                 # keys miss same-inode/same-size changes with restored mtime.
                 action = 'info' if info else 'read-text' if read_text else 'search' if search else 'text' if text else 'image'
-                key = (hashlib.sha256(source_bytes).digest(), action, page_number, scale, fit, image_format, search_query, text_offset)
+                key = (source_digest, action, page_number, scale, fit, image_format, search_query, text_offset, index_batch)
                 cached = PDF_RESPONSE_CACHE.get(key)
                 if cached is None:
                     response_status, content_type, body = render_response(source_bytes)
@@ -1407,13 +1449,41 @@ class Handler(SimpleHTTPRequestHandler):
                 detail = '文件可能损坏或尚未完整下载，请重新添加完整的 PDF 原件'
             action = '无法读取 PDF 文字' if read_text else '无法查找 PDF' if search else '无法预览 PDF'
             self.send_json({'error': f'{action}：{detail}'}, 400)
+    def do_bookmark_metadata(self):
+        if not self.valid_auth_origin(mutation=True):
+            self.send_json({'error': '仅允许当前工作站获取网站信息。', 'code': 'INVALID_ORIGIN'}, 403); return
+        acquired = bookmark_fetch.FETCH_LOCK.acquire(blocking=False)
+        if not acquired:
+            self.send_json({'error': '另一项链接读取尚未结束，请稍后重试。', 'code': 'BOOKMARK_BUSY'}, 409); return
+        try:
+            request = json.loads(self.read_body(32768) or b'{}')
+            self.send_json(bookmark_metadata.receive(STORE, request))
+        except PublicFetchError as error:
+            self.send_json({'error': str(error), 'code': error.code}, error.status)
+        except (ValueError, TypeError):
+            self.send_json({'error': '网站信息请求格式无效。', 'code': 'INVALID_REQUEST'}, 400)
+        except Exception:
+            self.send_json({'error': '网站信息暂时不可用，已保存资料未改动。', 'code': 'METADATA_FAILED'}, 503)
+        finally:
+            bookmark_fetch.FETCH_LOCK.release()
+
     def do_fetch(self):
         if not self.valid_auth_origin(mutation=True):
             self.send_json({'error': '仅允许当前工作站下载链接资料。', 'code': 'INVALID_ORIGIN'}, 403); return
+        bookmark_locked = False
         try:
             request = json.loads(self.read_body(32768) or b'{}')
             if not isinstance(request, dict) or ('native' in request and not isinstance(request['native'], bool)):
                 raise PublicFetchError('链接请求格式无效。', 'INVALID_REQUEST', 400)
+            bookmark_before = None
+            if 'bookmark' in request:
+                bookmark_locked = bookmark_fetch.FETCH_LOCK.acquire(blocking=False)
+                if not bookmark_locked:
+                    raise PublicFetchError('另一项链接读取尚未结束，请稍后重试。', 'BOOKMARK_BUSY', 409)
+                with STORE.lock():
+                    bookmark_before, cached = bookmark_fetch.prepare(STORE, request)
+                if cached is not None:
+                    self.send_json(cached); return
             fetched = fetch_public_url(request.get('url'), max_bytes=MAX_FILE, user_agent='AI-Workstation/' + VERSION)
             raw, mime = fetched['raw'], fetched['mimeType']
             result = {key: fetched[key] for key in ('name', 'url', 'finalUrl', 'mimeType', 'size')}
@@ -1450,6 +1520,12 @@ class Handler(SimpleHTTPRequestHandler):
                     text = mindnote['content']
                     result.update(mindnote)
                 result.update({'content': text[:60000], 'parser': 'feishu-mindnote' if mindnote else 'web', 'truncated': len(text) > 60000})
+            if bookmark_before is not None:
+                if (mime.startswith('text/') or mime in ('application/xhtml+xml', 'application/json', 'application/xml')) and not result['content'].strip():
+                    raise PublicFetchError('网页没有可读取的正文，收藏已保留；可稍后重试或打开原网页。', 'EMPTY_CONTENT', 422)
+                with STORE.lock():
+                    result = bookmark_fetch.commit(STORE, request, bookmark_before, raw, result)
+                self.send_json(result); return
             # The original is independent of workspace records. The caller
             # commits this generated ID only after its own scope checks pass.
             identifier = 'att_' + secrets.token_hex(16)
@@ -1466,6 +1542,9 @@ class Handler(SimpleHTTPRequestHandler):
         except (ValueError, TypeError): self.send_json({'error': '链接请求格式无效。', 'code': 'INVALID_REQUEST'}, 400)
         except (BrokenPipeError, ConnectionResetError): pass
         except Exception: self.send_json({'error': '链接读取未完成，请稍后重试。', 'code': 'FETCH_FAILED'}, 502)
+        finally:
+            if bookmark_locked:
+                bookmark_fetch.FETCH_LOCK.release()
     def do_paper(self, paper_id, action):
         try:
             state = STORE.load(); paper = next((p for p in state.get('papers', []) if p.get('id') == paper_id), None)
@@ -1523,15 +1602,23 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             data, text, pages, warning = self.read_body(MAX_FILE), '', [], ''
             if suffix == '.pdf':
-                executable = shutil.which('pdftotext', path=os.environ.get('PATH', '') + ':/opt/homebrew/bin:/usr/local/bin')
-                if not executable: warning = '未安装 PDF 文本解析器；原始 PDF 已保留，可预览或交给支持文件的模型读取。'
-                else:
-                    with tempfile.NamedTemporaryFile(suffix='.pdf') as handle:
-                        handle.write(data); handle.flush(); parsed = subprocess.run([executable, '-layout', handle.name, '-'], capture_output=True, text=True, timeout=60)
-                    if parsed.returncode: warning = 'PDF 可能已加密或无法提取文本；原始文件仍然保留。'
-                    else:
-                        chunks = parsed.stdout.split('\f'); pages = [{'page': index + 1, 'text': chunk.strip()[:12000]} for index, chunk in enumerate(chunks) if chunk.strip()]; text = '\n\n'.join(f"[第 {p['page']} 页]\n{p['text']}" for p in pages)
-                        if not text.strip(): warning = '这是扫描版 PDF，需要支持视觉的模型读取。'
+                # The desktop bundle already includes MuPDF. Never depend on a
+                # separately installed command-line parser for searchable text.
+                import fitz
+                with PDF_PREVIEW_LOCK, fitz.open(stream=data, filetype='pdf') as document:
+                    if document.needs_pass:
+                        self.send_json({'error': 'PDF 已加密，需先解密原件。', 'code': 'PDF_PASSWORD_REQUIRED'}, 422); return
+                    if not document.permissions & fitz.PDF_PERM_COPY:
+                        self.send_json({'error': '此 PDF 的权限禁止复制文字，可继续查看原图。', 'code': 'PDF_COPY_RESTRICTED'}, 403); return
+                    pages = [{'page': index + 1, 'text': page.get_text('text', sort=True, flags=fitz.TEXTFLAGS_TEXT & ~fitz.TEXT_PRESERVE_IMAGES)} for index, page in enumerate(document)]
+                    page_count = document.page_count
+                text = '\n\n'.join(f"[第 {page['page']} 页]\n{page['text']}" for page in pages if page['text'].strip())
+                if not text.strip(): warning = '没有可提取的文字，可能是扫描页或空白页；未执行 OCR。'
+                # This compatibility upload endpoint returns the complete text.
+                # Durable background jobs use read-text page/cursor pagination.
+                self.send_json({'name': name, 'content': text, 'pages': pages, 'pageCount': page_count,
+                                'parser': 'pymupdf-local', 'warning': warning, 'truncated': False,
+                                'sourceHash': hashlib.sha256(data).hexdigest(), 'textExtractionComplete': True}); return
             elif suffix in ('.docx', '.pptx', '.xlsx'):
                 import io
                 with ZipFile(io.BytesIO(data)) as archive:
@@ -1728,6 +1815,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({'error': '本机文档草稿存储不可用；请保留当前编辑内容。', 'code': 'draft_write_failed'}, 503)
 
     def do_GET(self):
+        if handle_external_notifications(self, EXTERNAL_NOTIFICATIONS): return
         path = urllib.parse.urlsplit(self.path).path
         if path == '/__health': self.send_json({'app': 'ai-workstation', 'version': VERSION, 'assetFingerprint': ASSET_FINGERPRINT, 'port': self.server.server_port, 'instanceId': SERVICE_INSTANCE})
         elif path == '/__comparison-draft': self.do_comparison_draft()
@@ -1763,6 +1851,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path in STATIC_PATHS: self.serve_asset(path)
         else: self.send_error(404)
     def do_POST(self):
+        if handle_external_notifications(self, EXTERNAL_NOTIFICATIONS): return
         auth_path = urllib.parse.urlsplit(self.path).path
         if auth_path == '/__comparison-draft': self.do_comparison_draft(); return
         if auth_path == '/__note-draft': self.do_note_draft(); return
@@ -1814,6 +1903,7 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as exc: self.send_json({'error': str(exc)}, 400)
         elif path == '/__parse': self.do_parse()
         elif path == '/__fetch': self.do_fetch()
+        elif path == '/__bookmark-metadata': self.do_bookmark_metadata()
         elif path.startswith('/__papers/'):
             parts = path.split('/'); self.do_paper(urllib.parse.unquote(parts[2]) if len(parts) > 2 else '', parts[3] if len(parts) > 3 else '')
         elif path.startswith('/__files/'):
@@ -1856,4 +1946,6 @@ if __name__ == '__main__':
         threading.Thread(target=owner_lifetime,daemon=True).start()
     print(f'AI Workstation {VERSION}: http://127.0.0.1:{PORT}', flush=True)
     try: http_server.serve_forever()
-    finally: http_server.server_close()
+    finally:
+        EXTERNAL_NOTIFICATIONS.close()
+        http_server.server_close()

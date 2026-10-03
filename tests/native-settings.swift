@@ -52,6 +52,9 @@ func nativeUI(_ chinese:String,_ english:String)->String{english}
     var navigationReturnSpaceContent=false
     var glassHost:TestHost?
     let web=TestWeb(),browser=TestBrowser()
+    // Diagnostics are an observed host side effect; never write production files.
+    var navigationDiagnostics:[String]=[]
+    func recordQuickNavigation(_ stage:String,reason:String?=nil,error:Error?=nil,accepted:Bool?=nil){navigationDiagnostics.append(stage)}
     // PRODUCTION_METHODS
 }
 

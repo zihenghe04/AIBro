@@ -1,3 +1,4 @@
+const installConversationPathHost = require('./helpers/conversation-path-host.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -15,6 +16,11 @@ function executionContext() {
   let next=0; const toasts=[];
   const c=vm.createContext({structuredClone,state:empty(),Core,AttachmentContext,AttachmentDelivery,AttachmentAnalysis,window:{AttachmentAnalysis},workspaceName:v=>v==='科研'||v==='课程'?v:'日常',uid:prefix=>`${prefix}-${++next}`,normalizeStateShape:()=>{},addRunStep:()=>{},save:()=>{},renderAll:()=>{},toasts,toast:message=>toasts.push(String(message))});
   vm.runInContext(cut('function activeResultRecord(', '\nfunction conversationProjectIds(') + cut('function dedupeResultEntries(', '\nfunction groupedEntities(') + cut('function commitAttachmentAnalysis(', '\nfunction executeActions(')+cut('function executeActions(', '\nfunction fallbackWorkflow(')+cut('function actionsNeedApproval(', '\nfunction actionSummary('),c);
+  installConversationPathHost(c);
+  c.window.TaskWorkflow = require('../app/task-workflow');
+  c.window.ApprovalIntent = require('../app/approval-intent');
+  c.queueMicrotask = queueMicrotask;
+  c.KnowledgeAccess = c.window.KnowledgeAccess = require('../app/knowledge-access');
   installRunCheckpointHost(c);
   c.prepareApproval = () => {
     const controller = PlanReview.createController({ getState: () => c.state, getRun: id => c.state.agentRuns.find(run => run.id === id), contextForRun: run => c.approvalContext(run), applyPlan: Core.applyPlan, save: c.saveDocumentDurably, isBusy: () => !!c.approveRun.busy?.size });
@@ -89,7 +95,7 @@ test('local fallback preserves an explicitly bound project instead of resetting 
   assert.equal(c.state.tasks[0]?.projectId,'research');
 });
 
-test('changing the conversation scope during model preparation affects only the next turn retrieval', { timeout: 4000 }, async () => {
+test('captured context never retargets and scope changes cancel the final commit', { timeout: 4000 }, async () => {
   const c=executionContext(); const nodes=new Map();
   const node=key=>{if(!nodes.has(key)) nodes.set(key,{value:'',textContent:'',disabled:false,scrollHeight:0,scrollTop:0,clientHeight:0,classList:{remove(){},add(){}},setAttribute(){},querySelector(){return null},appendChild(){},firstElementChild:{}});return nodes.get(key);};
   c.state.projects.push({id:'another-project',name:'另一项目',workspace:'日常'});
@@ -105,9 +111,13 @@ test('changing the conversation scope during model preparation affects only the 
   const sending=c.sendMessage();const run=c.state.agentRuns[0];
   c.state.conversations[0].projectId='another-project';c.state.conversations[0].workspace='日常';
   ready({provider:'api',model:'fixture-model',effort:''});await sending;
-  assert.equal(run.status,'completed',run.error);
+  assert.equal(run.status,'cancelled',run.error); assert.equal(run.errorCode,'CANCELLED');
   assert.equal(recalledScope.projectId,'research');assert.equal(recalledScope.workspace,'科研');
   assert.match(requestText,/FROZEN_CONTEXT/);
+  assert.equal(run.executionReceipt,undefined); assert.equal(c.state.tasks.length,0);
+  assert.equal(c.state.conversations[0].projectId,'another-project'); assert.equal(c.state.conversations[0].workspace,'日常');
+  const response=c.state.conversations[0].messages.find(message=>message.runId===run.id);
+  assert.equal(response.runStatus,'cancelled'); assert.equal(response.live,false); assert.notEqual(response.text,'Read only result');
 });
 
 test('legacy content and new links use their owning project policy when workspace metadata is missing', () => {

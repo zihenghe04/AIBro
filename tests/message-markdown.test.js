@@ -118,3 +118,43 @@ test('new table and task rendering still escapes hostile HTML and keeps literal 
     assert.doesNotMatch(renderNote(markdown, 'note-1'), /type="checkbox"/, markdown);
   }
 });
+
+test('list indentation produces actual nested ownership while ordered starts and siblings stay intact',()=>{
+ const markdown='- Course\n  - Read the paper\n    3. Compare methods\n    4. Save evidence\n  - Write a note\n- Research\n\n7. First step\n   - Supporting point\n8. Next step';
+ assert.equal(render(markdown),'<ul><li>Course<ul><li>Read the paper<ol start="3"><li>Compare methods</li><li>Save evidence</li></ol></li><li>Write a note</li></ul></li><li>Research</li></ul><ol start="7"><li>First step<ul><li>Supporting point</li></ul></li><li>Next step</li></ol>');
+});
+
+test('read-only checklists retain citations and nested blocks without putting a list inside a label',()=>{
+ const html=render('- [ ] Read **source** [[cite:ev1]]\n  continuation\n  - nested source\n- [x] Already done\n\n3. [ ] Ordered check\n4. Regular item');
+ assert.match(html,/<label><input type="checkbox" disabled> Read <strong>source<\/strong> \[\[cite:ev1\]\]<br>continuation<\/label><ul><li>nested source/);
+ assert.match(html,/<ol start="3"><li class="markdown-task-item">/);
+ assert.match(html,/<li>Regular item<\/li>/);
+ assert.equal((html.match(/type="checkbox" disabled/g)||[]).length,3);
+ assert.doesNotMatch(html,/<label>(?:(?!<\/label>)[\s\S])*<(?:ul|ol|blockquote|pre)>|onchange|contenteditable|data-task-id/);
+});
+
+test('folded source quotes keep paragraphs, nested lists, nested quotes and code boundaries',()=>{
+ const html=render('> A long **source**\n> wraps without a new paragraph.\n>\n> The next paragraph [[cite:ev2]].\n> - first\n> - second\n>\n> > nested source\n\nOutside');
+ assert.equal(html,'<blockquote><p>A long <strong>source</strong><br>wraps without a new paragraph.</p><p>The next paragraph [[cite:ev2]].</p><ul><li>first</li><li>second</li></ul><blockquote><p>nested source</p></blockquote></blockquote><p>Outside</p>');
+ const code=render('- Example\n  ```js\n  const n = 1;\n\n  // - [x] literal\n  ```\n- Next');
+ assert.match(code,/<li>Example<pre class="message-code">/);assert.match(code,/const n = 1;\n\n\/\/ - \[x\] literal/);
+ assert.doesNotMatch(code,/type="checkbox"/);assert.match(code,/<\/pre><\/li><li>Next<\/li>/);
+});
+
+test('deep block input remains bounded and hostile nested content stays escaped',()=>{
+ const deep='> '.repeat(80)+'<script>alert(1)</script>';
+ const html=render(deep);assert.doesNotMatch(html,/<script/);assert.match(html,/&lt;script&gt;/);
+ assert.ok((html.match(/<blockquote>/g)||[]).length<=25);assert.match(html,/&gt; &gt;/);
+ assert.doesNotMatch(render('- Parent\n  - <img src=x onerror=1>\n  > [run](javascript:alert(1))'),/<img|<a\b/);
+});
+
+
+test('checklist first-line block-looking text remains inline under its saved checkbox',()=>{
+ for(const text of ['# A title','- A dash','> A quote']){
+  const html=render('- [ ] '+text+'\n  - actual child');
+  assert.match(html,/<label><input type="checkbox" disabled>/);
+  assert.doesNotMatch(html,/<h1>|<blockquote>/);
+  assert.match(html,/<\/label><ul><li>actual child<\/li><\/ul>/);
+  assert.equal((html.match(/<ul>/g)||[]).length,2);
+ }
+});

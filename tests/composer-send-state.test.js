@@ -1,3 +1,4 @@
+const installConversationPathHost = require('./helpers/conversation-path-host.cjs');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -25,6 +26,11 @@ function harness(options={}){
  });
  node('#agentInput').value='分析课件';node('#apiBase').value='https://example.invalid/v1';node('#apiKey').value='fixture-key';
  vm.runInContext(cut('function activeResultRecord(', '\nfunction conversationProjectIds(') + cut('function dedupeResultEntries(', '\nfunction groupedEntities(') + cut('function commitAttachmentAnalysis(', '\nfunction executeActions(')+cut('function executeActions(', '\nfunction fallbackWorkflow(')+cut('function normalizeStateShape(', '\ntry { normalizeStateShape(')+cut('const currentAttachments =', '\nlet serverSaveInFlight')+cut('function assertRunActive(', '\nlet activeRunController')+cut('function apiOrigin(', '\nfunction renderSettings(')+cut('async function requestAgentPlan(', '\nasync function sendMessage(')+cut('async function sendMessage(', '\n\nfunction formatBytes('),c);
+  installConversationPathHost(c);
+  c.window.TaskWorkflow = require('../app/task-workflow');
+  c.window.ApprovalIntent = require('../app/approval-intent');
+  c.queueMicrotask = queueMicrotask;
+  c.KnowledgeAccess = c.window.KnowledgeAccess = require('../app/knowledge-access');
  const checkpoint = installRunCheckpointHost(c);
  c.normalizeStateShape(state);
  return{c,state,node,saved,deliveries,requests,toasts,checkpoint,send:options=>c.sendMessage(options),attachments:()=>vm.runInContext(cut('function activeResultRecord(', '\nfunction conversationProjectIds(') + cut('function dedupeResultEntries(', '\nfunction groupedEntities(') + 'currentAttachments().map(item=>item.id)',c)};

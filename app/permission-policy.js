@@ -11,7 +11,7 @@
   // executor, not an authorization to run shell commands or write arbitrary
   // local files. Newly introduced action types require an explicit review.
   const WORKSTATION_ACTIONS = new Set([
-    'set_workspace', 'create_project', 'rename_attachment', 'assign_attachment',
+    'set_workspace', 'create_project', 'rename_attachment', 'assign_attachment', 'assign_record',
     'create_knowledge_item', 'create_note', 'update_note', 'append_note', 'upsert_paper', 'upsert_wiki',
     'create_task', 'update_task', 'delete_task', 'delete_note', 'delete_attachment', 'add_tag',
     'create_link', 'link_items', 'link_local_project'
@@ -61,7 +61,7 @@
     if (enabled !== true) return false;
     if (routingReview) return false;          // 跨空间归属需要人的语义判断
     if (!Array.isArray(actions) || !actions.length) return false;
-    return actions.every(action => action && WORKSTATION_ACTIONS.has(action.type) && !destructive(action.type));
+    return actions.every(action => action && WORKSTATION_ACTIONS.has(action.type) && !destructive(action.type) && action.type !== 'assign_record');
   }
 
   // 会话级授权（「本会话允许」）：用户在审批卡上点过一次后，**同类型的**非破坏性
@@ -76,6 +76,7 @@
     return actions.every(action => action
       && WORKSTATION_ACTIONS.has(action.type)
       && !destructive(action.type)
+      && action.type !== 'assign_record'
       && Object.prototype.hasOwnProperty.call(allows, action.type));
   }
 
@@ -83,7 +84,7 @@
   function allowableTypes(actions = []) {
     if (!Array.isArray(actions)) return [];
     return [...new Set(actions
-      .filter(action => action && WORKSTATION_ACTIONS.has(action.type) && !destructive(action.type))
+      .filter(action => action && WORKSTATION_ACTIONS.has(action.type) && !destructive(action.type) && action.type !== 'assign_record')
       .map(action => action.type))];
   }
 

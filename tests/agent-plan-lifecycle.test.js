@@ -8,6 +8,8 @@ const KnowledgeAccess = require('../app/knowledge-access');
 const AttachmentContext = require('../app/attachment-context');
 const AttachmentDelivery = require('../app/attachment-delivery');
 const AttachmentAnalysis = require('../app/attachment-analysis');
+const ApprovalIntent = require('../app/approval-intent');
+const TaskWorkflow = require('../app/task-workflow');
 const RunOutcomePresentation = require('../app/run-outcome-presentation');
 
 const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
@@ -59,7 +61,9 @@ function harness(responses, options = {}) {
     Core, state, run, conversation, window: {}, AgentTransport: transport,
     activeRunController: controller, provider: 'api', base: 'https://fixture.invalid/v1',
     model: 'fixture-model', effort: 'medium', token: 'fixture-token', fileContext: {},
-    buildRequestInput, recoverInput: async () => null, onDelta() {}, onActivity() {}, onSources() {}, onUsage() {},
+    // This extracted closure has no ProjectMemory host; model memory/recovery
+    // behavior is exercised with the real host in project-memory-host.test.cjs.
+    buildRequestInput, projectMemoryContext: () => '', recoverInput: async () => null, onDelta() {}, onActivity() {}, onSources() {}, onUsage() {}, onReception() {}, onAttempt() {},
     setPhase: phase => stages.push(phase), stage: text => stages.push(text), workspaceName: value => value,
     uid: prefix => prefix + '-fixture',
   });
@@ -278,11 +282,11 @@ function sendHarness(responses) {
     currentConversationId: 'conversation', settings: {permissions: {'日常': 'auto'}}};
   const models = {configuration: () => ({provider: 'api', model: 'fixture-model', effort: 'medium'}), resolve: async value => value};
   const context = vm.createContext({structuredClone, state, Core, KnowledgeAccess, AttachmentContext, AttachmentDelivery, AttachmentAnalysis,
-    $: element, window: {ConversationModels: models, AttachmentAnalysis, KnowledgeAccess, RunOutcomePresentation, AgentTransport: Transport}, ConversationModels: models,
+    $: element, window: {ConversationModels: models, AttachmentAnalysis, ApprovalIntent, TaskWorkflow, KnowledgeAccess, RunOutcomePresentation, AgentTransport: Transport}, ConversationModels: models,
     localStorage: {getItem: () => ''}, document: {createElement: () => element('holder')}, AbortController, URL, setTimeout, clearTimeout,
     uid: prefix => prefix + '-' + ++serial, workspaceName: value => value || '日常', classifyWorkspace: () => '日常', currentConversation: () => state.conversations.find(item => item.id === state.currentConversationId),
     currentAttachments: () => [], projectIsActive: id => state.projects.some(project => project.id === id && !project.archived),
-    defaultModelConfiguration: () => ({provider: 'api', model: 'fixture-model', effort: 'medium'}), normalizeStateShape() {}, save() {}, renderAll() {}, renderConversation() {}, renderMessage() {}, toast: message => toasts.push(String(message)),
+    defaultModelConfiguration: () => ({provider: 'api', model: 'fixture-model', effort: 'medium'}), normalizeStateShape() {}, save() {}, renderAll() {}, renderConversation() {}, renderMessage() {}, renderRunStatus() {}, toast: message => toasts.push(String(message)),
     visiblePaper: () => true, visibleNote: () => true, actionSummary: () => '待批准的动作', addRunStep: (run, text, status) => run.steps.push({text, status}),
     AgentTransport: {requestPlan: async request => {
       calls.push(request); assert.equal(request.requirePlanProtocol, true);
@@ -318,6 +322,36 @@ test('actual send freezes PDF mode before async preparation; subsequent composer
   assert.equal(conversation.messages[0].pdfReadMode, 'text');
   assert.equal(conversation.pdfReadMode, 'original');
   assert.equal(h.run.attachmentDelivery.pdfReadMode, 'text');
+});
+
+test('actual send reads an explicitly named course from daily scope, including an original /plan request', async () => {
+  for (const prefix of ['', '/plan ']) {
+    const h=sendHarness([readPlan([{type:'read',recordType:'note',id:'course-note'}]), answer('依据课程第一讲原文，建议在观察记录后补充验证问题。')]);
+    h.state.projects.push({id:'course',name:'交互设计方法',workspace:'课程'});
+    h.state.notes.push({id:'course-note',title:'第一讲',content:'ACTUAL_CROSS_SPACE_SOURCE',projectId:'course',workspace:'课程'});
+    h.context.window.ContextRetrieval=h.context.ContextRetrieval=require('../app/context-retrieval');
+    h.context.window.ModeHint=require('../app/mode-hint');
+    h.context.$('#agentInput').value=prefix+'请读取课程项目“交互设计方法”中的第一讲。';
+    await h.send();
+    assert.equal(h.run.status,'completed');
+    assert.ok(h.run.noteContextIds.includes('course-note'));
+    assert.match(JSON.stringify(h.calls[1].input),/ACTUAL_CROSS_SPACE_SOURCE/);
+    assert.ok(h.run.steps.some(step=>step.text==='回复已保存'));
+    assert.ok(!h.run.steps.some(step=>step.text==='结果已确认保存'));
+    assert.ok(!Object.hasOwn(h.run,'readProjects'));
+  }
+});
+
+test('actual send cancels when its explicitly authorized target becomes private before tools run', async () => {
+  const h=sendHarness([()=>{h.state.projects[1].private=true;return readPlan([{type:'read',id:'course-note'}]);}]);
+  h.state.projects.push({id:'course',name:'交互设计方法',workspace:'课程'});
+  h.state.notes.push({id:'course-note',title:'第一讲',content:'PRIVATE_AFTER_DISPATCH',projectId:'course',workspace:'课程'});
+  h.context.window.ContextRetrieval=h.context.ContextRetrieval=require('../app/context-retrieval');
+  h.context.$('#agentInput').value='请读取课程项目“交互设计方法”中的第一讲。';
+  await h.send();
+  assert.notEqual(h.run.status,'completed');assert.equal(h.calls.length,1);
+  assert.ok(!h.run.noteContextIds.includes('course-note'));
+  assert.match(h.run.error,/明确指定的项目已变化或不可访问/);
 });
 
 for (const boundary of ['wiki', 'draft-command']) test(`actual foreground send retains both drafts when navigation happens during ${boundary} preparation`, async () => {
@@ -552,7 +586,7 @@ test('actual sendMessage treats repeated DSML as failed with no tool execution o
   const h = sendHarness([Transport.protocolError(dsml), Transport.protocolError(dsml)]);
   await h.send();
   assert.equal(h.run.status, 'failed', h.run.error);
-  assert.equal(h.run.errorCode, 'MODEL_PROTOCOL_ERROR');
+  assert.equal(h.run.errorCode, 'MODEL_PROTOCOL_ERROR', h.run.error);
   assert.equal(h.reply.runStatus, 'failed');
   assert.equal(h.calls.length, 2);
   assert.equal(h.commits, 0);
@@ -641,4 +675,115 @@ test('actual automatic host retries only persistence after effects were applied 
   assert.equal(h.state.tasks.length, 1); assert.equal(h.state.tasks[0].id, taskId);
   assert.equal(h.commits, 1); assert.equal(h.calls.length, 1);
   assert.deepEqual(h.checkpoint.snapshots.map(snapshot => snapshot.agentRuns[0].executionReceipt.phase), ['prepared', 'applied', 'applied']);
+});
+
+
+// Public stream callbacks are fixture I/O; sendMessage, tool execution ordering,
+// safe JSON projection and checkpoint persistence below are production code.
+function enableConversationFlow(h) {
+  for (const [name, file] of [['ConversationFlow','conversation-flow'],['ToolScheduler','tool-scheduler'],['ResearchDelegation','research-delegation']])
+    h.context[name] = h.context.window[name] = require('../app/' + file);
+}
+function flowReply(id, value, reasoning) {
+  return request => {
+    request.onAttempt?.({id, status:'running'});
+    if (reasoning) request.onActivity?.({id:'reasoning:' + id,attemptId:id,kind:'summary',text:reasoning,status:'running'});
+    const output=JSON.stringify(value);
+    request.onDelta?.(output.slice(0,Math.floor(output.length/2)), '', {attemptId:id});
+    request.onDelta?.(output, '', {attemptId:id});
+    request.onAttempt?.({id,status:'completed'});
+    return output;
+  };
+}
+
+test('actual conversation flow retains intermediate answer and tool receipt before final answer, saved once per segment', async()=>{
+  const first='我先读取这份材料，再核对正文。',final='原文指出：SOURCE_EVIDENCE_FOR_ACTUAL_HOST。';
+  const h=sendHarness([
+    flowReply('round-1',{message:first,knowledgeRequests:[{type:'read',recordType:'note',id:'source-note'}],actions:[]},'先核对提供资料。'),
+    flowReply('round-2',{message:final,actions:[]},'结合刚才读取的内容回答。')
+  ]);enableConversationFlow(h);await h.send();
+  assert.equal(h.run.status,'completed',h.run.error);
+  const items=h.reply.conversationFlow.items;
+  assert.deepEqual(Array.from(items,item=>item.kind),['reasoning','response','tool','reasoning','response']);
+  assert.deepEqual(Array.from(items,item=>item.seq),[1,2,3,4,5]);
+  assert.equal(items[1].text,first);assert.equal(items[2].callId,h.run.toolCalls[0].id);
+  assert.equal(items[2].result,undefined,'Flow never duplicates authoritative tool output');
+  assert.equal(h.run.toolCalls[0].result.text,'SOURCE_EVIDENCE_FOR_ACTUAL_HOST');
+  assert.equal(h.reply.text,final);
+  const entries=h.context.ConversationFlow.entries(h.reply,h.run);
+  assert.equal(entries.filter(item=>item.kind==='response').length,1,'Final answer remains in the existing answer body only');
+  assert.equal(entries[2].call,h.run.toolCalls[0]);
+  assert.ok(h.checkpoint.snapshots.some(snapshot=>snapshot.conversations[0].messages.at(-1).conversationFlow?.items.some(item=>item.kind==='tool')),'Tool checkpoint persists conversation sequence with its receipt');
+});
+
+test('actual conversation flow never records nested plan fields as a visible response on cancellation',async()=>{
+  const h=sendHarness([request=>{
+    request.onAttempt({id:'cancel-round',status:'running'});
+    request.onActivity({id:'cancel-reasoning',attemptId:'cancel-round',kind:'summary',text:'已收到的模型摘要。',status:'running'});
+    request.onDelta('{"knowledgeRequests":[{"message":"INTERNAL_ONLY","type":"read"','',{attemptId:'cancel-round'});
+    request.onAttempt({id:'cancel-round',status:'cancelled'});
+    throw Object.assign(Error('已停止本次执行'),{code:'CANCELLED'});
+  }]);enableConversationFlow(h);await h.send();
+  assert.equal(h.run.status,'cancelled');assert.equal(h.reply.text,'');
+  assert.equal(h.reply.conversationFlow.items.length,1);assert.equal(h.reply.conversationFlow.items[0].status,'cancelled');
+  assert.ok(!JSON.stringify(h.reply.conversationFlow).includes('INTERNAL_ONLY'));
+});
+
+test('actual delegated conversation flow keeps child reasoning and response under host assigned parent identity',async()=>{
+  const h=sendHarness([
+    flowReply('main-1',{knowledgeRequests:[{type:'delegate',title:'核对资料',task:'读取 source-note 原文并回答其内容'}],actions:[]}),
+    flowReply('child-1',{knowledgeRequests:[{type:'read',recordType:'note',id:'source-note'}],actions:[]},'读取该资料以核对。'),
+    flowReply('child-2',{message:'source-note 的原文是 SOURCE_EVIDENCE_FOR_ACTUAL_HOST。',actions:[]}),
+    flowReply('main-2',{message:'研究子任务返回了 source-note 的原文依据。',actions:[]})
+  ]);enableConversationFlow(h);await h.send();
+  assert.equal(h.run.status,'completed',h.run.error);
+  const child=h.run.delegations[0],items=h.reply.conversationFlow.items;
+  const childItems=items.filter(item=>item.parentId===child.id);
+  assert.ok(childItems.some(item=>item.kind==='reasoning'&&item.text==='读取该资料以核对。'));
+  assert.ok(childItems.some(item=>item.kind==='response'&&item.text.includes('SOURCE_EVIDENCE')));
+  assert.ok(childItems.some(item=>item.kind==='tool'));
+  assert.equal(h.run.delegations.length,1);assert.ok(h.run.toolCalls.every(call=>['delegate','read'].includes(call.type)));
+});
+
+for (const onDemand of [false,true]) test(`actual ${onDemand?'on-demand':'full'} host accepts optional tool-phase prose but never exposes workingSummary`,async()=>{
+  const interim='我先核对资料正文中的具体依据。',final='原文内容是 SOURCE_EVIDENCE_FOR_ACTUAL_HOST。';
+  const h=sendHarness([
+    flowReply('public-tool-round',{message:interim,knowledgeRequests:[{type:'read',recordType:'note',id:'source-note'}],workingSummary:'INTERNAL_SUMMARY_ONLY',actions:[]}),
+    flowReply('public-final-round',{message:final,actions:[]})
+  ]);enableConversationFlow(h);
+  const businessBefore=JSON.stringify([h.state.notes,h.state.tasks,h.state.papers,h.state.imports]);
+  if(onDemand) h.context.window.AgentContext=h.context.AgentContext=require('../app/agent-context');
+  await h.send();assert.equal(h.run.status,'completed',h.run.error);
+  for(const request of h.calls)assert.match(JSON.stringify(request.input),/可选填顶层 message/);
+  const entries=h.context.ConversationFlow.entries(h.reply,h.run);
+  assert.deepEqual(Array.from(entries,item=>item.kind),['response','tool']);
+  assert.equal(entries[0].text,interim);assert.equal(entries[1].call,h.run.toolCalls[0]);
+  assert.equal(entries[1].call.result.text,'SOURCE_EVIDENCE_FOR_ACTUAL_HOST');
+  assert.doesNotMatch(JSON.stringify(h.reply.conversationFlow),/INTERNAL_SUMMARY_ONLY/);
+  assert.equal(h.reply.text,final);
+  assert.equal(JSON.stringify([h.state.notes,h.state.tasks,h.state.papers,h.state.imports]),businessBefore,'public commentary cannot turn a read into a write');
+});
+
+test('actual host does not synthesize tool-phase prose when optional message is absent',async()=>{
+  const h=sendHarness([
+    flowReply('silent-tool-round',{knowledgeRequests:[{type:'read',recordType:'note',id:'source-note'}],workingSummary:'INTERNAL_SILENT_SUMMARY',actions:[]}),
+    flowReply('silent-final-round',{message:'原文内容是 SOURCE_EVIDENCE_FOR_ACTUAL_HOST。',actions:[]})
+  ]);enableConversationFlow(h);await h.send();assert.equal(h.run.status,'completed',h.run.error);
+  assert.deepEqual(Array.from(h.reply.conversationFlow.items,item=>item.kind),['tool','response']);
+  assert.deepEqual(Array.from(h.context.ConversationFlow.entries(h.reply,h.run),item=>item.kind),['tool']);
+  assert.doesNotMatch(JSON.stringify(h.reply.conversationFlow),/INTERNAL_SILENT_SUMMARY|正在生成|已完成/);
+});
+
+test('actual host retains only received top-level public prose if a tool envelope is interrupted before execution',async()=>{
+  const publicText='接下来需要核对原文中的日期。';
+  const h=sendHarness([request=>{
+    request.onAttempt({id:'interrupted-public',status:'running'});
+    request.onDelta('{"message":'+JSON.stringify(publicText).slice(0,-1),'',{attemptId:'interrupted-public'});
+    request.onDelta('{"message":'+JSON.stringify(publicText)+',"workingSummary":"INTERNAL_CANCELLED_SUMMARY","knowledgeRequests":[{"type":"read","message":"NESTED_PRIVATE_VALUE"','',{attemptId:'interrupted-public'});
+    request.onAttempt({id:'interrupted-public',status:'cancelled'});
+    throw Object.assign(Error('已停止本次执行'),{code:'CANCELLED'});
+  }]);enableConversationFlow(h);await h.send();assert.equal(h.run.status,'cancelled');
+  assert.equal(h.reply.text,publicText);assert.equal((h.run.toolCalls||[]).length,0);assert.equal(h.commits,0);
+  assert.deepEqual(Array.from(h.reply.conversationFlow.items,item=>[item.kind,item.text,item.status]),[['response',publicText,'cancelled']]);
+  assert.doesNotMatch(JSON.stringify(h.reply.conversationFlow),/INTERNAL_CANCELLED_SUMMARY|NESTED_PRIVATE_VALUE/);
 });

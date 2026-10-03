@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),R=require('../app/agent-routing');
 const now=new Date('2026-09-17T09:00:00+08:00');
 test('mixed and context-dependent requests always retain retrieval',()=>{
- for(const goal of ['找到机器学习课程的相关内容，并帮我设置提醒','明天下午两点提醒我，根据课件安排复习','根据刚才的论文每周四两点安排组会','把那个任务标记为已完成','查找课程后再提醒我','find my course notes and then set a reminder','每周四下午两点开会，顺便总结论文','不要明天下午两点提醒我买牛奶'])assert.equal(R.decide({goal,now,hasAgenda:true}).mode,'full',goal);
+ for(const goal of ['找到机器学习课程的相关内容，并帮我设置提醒','明天下午两点提醒我，根据课件安排复习','根据刚才的论文每周四两点安排组会','把那个任务标记为已完成','查找课程后再提醒我','find my course notes and then set a reminder','每周四下午两点开会，顺便总结论文','不要明天下午两点提醒我买牛奶','每周四下午两点安排组会，关联另一研究项目'])assert.equal(R.decide({goal,now,hasAgenda:true}).mode,'full',goal);
 });
 test('self-contained reminders are compact but attached and skill context prevents shortcut',()=>{
  const input={goal:'明天下午两点提醒我买牛奶',now};const route=R.decide(input);assert.equal(route.mode,'reminder');assert.equal(route.reminder.reminderMinutes,0);
@@ -20,7 +20,7 @@ test('explicit weekly meeting is compact only where native review exists',()=>{
 });
 test('recurring prompt puts the proposal at the root and rejects the observed nested model output',()=>{
  const goal='每周四下午两点半参加组会',route=R.decide({goal,hasAgenda:true});
- const prompt=R.prompt(route,{goal,userMessageId:'m'});assert.match(prompt,/"actions":\[\],"agendaProposals":\[/);assert.match(prompt,/agendaProposals 是根对象字段/);
+ const prompt=R.prompt(route,{goal,userMessageId:'m',projectId:'course'});assert.match(prompt,/"actions":\[\],"agendaProposals":\[/);assert.match(prompt,/agendaProposals 是根对象字段/);assert.match(prompt,/"projectId":"course"/);assert.match(prompt,/projectId沿用本轮输入的真实项目ID/);
  assert.equal(R.needsFull(route,{workspace:'科研',message:'请审阅',actions:[{agendaProposals:[{title:'组会'}]}]}),true);
  assert.equal(R.needsFull(route,{workspace:'科研',message:'请审阅',actions:[],agendaProposals:[{title:'组会'}]}),false);
 });

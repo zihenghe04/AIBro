@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const CitationEvidence = require('../app/citation-evidence.js');
+const AttachmentAnalysis = require('../app/attachment-analysis.js');
 const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 function cut(start, end) {
   const begin = source.indexOf(start), finish = source.indexOf(end, begin);
@@ -26,7 +27,7 @@ function fixture(options = {}) {
   const nodes = new Map(), calls = [], reads = [], mounts = [], objectURLs = [], revoked = [], requests = [];
   class Node {
     constructor(tag = 'div') { this.tagName = tag.toUpperCase(); this.attributes = {}; this.dataset = {}; this.style = {}; this.hidden = false; this.children = []; this.textContent = ''; this.html = ''; this.open = false; this.onclick = null; this.classList = { toggle() {} }; }
-    get innerHTML() { return this.html; } set innerHTML(value) { this.html = value; this.children = []; }
+    get innerHTML() { return this.html; } set innerHTML(value) { this.html = value; this.children = []; this.anchor = null; }
     setAttribute(name, value) { this.attributes[name] = String(value); }
     getAttribute(name) { return this.attributes[name] ?? null; }
     removeAttribute(name) { delete this.attributes[name]; }
@@ -34,7 +35,7 @@ function fixture(options = {}) {
     get href() { return this.getAttribute('href') || ''; } set href(value) { this.setAttribute('href', value); }
     get download() { return this.getAttribute('download') || ''; } set download(value) { this.setAttribute('download', value); }
     append(...children) { this.children.push(...children); } replaceChildren(...children) { this.html = ''; this.children = [...children]; }
-    querySelector(selector) { return selector === 'summary' ? this.summary ||= new Node('summary') : null; }
+    querySelector(selector) { return selector === 'summary' ? this.summary ||= new Node('summary') : selector === 'a' && /<a\s/.test(this.html) ? this.anchor ||= new Node('a') : null; }
     before() {} after() {} close() { this.open = false; }
   }
   for (const id of ['previewDialog', 'previewEyebrow', 'previewTitle', 'previewMeta', 'previewContent', 'previewExtracted', 'previewAnalysisStatus', 'previewOrganize', 'previewBack', 'previewDownload', 'editPreviewNote', 'previewDelete', 'previewVisual', 'previewSourceLinks', 'previewProvenance', 'taskDialog', 'paperDialog', 'readingPane']) nodes.set('#' + id, new Node(id === 'previewDownload' ? 'a' : 'div'));
@@ -53,7 +54,7 @@ function fixture(options = {}) {
   };
   const context = {
     state, Blob, AbortController, TextEncoder, Uint8Array, atob: value => Buffer.from(value, 'base64').toString('binary'),
-    sourcePreviewGuards: new Map(), previewObjectUrl: null, CitationEvidence,
+    sourcePreviewGuards: new Map(), previewObjectUrl: null, CitationEvidence, AttachmentAnalysis,
     document: { body: { dataset: { view: 'agent' } }, createElement: tag => new Node(tag) },
     $: selector => nodes.get(selector) || null,
     URL: { createObjectURL(blob) { objectURLs.push(blob); return 'blob:test-' + objectURLs.length; }, revokeObjectURL(url) { revoked.push(url); } },
@@ -109,6 +110,46 @@ test('non-PDF imports retain the full-original loading path used by other attach
   const h = fixture({ item: { mimeType: 'text/plain', name: 'source.txt' } }); await h.open();
   assert.equal(h.dbOpens(), 1); assert.equal(h.reads.length, 1); assert.equal(h.requests.length, 1); assert.equal(h.requests[0].url, '/__files/pdf');
   assert.equal(h.requests[0].init.signal instanceof AbortSignal, true); assert.equal(h.objectURLs.length, 1); assert.equal(h.mounts.length, 0); assert.match(h.download().href, /^blob:/);
+});
+
+const bookmark = { id: 'bookmark', name: 'Campus reference', mimeType: 'text/html', parser: 'bookmark', url: 'https://example.org/campus', fileStored: false, content: '', pages: [] };
+test('production reader opens a real bookmark without probing nonexistent originals or claiming saved body', async () => {
+  for (const name of ['Campus reference', 'Reading.pdf']) {
+    const h = fixture({ item: { ...bookmark, name } }); await h.open();
+    assert.equal(h.dbOpens(), 0); assert.equal(h.requests.length, 0); assert.equal(h.mounts.length, 0); assert.equal(h.objectURLs.length, 0);
+    assert.equal(h.nodes.get('#previewExtracted').hidden, true); assert.equal(h.nodes.get('#previewContent').textContent, '');
+    assert.equal(h.download().hidden, true); assert.equal(h.download().href, '');
+    const visual = h.nodes.get('#previewVisual'); assert.match(visual.innerHTML, /网址已收藏，网页内容尚未下载/); assert.match(visual.innerHTML, /href="https:\/\/example.org\/campus"/); assert.match(visual.innerHTML, /打开原网页/); assert.doesNotMatch(visual.innerHTML, /已保存网页正文/);
+    const event = { preventDefault() { this.prevented = true; } }; visual.querySelector('a').onclick(event); assert.equal(event.prevented, undefined);
+  }
+});
+
+test('bookmark original link rechecks access, URL identity and current reader before native navigation', async () => {
+  for (const change of ['deleted', 'private', 'private-project', 'reader', 'url']) {
+    const h = fixture({ item: { ...bookmark } }); if (change === 'private-project') { h.state.projects.push({ id: 'p' }); h.item.projectId = 'p'; }
+    await h.open(); const click = h.nodes.get('#previewVisual').querySelector('a').onclick;
+    if (change === 'deleted') h.item.deleted = true; if (change === 'private') h.item.private = true; if (change === 'private-project') h.state.projects[0].private = true;
+    if (change === 'reader') h.switchReader(); if (change === 'url') h.item.url = 'https://example.org/replaced';
+    const event = { preventDefault() { this.prevented = true; } }; click(event); assert.equal(event.prevented, true, change);
+  }
+});
+
+test('unsafe or credential-bearing bookmark URLs have no original webpage action', async () => {
+  for (const url of ['javascript:alert(1)', 'file:///etc/hosts', 'https://user:secret@example.org', '']) {
+    const h = fixture({ item: { ...bookmark, url } }); await h.open();
+    assert.doesNotMatch(h.nodes.get('#previewVisual').innerHTML, /<a\s/); assert.match(h.nodes.get('#previewVisual').innerHTML, /原网页地址无效/); assert.equal(h.requests.length, 0);
+  }
+});
+
+test('already fetched webpage body remains readable and can follow a bookmark in the same host', async () => {
+  const h = fixture({ item: { ...bookmark }, fetch: async () => ({ ok: false, status: 404 }) });
+  h.context.PreviewMedia.mount = () => false;
+  await h.open(); assert.equal(h.nodes.get('#previewExtracted').hidden, true);
+  Object.assign(h.item, { parser: 'html', content: 'Downloaded source body with evidence.', pages: [{ page: 1, text: 'Downloaded source body with evidence.' }] });
+  await h.open();
+  assert.equal(h.nodes.get('#previewExtracted').hidden, false); assert.match(h.nodes.get('#previewContent').textContent, /Downloaded source body/);
+  assert.match(h.nodes.get('#previewVisual').innerHTML, /已保存网页正文/); assert.doesNotMatch(h.nodes.get('#previewVisual').innerHTML, /尚未下载网页/);
+  assert.equal(h.requests.length, 1); assert.equal(AttachmentAnalysis.derive(h.state, h.item).status, 'pending');
 });
 
 test('fileStoreGet localOnly returns IndexedDB originals and never fetches a cache miss or cache error', async () => {

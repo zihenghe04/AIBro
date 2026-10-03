@@ -45,3 +45,22 @@ test('capture batch filters use local inclusive dates, exact tags and active lin
  s.notes.find(n=>n.id==='derived').archived=true;assert.deepEqual(C.projectIds(s,a),[]);
  s.projects[0].archived=true;assert.deepEqual(C.projectIds(s,c),[]);
 });
+test('independent manual title has its own revision and survives main capture body edits',()=>{
+ const s=base(),n=C.write(s,{text:'First line\nOriginal body',tags:['research']},{uid,now:10});
+ n.sourceAttachmentIds=['attachment'];n.provenance={source:'original'};
+ C.write(s,{id:n.id,version:n.updatedAt,text:n.content,title:'  Human title  ',tags:n.tags},{uid,now:11});
+ assert.equal(n.title,'Human title');assert.equal(n.titleSource,'user');assert.equal(n.revisionHistory.length,1);
+ assert.equal(n.revisionHistory[0].title,'First line');assert.equal(n.revisionHistory[0].content,'First line\nOriginal body');
+ assert.deepEqual(n.sourceAttachmentIds,['attachment']);assert.deepEqual(n.provenance,{source:'original'});
+ C.write(s,{id:n.id,version:n.updatedAt,text:'Changed first line\nChanged body',tags:n.tags},{uid,now:12});
+ assert.equal(n.title,'Human title');assert.equal(n.revisionHistory.length,2);assert.equal(n.revisionHistory[1].title,'Human title');
+ const frozen=JSON.stringify(s);
+ for(const title of ['', '  ', null, 3, 'x'.repeat(501), 'bad\nTitle', 'bad\u0000Title'])assert.throws(()=>C.write(s,{id:n.id,version:n.updatedAt,text:n.content,title},{uid}),/标题/);
+ assert.equal(JSON.stringify(s),frozen);
+});
+test('legacy automatic titles continue following the first line and attachment-only titles can be renamed',()=>{
+ const s=base(),n=C.write(s,{text:'Before'},{uid,now:1});C.write(s,{id:n.id,version:n.updatedAt,text:'After'},{uid,now:2});assert.equal(n.title,'After');
+ const attachment=C.write(s,{text:'',hasFiles:true},{uid,now:3});attachment.sourceAttachmentIds=['file'];
+ C.write(s,{id:attachment.id,version:attachment.updatedAt,text:'',hasFiles:true,title:'Source scan'},{uid,now:4});
+ assert.equal(attachment.title,'Source scan');assert.equal(attachment.revisionHistory[0].content,'');assert.deepEqual(attachment.sourceAttachmentIds,['file']);
+});

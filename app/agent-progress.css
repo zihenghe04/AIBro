@@ -81,7 +81,8 @@ body.reduce-motion .agent-progress.agent-progress summary:after{transition:none}
    owner. Full tool output remains below, without a nested scroll or clamp. */
 .halaska-lifecycle-summary{display:block;min-width:0;width:100%}
 .halaska-lifecycle-line{display:flex;align-items:center;gap:8px;min-width:0;width:100%;flex-wrap:wrap}
-.halaska-lifecycle-line .progress-heading-text{flex:1 1 140px;white-space:normal;overflow-wrap:anywhere;overflow:visible;max-width:none!important;font-size:12px}
+/* Bound only the live headline. The expandable process body keeps every line. */
+.halaska-lifecycle-line .progress-heading-text{flex:1 1 140px;min-width:0;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;line-height:1.65;max-height:3.3em;max-width:none!important;font-size:12px}
 .halaska-lifecycle-line .progress-phase-label{font-size:12px;white-space:nowrap}
 .halaska-lifecycle-line .progress-chevron{margin-left:auto}
 .halaska-lifecycle-line .progress-count{margin-left:0}
@@ -101,6 +102,12 @@ body.reduce-motion .agent-progress.agent-progress summary:after{transition:none}
 .halaska-lifecycle-stop{margin-top:10px}
 .halaska-lifecycle-stop .stop-run{position:static!important;transform:none!important}
 .conversation-process-navigation{min-width:0;margin:4px 0 10px}
+.progress-issues{font-size:11px;line-height:1.6;color:var(--red,var(--text));white-space:nowrap}
+.conversation-tool-filters{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:7px 0 0;min-width:0}
+.conversation-tool-filters button[aria-pressed="true"]{background:var(--surface-wash)!important;color:var(--text)!important}
+.conversation-tool-filters>span:last-child{min-width:0;overflow-wrap:anywhere}
+.conversation-tools-empty{font-size:12px;line-height:1.65;color:var(--muted);margin:10px 0}
+.agent-progress .tool-ledger-row[hidden],.conversation-tools-empty[hidden]{display:none!important}
 .agent-progress[open]:has(>.conversation-process-navigation:not([hidden]))>summary .progress-count{display:none}
 .halaska-process-tabs{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);min-width:0}
 .halaska-process-tabs .kit-navigation{min-width:0;flex:0 1 auto}
@@ -110,3 +117,57 @@ body.reduce-motion .agent-progress.agent-progress summary:after{transition:none}
 .agent-progress [role="tabpanel"][hidden],.conversation-process-navigation[hidden],.message-body[hidden]{display:none!important}
 @media(max-width:500px){.halaska-process-tabs{align-items:flex-start;flex-wrap:wrap;gap:0}.halaska-process-tabs>.kit-navigation+*{flex-basis:100%;text-align:left;padding:3px 0 6px}}
 @media(max-width:500px){.halaska-lifecycle-line{gap:6px}.halaska-lifecycle-line .progress-heading-text{flex-basis:100%;order:5}.halaska-lifecycle-line .progress-elapsed{margin-left:auto}.halaska-lifecycle-line .progress-chevron{margin-left:0}.halaska-lifecycle-key{display:none!important}}
+
+/* Status-only stages stay legible without implying hidden details. */
+.agent-progress .progress-stage-label{display:block;min-height:24px;line-height:24px;color:var(--faint);overflow-wrap:anywhere}
+.agent-progress .progress-item.is-running .progress-stage-label,.agent-progress .progress-item.is-failed .progress-stage-label{color:var(--muted)}
+.conversation-reasoning-note{font-size:12px;line-height:1.7;color:var(--faint);margin:12px 0 4px;padding-top:10px;border-top:1px solid var(--line)}
+
+/* One ordered stream of recorded responses, reasoning and real tool receipts.
+   It shares the transcript scroll and never puts the final answer in a second
+   body. Only the small collapsed reasoning preview is visually clipped. */
+.conversation-flow{list-style:none;margin:4px 0 0;padding:0;min-width:0}
+.conversation-flow-item{list-style:none;min-width:0;padding:7px 0}
+.conversation-flow-item+.conversation-flow-item{margin-top:2px}
+.conversation-flow-owner{display:block;font-size:10px;line-height:1.6;color:var(--faint);margin-bottom:4px;overflow-wrap:anywhere}
+.conversation-flow-missing-tool{color:var(--faint);font-size:12px}
+.conversation-flow-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75;color:var(--text);font-size:13px;min-width:0}
+.conversation-flow-rich{white-space:normal}
+.conversation-flow-rich p{margin:.5em 0 .8em}
+.conversation-flow-rich>:first-child{margin-top:0}
+.conversation-flow-rich>:last-child{margin-bottom:0}
+.conversation-flow-rich :is(h1,h2,h3,h4,h5,h6){font-size:1.08em;line-height:1.5;margin:1em 0 .5em}
+.conversation-flow-rich :is(ul,ol){margin:.65em 0 .95em;padding-inline-start:1.65em;list-style-position:outside}
+.conversation-flow-rich li{padding-block:.18em}
+.conversation-flow-rich li::marker{color:var(--muted)}
+.conversation-flow-rich li>p{margin:.45em 0}
+.conversation-flow-rich blockquote{margin:1em 0;padding:.1em 0 .1em 1em;border-inline-start:2px solid var(--line-strong);color:var(--muted)}
+.conversation-flow-rich strong{font-weight:600}
+.conversation-flow-rich code:not(.message-code code){padding:2px 5px;border:1px solid var(--line);background:var(--panel-hover);border-radius:4px;font-size:.92em}
+.conversation-flow-rich .message-code{max-width:100%;white-space:pre;overflow-wrap:normal;line-height:1.7}
+.conversation-flow-rich .message-code:has(>.message-code-lang){padding-top:30px}
+.conversation-flow-rich .message-code>code{display:block;white-space:inherit;overflow-wrap:normal}
+.conversation-flow-rich .markdown-task-item>label{display:flex;align-items:baseline;gap:.4em;color:inherit;font:inherit}
+.conversation-flow-rich .markdown-task-item>label>input{flex:none;width:.95em;height:.95em;margin:0;accent-color:var(--accent)}
+.conversation-flow-rich ul>.markdown-task-item{list-style:none}
+.conversation-flow-commentary>.conversation-flow-text{color:var(--muted);font-size:12px}
+.agent-progress.agent-progress .conversation-flow-reasoning{display:block;padding:5px 0}
+.conversation-flow-reasoning:before{display:none}
+.conversation-flow-reasoning-details>.conversation-flow-text{padding:8px 0 4px;color:var(--muted);font-size:12px}
+.conversation-flow-reasoning-details>summary{min-width:0;overflow:hidden}
+.conversation-flow-reasoning-preview{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font-size:11px}
+.conversation-flow-reasoning-details[open]>summary .conversation-flow-reasoning-preview,
+.conversation-flow-reasoning-details[open]>summary .halaska-activity-group-detail{display:none}
+.conversation-flow-reasoning-details .halaska-activity-group-detail{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.conversation-flow-reasoning-details .halaska-activity-meta{display:none}
+.conversation-flow-reasoning-details .halaska-activity-summary{width:100%;min-width:0}
+.conversation-flow-reasoning-details .halaska-activity-line{min-width:0}
+.conversation-flow-tool .tool-ledger-row{min-width:0}
+.conversation-flow-diagnostics{margin-top:10px;color:var(--faint);font-size:11px}
+.conversation-flow-diagnostics>summary{cursor:pointer;list-style:none;padding:4px 0;display:flex;align-items:center;gap:6px}
+.conversation-flow-diagnostics>summary:before{content:'›';display:inline-block;transition:transform 140ms ease}
+.conversation-flow-diagnostics[open]>summary:before{transform:rotate(90deg)}
+.conversation-flow-stages{padding-left:18px;margin:4px 0;line-height:1.75}
+.conversation-flow-stages .conversation-flow-text{font-size:11px;color:var(--muted)}
+body.reduce-motion .conversation-flow-diagnostics>summary:before{transition:none}
+@media(prefers-reduced-motion:reduce){.conversation-flow-diagnostics>summary:before{transition:none}}

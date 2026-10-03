@@ -25,7 +25,7 @@ function harness(state = fixture()) {
       for(const child of this.children){if(child.className.split(/\s+/).includes(name))return child;if(!direct){const match=child.querySelector(selector);if(match)return match;}}
       return null;
     }});
-  const context = vm.createContext({state,Core:require('../app/workstation-core'),window:{},document:{createElement:element},
+  const context = vm.createContext({state,queueMicrotask,Core:require('../app/workstation-core'),window:{},document:{createElement:element},
     workspaceName:value=>value||'日常',esc:value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),
     renderRichText:value=>value,statusLabel:value=>value||'待开始',formatDate:value=>value,
     currentConversation:()=>state.conversations.find(item=>item.id===state.currentConversationId)

@@ -34,7 +34,7 @@ assert.deepEqual(await collectChat([
 
 // 缺失或畸形的用量不得编造数值
 assert.deepEqual(await collect([{ type: 'response.output_text.delta', delta: 'x' }, { type: 'response.completed', response: {} }]), [], '无用量时不应上报');
-assert.deepEqual(await collect([{ type: 'response.output_text.delta', delta: 'x' }, { type: 'response.completed', response: { usage: { total_tokens: 0 } } }]), [], '零用量不应上报');
+assert.deepEqual(await collect([{ type: 'response.output_text.delta', delta: 'x' }, { type: 'response.completed', response: { usage: { total_tokens: 0 } } }]), [{ input: null, output: null, total: 0 }], '服务端明确报告的零用量保留，不能与未报告混淆');
 assert.deepEqual(await collect([{ type: 'response.output_text.delta', delta: 'x' }, { type: 'response.completed', response: { usage: { total_tokens: 'many' } } }]), [], '非数值用量不应上报');
 assert.deepEqual(await collect([{ type: 'response.output_text.delta', delta: 'x' }, { type: 'response.completed', response: { usage: { total_tokens: 50, input_tokens: 'n/a' } } }]), [{ input: null, output: null, total: 50 }], '部分字段缺失时应保留可用总量');
 console.log('agent transport usage tests passed');

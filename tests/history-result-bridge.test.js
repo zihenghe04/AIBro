@@ -38,14 +38,17 @@ test('old pending-action lists ignore invalid entries without blocking valid act
   assert.equal(invalid.empty,true);
 });
 test('a completed execution step settles prior running steps without rewriting failures',()=>{
-  const box={textContent:''};const c=vm.createContext({$:()=>box,uid:prefix=>prefix+'-fixture'});
-  const declaration=source.split('\n').find(line=>line.startsWith('function addRunStep('));
-  vm.runInContext(declaration,c);
-  const run={steps:[{text:'已完成解析',status:'done'},null,{text:'旧失败',status:'error'},{text:'写入项目',status:'running'}]};
+  const box={textContent:''},conversation={id:'original',messages:[]};
+  const run={id:'run',conversationId:conversation.id,status:'running',phase:'waiting',startedAt:1,steps:[{text:'已完成解析',status:'done'},null,{text:'旧失败',status:'error'},{text:'写入项目',status:'running'}]};
+  const c=vm.createContext({state:{agentRuns:[run]},window:{},Core:require('../app/workstation-core'),currentConversation:()=>conversation,$:()=>box,uid:prefix=>prefix+'-fixture'});
+  vm.runInContext(body('function runStatusLabel(', '\nfunction projectForAction('),c);
   c.addRunStep(run,'成果已保存');
   assert.equal(run.steps.filter(step=>step?.status==='running').length,0);
   assert.equal(run.steps.find(step=>step?.text==='写入项目').status,'done');
   assert.equal(run.steps.find(step=>step?.text==='旧失败').status,'error');
   assert.equal(run.steps.at(-1).status,'done');
-  assert.match(box.textContent,/执行完成/);
+  assert.equal(run.status,'running','settling a step must not complete the request');
+  assert.equal(box.textContent,'● 等待模型响应');
+  run.status='completed';c.renderRunStatus(run);
+  assert.equal(box.textContent,'● 已完成','only the actual run completion settles the header');
 });

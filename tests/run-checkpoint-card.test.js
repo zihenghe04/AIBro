@@ -49,12 +49,23 @@ test('busy state disables recovery and history while exposing phase-specific loa
     assert.doesNotMatch(text(card), /结果已保存/);
   }
 });
-test('only committed renders saved state and never offers continuation; unknown phases render nothing', () => {
-  const h = fixture(), card = h.render({ phase: 'committed', actionCount: 2, onContinue() {}, onSave() {}, onHistory() {} });
+test('only committed with a confirmed output renders saved state and never offers continuation; unknown phases render nothing', () => {
+  const h = fixture(), card = h.render({ phase: 'committed', actionCount: 2, hasSavedResult: true, onContinue() {}, onSave() {}, onHistory() {} });
   assert.match(text(card), /结果已保存/); assert.match(text(card), /2 项本机操作/);
   const buttons = elements(card).filter(node => node.type === 'KitButton');
   assert.equal(buttons.length, 1); assert.equal(text(buttons[0]), '查看执行记录');
   assert.equal(h.render({ phase: 'completed' }), null); assert.equal(h.render({}), null);
+});
+test('committed answers and proposals without a confirmed output display completed in either language', () => {
+  for (const [language, label] of [['zh', '已完成'], ['en', 'Completed']]) {
+    const h = fixture(language);
+    for (const props of [{ actionCount: 0 }, { actionCount: 2, hasSavedResult: false }, { actionCount: 2, hasSavedResult: 'true' }]) {
+      const card = h.render({ phase: 'committed', ...props, onHistory() {} });
+      assert.ok(text(card).includes(label)); assert.doesNotMatch(text(card), /结果已保存|Results saved/);
+      assert.equal(elements(card).filter(node => node.type === 'KitButton').length, 1);
+    }
+    for (const phase of ['prepared', 'applied']) assert.doesNotMatch(text(h.render({ phase, hasSavedResult: true })), /结果已保存|Results saved/);
+  }
 });
 test('missing callbacks cannot execute; invalid metadata stays hidden and errors remain literal accessible text', () => {
   const h = fixture(), error = '<script>source</script>\n保存尚未确认';

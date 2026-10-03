@@ -41,7 +41,7 @@ const translatedOptions = rows => rows.map(([value, zh, en]) => ({ value, label:
 // Own every editable field. The controller's imperative draft adapter updates
 // this state synchronously, so a document round-trip cannot leave controlled
 // inputs displaying a restored DOM value while React still holds old values.
-export function TaskDetailSurface({ taskId, title, location, initial = {}, projects = [], dependencies = [], deliverables = {}, materials = [], knowledge = [], busy = false, error = '', notificationSupported = false, notificationStatus = '', onNotifications, onReady, onSave, onCancel, onDelete, onOpen }) {
+export function TaskDetailSurface({ taskId, title, location, initial = {}, projects = [], workflowOptions = [], dependencies = [], deliverables = {}, materials = [], knowledge = [], busy = false, error = '', notificationSupported = false, notificationStatus = '', onNotifications, onReady, onSave, onCancel, onDelete, onOpen }) {
   const [fields, setFields] = useState(() => ({ ...initial.fields }));
   const [checklist, setChecklist] = useState(() => copy(initial.checklist || []));
   const [dependsOn, setDependsOn] = useState(() => [...(initial.dependencies || [])]);
@@ -103,6 +103,7 @@ export function TaskDetailSurface({ taskId, title, location, initial = {}, proje
       <div className="task-detail-primary-properties">
         {choice('taskStatusInput', t('状态', 'Status'), translatedOptions([['todo', '待开始', 'To do'], ['in_progress', '进行中', 'In progress'], ['blocked', '受阻', 'Blocked'], ['done', '已完成', 'Done']]))}
         {choice('taskPriorityInput', t('优先级', 'Priority'), translatedOptions([['low', '低', 'Low'], ['medium', '中', 'Medium'], ['high', '高', 'High']]))}
+        <div title={t('分类独立于空间、项目和优先级；与灵动岛待办共用。', 'Shared with island tasks; separate from space, project and priority.')}>{choice('taskWorkflowInput', t('任务分类', 'Task category'), [{ value: '', label: t('未分类', 'Uncategorized') }, ...workflowOptions])}</div>
         {field('taskDueInput', t('截止日期', 'Due date'), { type: 'date' })}
       </div>
     </section>

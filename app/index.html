@@ -179,8 +179,9 @@
 <script src="skills-core.js"></script>
 <script src="conversation-tree.js"></script><script src="terminal-pane.js"></script><script src="skills-import.js"></script><script src="skills-ui.js"></script>
 <script src="artifact-provenance.js"></script><script src="artifact-provenance-ui.js"></script><script src="research-wiki.js"></script><script src="task-deliverable.js"></script>
+<script src="context-retrieval.js"></script><script src="record-assignment.js"></script>
 <script src="task-dependencies.js"></script><script src="workstation-core.js"></script><script src="reminder-intent.js"></script><script src="context-window.js"></script>
-<script src="goal-loop.js"></script><script src="context-anchors.js"></script><script src="agent-context.js"></script>
+<script src="goal-loop.js"></script><script src="context-anchors.js"></script><script src="agenda-access.js"></script><script src="agent-context.js"></script>
 <script src="conversation-compaction.js"></script>
 <script src="agent-routing.js"></script>
 <script src="d3.min.js"></script>
@@ -188,13 +189,14 @@
 <script src="activity-ui.js"></script>
 <script src="attachment-analysis.js"></script>
 <script src="collection-ui.js"></script>
-<script src="run-failure-diagnostics.js"></script><script src="sse-frame-scanner.js"></script><script src="agent-transport.js"></script>
+<script src="run-failure-diagnostics.js"></script><script src="sse-frame-scanner.js"></script><script src="stream-reception.js"></script><script src="agent-transport.js"></script><script src="agent-usage.js"></script>
 <script src="agent-queue.js"></script>
 <script src="queue-context.js"></script>
 <script src="agent-queue-ui.js"></script>
 <script src="reviewer-delegate.js"></script>
 <script src="conversation-branches.js"></script>
 <script src="stream-code.js"></script>
+<script src="conversation-stream-body.js"></script>
 <script src="stream-markdown.js"></script>
   <script src="streaming-body.js"></script><script src="conversation-reading.js"></script><script src="conversation-window.js"></script><script src="agent-progress.js"></script><script src="activity-motion.js"></script><script src="clarify-questions.js"></script>
 <script src="auth-ui.js"></script>
@@ -203,10 +205,10 @@
 <script src="model-settings-ui.js"></script><link rel="stylesheet" href="model-settings-ui.css"/>
 <script src="settings-workspace.js"></script><link rel="stylesheet" href="settings-workspace.css"/>
 <script src="import-workspace.js"></script><link rel="stylesheet" href="import-workspace.css"/>
-<script src="context-retrieval.js"></script>
 <script src="project-memory.js"></script><script src="project-memory-ui.js"></script><script src="tool-loop-guard.js"></script>
-<script src="tool-scheduler.js"></script><script src="conversation-process.js"></script><script src="run-checkpoint.js"></script>
+<script src="tool-scheduler.js"></script><script src="conversation-flow.js"></script><script src="conversation-process.js"></script><script src="run-checkpoint.js"></script>
 <script src="run-outcome-presentation.js"></script><link rel="stylesheet" href="tool-scheduler.css"><script src="knowledge-access.js"></script><script src="research-delegation.js"></script>
+<script src="pdf-text-index.js"></script>
 <script src="vector-index.js"></script>
 <script src="vector-knowledge-ui.js"></script>
 <script src="task-context.js"></script>
@@ -237,6 +239,7 @@
 <script src="note-consolidation.js"></script>
 <script src="run-history.js"></script>
 <script src="permission-policy.js"></script>
+<script src="approval-intent.js"></script>
 <script src="permission-picker.js"></script>
 <script src="local-projects-ui.js"></script>
 <script src="local-project-agent.js"></script>
@@ -244,15 +247,20 @@
 <script src="sync-merge.js"></script>
 <script src="cloud-sync-ui.js"></script>
 <script src="trash-ui.js"></script><script src="attachment-context.js"></script>
-  <script src="attachment-delivery.js"></script><script src="reading-pane.js"></script><script src="pdf-search.js"></script><script src="pdf-reader.js"></script><link rel="stylesheet" href="pdf-reader.css"/><script src="prompt-polisher.js"></script><script src="selection-explain.js"></script><script src="alert-sound.js"></script><script src="usage-cost.js"></script><script src="conversation-link.js"></script><script src="planning-workbench.js"></script><script src="workspace-layout.js"></script><script src="onboarding.js"></script><script src="liquid-glass.js"></script><script src="native-glass-ui.js"></script><script src="project-automation.js"></script><script src="safe-preview.js"></script><script src="session-tasks.js"></script><script src="shortcuts.js"></script><script src="composer-tips.js"></script><script src="message-rail.js"></script><script src="private-mode.js"></script><script src="mode-hint.js"></script><script src="find-in-conversation.js"></script><script src="preview-media.js"></script><script src="code-highlight.js"></script><script src="math-render.js"></script><script src="project-schedule.js"></script><script src="message-media.js"></script><script src="conversation-organization.js"></script>
+  <script src="attachment-delivery.js"></script><script src="reading-pane.js"></script><script src="document-chat.js"></script><script src="pdf-search.js"></script><script src="pdf-reader.js"></script><link rel="stylesheet" href="pdf-reader.css"/><script src="prompt-polisher.js"></script><script src="selection-explain.js"></script><script src="alert-sound.js"></script><script src="usage-cost.js"></script><script src="conversation-link.js"></script><script src="task-workflow.js"></script><script src="planning-workbench.js"></script><script src="workspace-layout.js"></script><script src="onboarding.js"></script><script src="liquid-glass.js"></script><script src="native-glass-ui.js"></script><script src="project-automation.js"></script><script src="safe-preview.js"></script><script src="session-tasks.js"></script><script src="shortcuts.js"></script><script src="composer-tips.js"></script><script src="message-rail.js"></script><script src="private-mode.js"></script><script src="mode-hint.js"></script><script src="find-in-conversation.js"></script><script src="preview-media.js"></script><script src="code-highlight.js"></script><script src="math-render.js"></script><script src="project-schedule.js"></script><script src="message-media.js"></script><script src="conversation-organization.js"></script>
 <script src="conversation-organizer.js"></script>
 <script src="composer-ui.js"></script>
+<script src="composer-dictation.js"></script>
+<script src="quick-voice-command.js"></script>
 <script src="composer-add-menu.js"></script>
+<script src="message-actions.js"></script>
 <script src="app.js"></script>
 <link rel="stylesheet" href="markdown-editor.css"/><link rel="stylesheet" href="project-files.css"/><link rel="stylesheet" href="local-document-editor.css"/><link rel="stylesheet" href="agent-workbench.css"/><link rel="stylesheet" href="component-polish.css"/>
 <link rel="stylesheet" href="command-search.css"/>
 <link rel="stylesheet" href="composer-ui.css"/>
+<link rel="stylesheet" href="composer-dictation.css"/>
 <link rel="stylesheet" href="model-picker-kit.css"/>
 <link rel="stylesheet" href="composer-add-menu.css"/>
+<link rel="stylesheet" href="message-actions.css"/>
 </body>
 </html>

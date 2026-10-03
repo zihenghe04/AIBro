@@ -8,12 +8,12 @@
 .task-create-form input,.task-create-form textarea{font-size:13px!important;border:1px solid var(--line-strong)!important;border-radius:7px!important;background:var(--panel)!important}
 .task-create-form input:focus,.task-create-form textarea:focus{border-color:var(--accent)!important;box-shadow:0 0 0 2px var(--accent-soft)}
 .task-create-form input[type=date]{min-width:0;padding:8px 10px!important}
-.task-create-dates{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.task-create-dates>.task-create-field{width:52%}
+.task-create-dates{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:end}.task-create-content>button{align-self:flex-start}
 .task-create-details{display:grid;grid-template-columns:1fr 1fr;gap:18px 14px;padding-top:18px;border-top:1px solid var(--line)}
 .task-create-details>div{min-width:0}
 .task-create-actions{display:flex;flex:none;justify-content:flex-end;gap:9px;padding:16px 22px;border-top:1px solid var(--line)}
 .task-create-form .planning-error{margin:0;min-height:0}
-@media(max-width:520px){.task-create-details{grid-template-columns:1fr}.task-create-dates{gap:8px}.task-create-dates>.task-create-field{width:58%}}
+@media(max-width:520px){.task-create-details{grid-template-columns:1fr}.task-create-dates{gap:8px}.task-create-dates{grid-template-columns:1fr 1fr}}
 /* Keep the action row outside the expanding/scrolling fields. In WebKit,
    shrinking the old dialog scroller could leave its footer absent from AX. */
 #planningCreateSurface{box-sizing:border-box;min-width:0}

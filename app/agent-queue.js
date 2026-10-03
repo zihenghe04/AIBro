@@ -3,6 +3,10 @@
   // 对话级排队提交：当前轮执行期间用户仍可继续输入，消息按序排队，当前轮完成后再发送。
   // 只保存排队意图（文本 + 附件引用）；真正的发送仍走既有 sendMessage 路径，不新增发送分支。
   const LIMIT = 8;
+  // Both pending lanes share the admission limit. Moving accepted input from
+  // one lane to the other is not a new submission and must never discard it.
+  const pendingCount = conversation => (Array.isArray(conversation?.pendingSubmits) ? conversation.pendingSubmits.length : 0)
+    + (Array.isArray(conversation?.pendingInjections) ? conversation.pendingInjections.length : 0);
   const saving = new Set(), editing = new Map();
   let serial = 0;
   const key = conversation => conversation?.id || conversation;
@@ -54,7 +58,7 @@
     const goal = clean(entry?.goal); if (!goal) return null;
     checkedPdfMode(entry);
     const items = list(conversation);
-    if (items.length >= LIMIT) return null;
+    if (pendingCount(conversation) >= LIMIT) return null;
     const attachmentIds = [...new Set((Array.isArray(entry?.attachmentIds) ? entry.attachmentIds : []).filter(id => typeof id === 'string' && id))];
     const item = { id: `queued-${now}-${++serial}`, goal, attachmentIds, at: now };
     if (Array.isArray(entry?.skillSnapshot)) item.skillSnapshot = copy(entry.skillSnapshot);
@@ -161,7 +165,7 @@
     if (!conversation) return null;
     const goal = clean(entry?.goal); if (!goal) return null;
     const items = injections(conversation);
-    if (items.length >= LIMIT) return null;
+    if (pendingCount(conversation) >= LIMIT) return null;
     const item = { id: `inject-${now}-${items.length}-${goal.length}`, goal, at: now, usedAt: 0 };
     items.push(item);
     return item;
@@ -183,6 +187,18 @@
     if (conversation) conversation.pendingInjections = [];
     return items;
   }
+  function settleInjections(conversation) {
+    const pending = injections(conversation);
+    const used = pending.filter(item => item && item.usedAt);
+    // Older saved conversations may already exceed the shared admission limit.
+    // Preserve every accepted item, its identity/context and FIFO order; only
+    // new submissions are bounded. Prepare all copies before changing either lane.
+    const queued = pending.filter(item => item && !item.usedAt).map(item => ({ ...copy(item),
+      attachmentIds: copy(Array.isArray(item.attachmentIds) ? item.attachmentIds : []) }));
+    if (queued.length) list(conversation).push(...queued);
+    if (conversation) conversation.pendingInjections = [];
+    return { used, queued };
+  }
   function describeInjections(conversation, en = false) {
     const total = injections(conversation).length; if (!total) return '';
     return en ? `${total} pending · applied at the next tool boundary` : `待注入 ${total} 条 · 下一个工具边界生效`;
@@ -192,6 +208,6 @@
     const total = count(conversation); if (!total) return '';
     return en ? `${total} queued · sent after the current reply` : `已排队 ${total} 条 · 当前回复完成后自动发送`;
   }
-  root.AgentQueue = { LIMIT, snapshot, sameContext, isBusy, isBlocked, anyBusy: () => saving.size > 0, beginEdit, endEdit, commit, mutate, list, enqueue, shift, clear, count, describe, injections, inject, injectionText, takeInjections, describeInjections };
+  root.AgentQueue = { LIMIT, pendingCount, snapshot, sameContext, isBusy, isBlocked, anyBusy: () => saving.size > 0, beginEdit, endEdit, commit, mutate, list, enqueue, shift, clear, count, describe, injections, inject, injectionText, takeInjections, settleInjections, describeInjections };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.AgentQueue;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

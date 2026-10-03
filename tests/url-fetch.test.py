@@ -311,6 +311,148 @@ class FetchHTTPTests(unittest.TestCase):
         self.assertEqual(sorted(path.name for path in (Path(self.store_temp.name)/'files').iterdir()), ['existing','existing.meta.json'])
         self.assertEqual(self.store.load(), self.before)
 
+    def bookmark_request(self):
+        identifier = 'quick_link_00000000-0000-4000-8000-000000000001'
+        current = self.store.load()
+        current['projects'] = [{'id': 'project', 'name': 'Example', 'workspace': '科研'}]
+        current['imports'] = [{'id': identifier, 'name': 'My title', 'url': 'https://example.com/paper',
+                               'projectId': 'project', 'workspace': '科研', 'folderPath': 'Reading',
+                               'quickLinkIdentity': identifier + ':' + identifier, 'updatedAt': 1,
+                               'parser': 'bookmark', 'importOrigin': 'quick-links', 'fileStored': False,
+                               'content': '', 'pages': [], 'status': 'original-only'}]
+        self.store.save(current)
+        return {'url': 'https://example.com/paper', 'native': True, 'bookmark': {
+            'id': identifier, 'identity': identifier + ':' + identifier, 'updatedAt': 1,
+            'requestId': 'quick_link_00000000-0000-4000-8000-000000000002'}}
+
+    def test_bookmark_saves_same_id_original_without_mutating_workspace_and_replays_lost_ack(self):
+        payload = self.bookmark_request(); before = self.store.load()
+        raw = b'<title>Fetched title</title><p>Saved readable body</p>'
+        with mock.patch.object(self.module, 'fetch_public_url', return_value=self.downloaded(raw, 'text/html')) as fetch:
+            status, result = self.post(payload)
+            replay_status, replay = self.post(payload)
+        self.assertEqual((status, replay_status), (200, 200)); self.assertEqual(result, replay)
+        self.assertEqual(result['id'], payload['bookmark']['id']); self.assertEqual(result['bookmarkRequestId'], payload['bookmark']['requestId'])
+        self.assertEqual(self.store.file_path(result['id']).read_bytes(), raw)
+        self.assertEqual(result['content'], 'Fetched title Saved readable body')
+        self.assertEqual(self.store.load(), before); fetch.assert_called_once()
+
+    def test_bookmark_private_retired_ancestry_and_deleted_project_refuse_before_network(self):
+        for kind in ('private', 'retired', 'deleted', 'provenance'):
+            payload = self.bookmark_request(); state = self.store.load()
+            if kind == 'private': state['projects'][0]['private'] = True
+            elif kind == 'deleted': state['projects'][0]['archived'] = True
+            elif kind == 'provenance': state['imports'][0]['provenance'] = {'origin': {'incognito': True}}
+            else:
+                state['imports'][0]['sourceConversationId'] = 'old-conversation'
+                state['trash'] = [{'data': {'conversations': [{'id': 'old-conversation', 'private': True}]}}]
+            self.store.save(state)
+            with mock.patch.object(self.module, 'fetch_public_url') as fetch:
+                self.assertIn(self.post(payload)[0], (403, 409), kind); fetch.assert_not_called()
+
+    def test_bookmark_rejects_unknown_identity_url_target_and_shape_before_network(self):
+        for change in ('id', 'identity', 'empty-identity', 'url', 'timestamp', 'native', 'extra'):
+            payload = self.bookmark_request()
+            if change == 'id': payload['bookmark']['id'] = '../outside'
+            elif change == 'identity': payload['bookmark']['identity'] = 'another record'
+            elif change == 'empty-identity': payload['bookmark']['identity'] = ''
+            elif change == 'url': payload['url'] = 'https://example.com/different'
+            elif change == 'timestamp': payload['bookmark']['updatedAt'] = True
+            elif change == 'native': payload['native'] = False
+            else: payload['bookmark']['destination'] = '/tmp/other'
+            with mock.patch.object(self.module, 'fetch_public_url') as fetch:
+                self.assertIn(self.post(payload)[0], (400, 409), change); fetch.assert_not_called()
+
+    def test_bookmark_empty_html_does_not_claim_readable_body_or_store_unusable_original(self):
+        payload = self.bookmark_request()
+        with mock.patch.object(self.module, 'fetch_public_url', return_value=self.downloaded(b'<html><script>render()</script></html>', 'text/html')):
+            status, result = self.post(payload)
+        self.assertEqual(status, 422); self.assertEqual(result['code'], 'EMPTY_CONTENT')
+        self.assertFalse(self.store.file_path(payload['bookmark']['id']).exists())
+        self.assertEqual(self.store.load()['imports'][0]['parser'], 'bookmark')
+
+    def test_bookmark_keeps_public_network_validation_and_original_url(self):
+        payload = self.bookmark_request()
+        with mock.patch.object(self.module, 'fetch_public_url', side_effect=fetcher.PublicFetchError('非公网目标', 'NON_PUBLIC_URL', 403)) as fetch:
+            status, result = self.post(payload)
+        self.assertEqual(status, 403); self.assertEqual(result['code'], 'NON_PUBLIC_URL')
+        self.assertEqual(fetch.call_args.args[0], payload['url'])
+        self.assertFalse(self.store.file_path(payload['bookmark']['id']).exists())
+        self.assertEqual(self.store.load()['imports'][0]['url'], payload['url'])
+
+    def test_bookmark_change_or_new_privacy_during_download_never_writes_original(self):
+        for private in (False, True):
+            payload = self.bookmark_request()
+            def download(*args, **kwargs):
+                state = self.store.load()
+                if private: state['projects'][0]['private'] = True
+                else: state['imports'][0]['name'] = 'Changed without timestamp'
+                self.store.save(state)
+                return self.downloaded(b'body', 'text/plain')
+            with mock.patch.object(self.module, 'fetch_public_url', side_effect=download):
+                self.assertIn(self.post(payload)[0], (403, 409))
+            self.assertFalse(self.store.file_path(payload['bookmark']['id']).exists())
+
+    def test_bookmark_existing_original_is_never_replaced(self):
+        payload = self.bookmark_request(); identifier = payload['bookmark']['id']
+        self.store.save_file(identifier, b'Human original', 'keep.txt', 'text/plain')
+        with mock.patch.object(self.module, 'fetch_public_url') as fetch:
+            status, result = self.post(payload); fetch.assert_not_called()
+        self.assertEqual(status, 409); self.assertEqual(result['code'], 'BOOKMARK_FILE_CONFLICT')
+        self.assertEqual(self.store.file_path(identifier).read_bytes(), b'Human original')
+
+    def test_bookmark_offline_then_manual_retry_keeps_single_original_identity(self):
+        payload = self.bookmark_request()
+        with mock.patch.object(self.module, 'fetch_public_url', side_effect=fetcher.PublicFetchError('离线', 'DOWNLOAD_FAILED', 502)):
+            self.assertEqual(self.post(payload)[0], 502)
+        state = self.store.load(); state['imports'][0]['updatedAt'] = 2
+        state['imports'][0]['quickLinkFetch'] = {'status': 'failed'}; self.store.save(state)
+        payload['bookmark']['updatedAt'] = 2
+        payload['bookmark']['requestId'] = 'quick_link_00000000-0000-4000-8000-000000000003'
+        with mock.patch.object(self.module, 'fetch_public_url', return_value=self.downloaded(b'Retry body', 'text/plain')):
+            self.assertEqual(self.post(payload)[0], 200)
+        self.assertEqual(len(self.store.load()['imports']), 1)
+        self.assertEqual(self.store.file_path(payload['bookmark']['id']).read_bytes(), b'Retry body')
+
+    def test_bookmark_lost_ack_then_title_change_reuses_original_not_overwrites_or_refetches(self):
+        payload = self.bookmark_request()
+        with mock.patch.object(self.module, 'fetch_public_url', return_value=self.downloaded(b'First body', 'text/plain')):
+            self.assertEqual(self.post(payload)[0], 200)
+        state = self.store.load(); state['imports'][0].update(name='Human title', updatedAt=2); self.store.save(state)
+        payload['bookmark'].update(updatedAt=2, requestId='quick_link_00000000-0000-4000-8000-000000000003')
+        with mock.patch.object(self.module, 'fetch_public_url') as fetch:
+            status, result = self.post(payload); fetch.assert_not_called()
+        self.assertEqual(status, 200); self.assertEqual(result['content'], 'First body')
+        self.assertEqual(self.store.load()['imports'][0]['name'], 'Human title')
+
+    def test_bookmark_corrupt_cached_original_is_not_presented_as_success(self):
+        payload = self.bookmark_request()
+        with mock.patch.object(self.module, 'fetch_public_url', return_value=self.downloaded(b'First body', 'text/plain')):
+            self.assertEqual(self.post(payload)[0], 200)
+        self.store.file_path(payload['bookmark']['id']).write_bytes(b'Unexpected bytes')
+        with mock.patch.object(self.module, 'fetch_public_url') as fetch:
+            self.assertEqual(self.post(payload)[0], 409); fetch.assert_not_called()
+
+    def test_bookmark_disk_failure_is_retryable_without_partial_readable_original(self):
+        payload = self.bookmark_request(); atomic = self.store.atomic_write
+        def write(path, data):
+            if path.name == payload['bookmark']['id']: raise OSError('disk full')
+            return atomic(path, data)
+        with mock.patch.object(self.module, 'fetch_public_url', return_value=self.downloaded(b'body', 'text/plain')), mock.patch.object(self.store, 'atomic_write', side_effect=write):
+            self.assertEqual(self.post(payload)[0], 503)
+        self.assertFalse(self.store.file_path(payload['bookmark']['id']).exists())
+        with mock.patch.object(self.module, 'fetch_public_url', return_value=self.downloaded(b'body', 'text/plain')):
+            self.assertEqual(self.post(payload)[0], 200)
+
+    def test_bookmark_concurrent_request_reports_busy_without_repeating_network(self):
+        payload = self.bookmark_request()
+        def download(*args, **kwargs):
+            status, result = self.post(payload)
+            self.assertEqual(status, 409); self.assertEqual(result['code'], 'BOOKMARK_BUSY')
+            return self.downloaded(b'body', 'text/plain')
+        with mock.patch.object(self.module, 'fetch_public_url', side_effect=download) as fetch:
+            self.assertEqual(self.post(payload)[0], 200); fetch.assert_called_once()
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

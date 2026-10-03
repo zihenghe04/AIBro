@@ -41,6 +41,7 @@ test('prepared snapshot is durable before validation/application; completion and
   gate.resolve(); const receipt = await pending;
   assert.equal(receipt.phase, 'committed'); assert.equal(f.run.status, 'completed'); assert.equal(f.message.text, 'The actual result');
   assert.deepEqual(receipt.results, f.run.results); assert.equal(f.calls.apply, 1); assert.equal(f.calls.settled, 1); assert.equal(f.api.isBusy(), false);
+  assert.equal(f.api.view(f.run).hasSavedResult, true);
 });
 
 test('preparation save rejection has no effects and explicit continuation re-saves the same frozen plan', async () => {
@@ -107,6 +108,28 @@ test('zero actions still persist the answer before reporting completion', async 
   const f = fixture(); f.run.pendingActions = []; await f.prepare({ answer: 'A direct answer', clarify: { questions: [{ id: 'q' }], draft: {} } });
   assert.equal(f.calls.persist, 2); assert.equal(f.state.notes.length, 0); assert.equal(f.message.text, 'A direct answer');
   assert.deepEqual(f.message.clarify, { questions: [{ id: 'q' }], draft: {} }); assert.equal(f.run.executionReceipt.actionCount, 0);
+  assert.equal(f.run.status, 'completed'); assert.equal(f.api.view(f.run).hasSavedResult, false);
+});
+
+test('receipt presentation accepts known persisted operations and rejects proposals, no-ops and malformed results', () => {
+  const receipt = results => ({ version: 1, phase: 'committed', actionCount: 1, results });
+  const view = results => Checkpoint.view({ executionReceipt: receipt(results) });
+  for (const [type, operation] of [['note', 'created'], ['note', 'updated'], ['task', 'created'], ['task', 'updated'],
+    ['project', 'created'], ['project', 'linked'], ['import', 'assigned'], ['import', 'renamed'], ['import', 'updated'], ['paper', 'updated']]) {
+    assert.equal(view([{ type, operation, id: 'actual-record' }]).hasSavedResult, true, `${type}:${operation}`);
+  }
+  for (const result of [null, {}, { type: 'note', id: 'note' }, { type: 'note', id: '', operation: 'created' },
+    { type: 'note', id: 1, operation: 'created' }, { type: 'note', id: 'note', operation: 'matched' },
+    { type: 'note', id: 'note', operation: 'drafted' }, { type: 'note', id: 'note', operation: 'deleted' },
+    { type: 'note', id: 'note', operation: 'created', undoneAt: 1 }, { type: 'note', id: 'note', operation: 'assigned' },
+    { type: 'schedule-proposal', id: 'proposal', operation: 'created' }, { type: 'tool', id: 'read', operation: 'completed' }]) {
+    assert.equal(view([result]).hasSavedResult, false, JSON.stringify(result));
+  }
+  for (const results of [undefined, null, {}, []]) assert.equal(view(results).hasSavedResult, false);
+  for (const overrides of [{ phase: 'prepared' }, { phase: 'applied' }, { actionCount: 0 }, { actionCount: '1' }, { actionCount: -1 }]) {
+    assert.equal(Checkpoint.view({ executionReceipt: { ...receipt([{ type: 'note', id: 'note', operation: 'created' }]), ...overrides } }).hasSavedResult, false);
+  }
+  assert.equal(view([{ type: 'note', id: 'draft', operation: 'drafted' }, { type: 'task', id: 'task', operation: 'created' }]).hasSavedResult, true);
 });
 
 test('result identity changed during durable save cannot be reported as completed', async () => {

@@ -57,27 +57,56 @@
   }
 
   let hooks = {}, controller = null, generation = 0, snapshot = null, selection = null, status = '';
+  let toolbarOwner = null, suppressedSelection = null;
 
   const $ = id => root.document.getElementById(id);
 
   function readSelection() {
     const doc = root.document;
     const sel = doc.getSelection && doc.getSelection();
-    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+    if (!sel || sel.isCollapsed || sel.rangeCount !== 1) return null;
     const text = normalizeSelection(sel.toString());
     if (!text) return null;
     let node = sel.anchorNode;
     if (node && node.nodeType === 3) node = node.parentNode;
     const body = node && node.closest ? node.closest('.message-body') : null;
-    if (!body || !doc.body.contains(body)) return null;
+    if (!body || !doc.body.contains(body) || !body.contains(sel.focusNode) || body.closest('[hidden],[inert],[aria-hidden="true"]')) return null;
+    const controls = 'button,summary,input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="button"]';
+    const range = sel.getRangeAt(0);
+    if ([...body.querySelectorAll(controls)].some(control => range.intersectsNode(control))) return null;
     const message = (body.closest && body.closest('.message-wrap')) || body.parentElement;
     const kind = message && message.classList ? (message.classList.contains('user-message') ? 'user' : message.classList.contains('agent-message') ? 'agent' : '') : '';
-    return { text, role: kind, context: nearContext(body, node, text), body };
+    return { text, role: kind, context: nearContext(body, node, text), body,
+      anchorNode: sel.anchorNode, anchorOffset: sel.anchorOffset, focusNode: sel.focusNode, focusOffset: sel.focusOffset };
+  }
+
+  function sameSelection(a, b) {
+    return !!a && !!b && a.body === b.body && normalizeSelection(a.text) === normalizeSelection(b.text) &&
+      ((a.anchorNode === b.anchorNode && a.anchorOffset === b.anchorOffset && a.focusNode === b.focusNode && a.focusOffset === b.focusOffset) ||
+       (a.anchorNode === b.focusNode && a.anchorOffset === b.focusOffset && a.focusNode === b.anchorNode && a.focusOffset === b.anchorOffset));
+  }
+
+  // The existing toolbar owns the sole floating shell. A reviewed extension
+  // may own one slot and its stricter snapshot/lifecycle, not another popover.
+  function claimToolbar(owner) {
+    const bar = $('selectionBar');
+    if (!bar || !$('selectionPanel')?.hidden || !owner?.element || !owner.pick || !owner.close) return null;
+    if (toolbarOwner && toolbarOwner !== owner) toolbarOwner.close();
+    toolbarOwner = owner; suppressedSelection = null;
+    bar.prepend(owner.element); bar.hidden = false;
+    return bar;
+  }
+
+  function releaseToolbar(owner) {
+    if (toolbarOwner !== owner) return;
+    toolbarOwner = null; suppressedSelection = owner.snapshot;
+    const bar = $('selectionBar'); if (bar) bar.hidden = true;
   }
 
   function position() {
     const bar = $('selectionBar');
     if (!bar || bar.hidden) return;
+    if (toolbarOwner) return; // Its owner positions the entire shared shell.
     const sel = root.document.getSelection && root.document.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) { hideBar(); return; }
     const rect = sel.getRangeAt(0).getBoundingClientRect();
@@ -99,6 +128,7 @@
 
   function hideBar() {
     const bar = $('selectionBar');
+    toolbarOwner?.close();
     if (bar) bar.hidden = true;
   }
 
@@ -119,8 +149,10 @@
   }
 
   function open(mode) {
-    const picked = readSelection();
-    if (!picked) { hooks.toast?.('先选中一段对话内容。'); return; }
+    let picked = toolbarOwner ? toolbarOwner.pick() : readSelection();
+    if (!picked) { hideBar(); hooks.toast?.('先选中一段对话内容。'); return; }
+    if (toolbarOwner) picked = { ...picked, role: 'agent', text: normalizeSelection(picked.text),
+      context: nearContext(picked.body, picked.anchorNode, normalizeSelection(picked.text)) };
     selection = { ...picked, mode: Object.hasOwn(modes, mode) ? mode : 'explain' };
     snapshot = { conversationId: hooks.getConversation()?.id || '' };
     status = '';
@@ -203,7 +235,10 @@
   function onSelectionChange() {
     const panel = $('selectionPanel');
     if (panel && !panel.hidden) return;
+    if (toolbarOwner) return;
     const picked = readSelection();
+    if (sameSelection(picked, suppressedSelection)) { hideBar(); return; }
+    suppressedSelection = null;
     if (picked) showBar(); else hideBar();
   }
 
@@ -227,12 +262,14 @@
     doc.body.append(panel);
 
     bar.querySelectorAll('[data-selection-mode]').forEach(button => { button.onclick = () => open(button.dataset.selectionMode); });
+    bar.addEventListener('pointerdown', event => { if (event.button === 0 && event.target.closest('button')) event.preventDefault(); });
     $('selectionClose').onclick = () => close(true);
     $('selectionStop').onclick = stop;
     $('selectionInsert').onclick = insert;
     $('selectionCopy').onclick = copy;
     doc.addEventListener('selectionchange', onSelectionChange);
     doc.addEventListener('pointerdown', event => {
+      if (event.target.closest?.('.message-body')) suppressedSelection = null;
       if (bar.hidden) return;
       if (bar.contains(event.target)) return;
       if (event.target.closest && event.target.closest('.message-body')) return;
@@ -243,5 +280,6 @@
     doc.addEventListener('scroll', position, true);
   }
 
-  return { init, open, close, stop, insert, copy, generate, buildInput, normalizeSelection, nearContext, canApply, insertText, modes, MAX_CHARS };
+  return { init, open, close, stop, insert, copy, generate, claimToolbar, releaseToolbar,
+    buildInput, normalizeSelection, nearContext, canApply, insertText, modes, MAX_CHARS };
 });

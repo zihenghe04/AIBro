@@ -38,6 +38,7 @@
   });
  }
  function completedAnalysis(state,source,conversationId){
+  if(Analysis()?.adoptedAnalysis(state,source,{conversationId}).some(output=>completedRun(state,unique(state.agentRuns,output.runId),conversationId)))return true;
   const stamp=source.analysis,at=stamp?.analyzedAt;
   if(stamp?.status!=='analyzed'||!Number.isFinite(at)||at<0)return false;
   const run=unique(state.agentRuns,stamp.runId);

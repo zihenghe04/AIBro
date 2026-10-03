@@ -1,9 +1,11 @@
 import SwiftUI
 import AppKit
 import WebKit
+import Combine
 
 struct Item: Identifiable, Decodable, Hashable { let id: String; let title: String; let workspace: String }
-struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bool?;let activityUnread:Int?;let commandSearchOpen:Bool?;let commandSearchNavigationVersion:Int?;let tourOpen:Bool?; let conversationLibrary:[ConversationEntry]?;let conversationFolders:[ConversationFolder]?; let tasks:[ContentRecord]?;let documents:[ContentRecord]?;let modalOpen:Bool?;let taskOpen:Bool?;let taskEntry:[String:String]?;let readingOpen:Bool?;let readerAvailable:Bool?; let projects: [Item]; let conversations: [Item]; let taskCount: Int; let noteCount: Int; let sourceCount: Int; let view: String; let conversationId: String; let busy: Bool; let projectId: String?;let projectSection:String?;let spaceSection:String?;let privateMode:Bool? }
+private struct NativeSnapshotStamp:Decodable {let version:Int;let nonce:String;let sequence:Int;let type:String}
+struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bool?;let activityUnread:Int?;let commandSearchOpen:Bool?;let commandSearchNavigationVersion:Int?;let tourOpen:Bool?; let conversationLibrary:[ConversationEntry]?;let conversationFolders:[ConversationFolder]?; let tasks:[ContentRecord]?;let documents:[ContentRecord]?;let modalOpen:Bool?;let taskOpen:Bool?;let taskEntry:[String:String]?;let readingOpen:Bool?;let readerAvailable:Bool?; let projects: [Item]; let conversations: [Item]; let taskCount: Int; let noteCount: Int; let sourceCount: Int; let view: String; let conversationId: String; let busy: Bool; let projectId: String?;let projectSection:String?;let spaceSection:String?;let privateMode:Bool?;let quickWorkbench:NativeQuickWorkbenchSnapshot? }
 
 @MainActor final class Workspace: NSObject, ObservableObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     @Published var conversationProjectFilter=""
@@ -17,6 +19,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     private var restoringWorkspaceLocation=false
     @Published var compactWorkspacePreferred=false
     let agenda = AgendaStore()
+    let agendaAgent = AgendaAgentController()
     let browser = NativeBrowser()
     @Published var agendaSyncConflicts:[AgendaSyncConflict]=[]
     @Published var agendaSyncStatus=""
@@ -45,6 +48,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     private var webFocusGeneration=0
     let web: WKWebView
     var origin: URL?
+    let nativeNotificationToken = UUID().uuidString + UUID().uuidString
     var backend: Process?
     var backendLifetime: Pipe?
     var log: FileHandle?
@@ -54,6 +58,20 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     var desktop:NativeDesktop?
     var sessionLock:Int32 = -1
     private var startupBegan = Date()
+    @Published private(set) var startupFailure:String?
+    private var startupStage="not_started"
+    private var startupStatus="loading"
+    private var startupEvents:[[String:Any]]=[]
+    private var startupWatchdog:Task<Void,Never>?
+    private var snapshotNavigationGeneration=0
+    private var snapshotNavigationCommitted=false
+    private var snapshotDocumentNonce:String?
+    private var snapshotAcceptedSequence=0
+    private var snapshotEverReady=false
+    private var startupNavigationFailed=false
+    private var startupContentTerminated=false
+    private var startupNavigation:WKNavigation?
+    private var quickNavigationEvents:[[String:Any]]=[]
     override init() {
         production=Bundle.main.object(forInfoDictionaryKey:"AIBroProduction") as? Bool == true
         root = ProcessInfo.processInfo.environment["AIBRO_SOURCE_ROOT"].map{URL(fileURLWithPath:$0)} ?? (production ? Bundle.main.resourceURL! : URL(fileURLWithPath:FileManager.default.currentDirectoryPath))
@@ -72,6 +90,17 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         config.userContentController.addUserScript(WKUserScript(source:"window.__aibroPresentationVisible=false;window.__aibroSurfaceVisible=false;",injectionTime:.atDocumentStart,forMainFrameOnly:true))
         web = WKWebView(frame: .zero, configuration: config)
         super.init()
+        agendaAgent.configure(store:agenda,environment:{[weak self] in
+            let snapshot=self?.snapshot
+            return AgendaAgentEnvironment(ready:self?.ready == true,privateMode:snapshot?.privateMode != false,
+                projects:(snapshot?.projects ?? []).map{AgendaAgentProject(id:$0.id,title:$0.title,workspace:$0.workspace)},
+                documents:(snapshot?.documents ?? []).map{AgendaEditingDocument(id:$0.id,title:$0.title,projectID:$0.projectId,kind:$0.kind)},
+                conversationIDs:Set((snapshot?.conversationLibrary ?? []).filter{!$0.archived}.map(\.id)),
+                documentWorkspaces:Dictionary(grouping:snapshot?.documents ?? [],by:\.id).compactMapValues{$0.count == 1 ? $0.first?.workspace:nil})
+        },present:{[weak self] in
+            guard let self,self.agendaDraft == nil,!self.agenda.hasUnsavedEditorDrafts else{return false}
+            return await self.navigateWorkspace("agenda")
+        })
         // Synthetic QA deliberately uses the browser fallback and never touches saved secrets.
         if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] == nil || ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_DESKTOP"] == "1" {
             let bridge=NativeDesktop(data:dataDirectory,production:production && ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] == nil);desktop=bridge;bridge.workspace=self;bridge.install(config,root:root)
@@ -84,12 +113,16 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         appearance=UserDefaults.standard.string(forKey:"NativePreviewAppearance") ?? "system"
         web.navigationDelegate = self; web.uiDelegate = self
         agenda.onOpen = { [weak self] in self?.selection="agenda" }
-        agenda.onChanged = { [weak self] in self?.requestAgendaSync();self?.web.evaluateJavaScript("document.dispatchEvent(new Event('aibro-agenda-changed'))",completionHandler:nil) }
+        agenda.onChanged = { [weak self] in self?.agendaAgent.refreshContext();self?.requestAgendaSync();self?.web.evaluateJavaScript("document.dispatchEvent(new Event('aibro-agenda-changed'))",completionHandler:nil) }
         config.userContentController.add(self, name: "workspace")
         config.userContentController.add(self,name:"glassRegions")
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/conversation-library.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/agenda-sync.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/agenda-ai.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
+        if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/quick-capture.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
+        if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/quick-recording-title.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
+        if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/quick-links.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
+        if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/quick-workbench.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/glass-regions.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js = try? String(contentsOf: root.appendingPathComponent("native/Resources/bridge.js"), encoding: .utf8) {
             config.userContentController.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
@@ -129,10 +162,10 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         do {
             let data = dataDirectory
             try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
-            startupBegan=Date();recordStartupStatus("loading")
-            if production {
+            startupBegan=Date();recordStartupStatus("loading",stage:"backend_starting");watchStartup()
+            if production,sessionLock<0 {
                 sessionLock=Darwin.open(data.appendingPathComponent("native-session.lock").path,O_CREAT|O_RDWR,0o600)
-                guard sessionLock >= 0,flock(sessionLock,LOCK_EX|LOCK_NB)==0 else{throw AgendaError.message("AI Bro 已在运行，请返回现有窗口。")}
+                guard sessionLock >= 0,flock(sessionLock,LOCK_EX|LOCK_NB)==0 else{if sessionLock>=0{Darwin.close(sessionLock);sessionLock = -1};throw AgendaError.message("AI Bro 已在运行，请返回现有窗口。")}
             }
             agenda.load(folder:data,qa:ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] != nil && ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_NOTIFICATIONS"] != "1")
             let process = Process()
@@ -145,6 +178,8 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             // Bundled resources are signed; Python caches must not mutate them.
             env["PYTHONDONTWRITEBYTECODE"] = "1"
             env["AI_WORKSTATION_PARENT_PIPE"] = "1"
+            env["AI_WORKSTATION_NOTIFICATION_DIR"] = NativeQuickExternalNotificationLocation.directory.path
+            env["AI_WORKSTATION_NATIVE_NOTIFICATION_TOKEN"] = nativeNotificationToken
             process.environment = env
             let lifetime = Pipe(); process.standardInput = lifetime; backendLifetime = lifetime
             let pipe = Pipe(); process.standardOutput = pipe; process.standardError = FileHandle.nullDevice
@@ -155,17 +190,58 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             }.value
             guard let text = output.components(separatedBy: "http://127.0.0.1:").last?.split(whereSeparator: { !$0.isNumber }).first,
                   let port = Int(text), port > 0, let url = URL(string:"http://127.0.0.1:\(port)/") else { throw CocoaError(.fileReadCorruptFile) }
-            origin = url; web.load(URLRequest(url: url))
-        } catch { self.error = "无法启动 AI Bro：\(error.localizedDescription)"; backend?.terminate(); backend = nil }
+            origin = url;recordStartupStatus("loading",stage:"backend_port_received");web.load(URLRequest(url: url))
+        } catch { self.error = "无法启动 AI Bro：\(error.localizedDescription)";startupFailure=nativeUI("本地工作区未能启动。", "The local workspace could not start.");recordStartupStatus("failed",stage:"backend_failed",error:error);startupWatchdog?.cancel();backend?.terminate();backend = nil }
     }
     // Local diagnostics contain readiness/counts only, never workspace text or credentials.
-    private func recordStartupStatus(_ status:String) {
+    private func recordStartupStatus(_ status:String,stage:String?=nil,reason:String?=nil,error:Error?=nil) {
+        startupStatus=status
+        if let stage {startupStage=stage}
+        var event:[String:Any]=["status":status,"stage":startupStage,"elapsedSeconds":Date().timeIntervalSince(startupBegan),"navigationGeneration":snapshotNavigationGeneration]
+        if let reason {event["reason"]=reason}
+        if let error {event.merge(diagnosticError(error)){_,new in new}}
+        startupEvents.append(event);if startupEvents.count>32 {startupEvents.removeFirst(startupEvents.count-32)}
         var value:[String:Any] = ["status":status,"version":Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "preview","updatedAt":Date().timeIntervalSince1970,"elapsedSeconds":Date().timeIntervalSince(startupBegan)]
+        value["stage"]=startupStage;value["events"]=startupEvents
         if let snapshot {value["projects"]=snapshot.projects.count;value["tasks"]=snapshot.tasks?.count ?? 0;value["notes"]=snapshot.noteCount;value["sources"]=snapshot.sourceCount;value["conversations"]=snapshot.conversations.count}
         let path=dataDirectory.appendingPathComponent("native-startup-status.json")
         if let bytes=try? JSONSerialization.data(withJSONObject:value,options:[.sortedKeys]) {try? bytes.write(to:path,options:.atomic);try? FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:path.path)}
     }
-    @discardableResult func command(_ type: String, _ id: String = "", section:String?=nil, origin:[String:Any]?=nil,requestId:String?=nil)->Task<Bool,Never>? {
+    private func diagnosticError(_ error:Error)->[String:Any] {
+        let value=error as NSError
+        let category=value.domain==WKErrorDomain ? "webkit":value.domain==NSURLErrorDomain ? "url":value.domain==NSCocoaErrorDomain ? "cocoa":"other"
+        return ["errorCategory":category,"errorCode":value.code]
+    }
+    func recordQuickNavigation(_ stage:String,reason:String?=nil,error:Error?=nil,accepted:Bool?=nil) {
+        var value:[String:Any]=["stage":stage,"at":Date().timeIntervalSince1970]
+        if let reason {value["reason"]=reason};if let accepted {value["accepted"]=accepted}
+        if let error {value.merge(diagnosticError(error)){_,new in new}}
+        quickNavigationEvents.append(value);if quickNavigationEvents.count>24 {quickNavigationEvents.removeFirst(quickNavigationEvents.count-24)}
+        let path=dataDirectory.appendingPathComponent("native-navigation-status.json")
+        if let bytes=try? JSONSerialization.data(withJSONObject:["version":1,"events":quickNavigationEvents],options:[.sortedKeys]) {try? bytes.write(to:path,options:.atomic);try? FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:path.path)}
+    }
+    private func watchStartup() {
+        startupWatchdog?.cancel()
+        startupWatchdog=Task { @MainActor [weak self] in
+            do {try await Task.sleep(nanoseconds:20_000_000_000)}catch{return}
+            guard let self,!self.ready else{return}
+            self.startupFailure=nativeUI("工作区尚未连接。可以重试连接，当前内容会保留。", "The workspace has not connected. Retry the connection; current content is retained.")
+            self.recordStartupStatus("stalled",reason:"readiness_deadline")
+        }
+    }
+    func retryStartupConnection() {
+        guard !ready else{return}
+        if backend == nil {startupFailure=nil;Task{await start()};return}
+        // A user may retry a failed initial navigation. An existing document
+        // is never reloaded automatically or just because an ACK was lost.
+        if (startupContentTerminated || (!snapshotEverReady && startupNavigationFailed)),let origin {startupFailure=nil;web.load(URLRequest(url:origin));return}
+        web.evaluateJavaScript("window.NativeSnapshotChannel?.retry() === true") { [weak self] value,error in
+            guard let self,!self.ready else{return}
+            if error == nil,(value as? Bool)==true {self.startupFailure=nil;self.recordStartupStatus("loading",stage:"snapshot_retry");self.watchStartup()}
+            else {self.startupFailure=nativeUI("工作区仍未就绪，内容已保留。请稍后重试。", "The workspace is not ready yet. Content is retained; try again shortly.");self.recordStartupStatus("stalled",stage:"snapshot_retry_unavailable",error:error)}
+        }
+    }
+    @discardableResult func command(_ type: String, _ id: String = "", section:String?=nil, origin:[String:Any]?=nil,requestId:String?=nil,quickEntry:Bool=false,runId:String?=nil)->Task<Bool,Never>? {
         guard ready else { return nil }
         if type == "view",!["history","settings"].contains(id) {return command("workspace-view",id == "dashboard" ? "overview":id,section:section,requestId:requestId)}
         // Direct commands (including native actions) need the same origin as reveal.
@@ -179,6 +255,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         }
         let focusGeneration=webFocusGeneration
         let taskSurfaceBefore=(spaceContent,returningFromModal,sawModal)
+        let quickCompactBefore=compactWorkspacePreferred
         if type == "task" {returningFromModal=true;sawModal=false}
         if ["note","import","task"].contains(type) {spaceContent=true}
         if isRoute || ["view","note","import","reader"].contains(type) {compactWorkspacePreferred=true}
@@ -193,6 +270,8 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             var payload:[String:Any] = ["type":type,"id":id]
             if let section {payload["section"]=section}
             if let requestId {payload["requestId"]=requestId}
+            if quickEntry {payload["quickEntry"]=true}
+            if let runId {payload["runId"]=runId}
             return Task { @MainActor in
                 do {
                     guard projectNavigationRequest == request,webFocusGeneration == focusGeneration else{return false}
@@ -219,6 +298,36 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
                     if let returnSelection {commandSearchSelection=selection == returnSelection ? nil:returnSelection;selection=returnSelection;spaceContent=returnSpaceContent}
                     self.error=nativeUI("无法打开该位置，当前文档已保留。请重试。", "This destination could not open. Your current document is retained. Try again.")
                 }
+                return false
+            }
+        }
+        // Floating document opens need their real acknowledgment. Keep ordinary
+        // modal commands' existing lifecycle; never count nil as quick success.
+        if ["task","note","import"].contains(type),quickEntry {
+            var payload:[String:Any] = ["type":type,"id":id]
+            if let documentOrigin {payload["origin"]=documentOrigin}
+            if quickEntry {payload["quickEntry"]=true}
+            return Task { @MainActor in
+                do {
+                    guard webFocusGeneration == focusGeneration else{recordQuickNavigation("renderer_cancelled",reason:"generation_changed_before_call");return false}
+                    let result=try await web.callAsyncJavaScript("return await window.NativeShell?.performWithDiagnostics(command);",arguments:["command":payload],in:nil,contentWorld:.page)
+                    guard webFocusGeneration == focusGeneration else{recordQuickNavigation("renderer_cancelled",reason:"generation_changed_after_call");return false}
+                    let receipt=result as? [String:Any]
+                    let accepted=(receipt?["accepted"] as? Bool)==true
+                    let known=["opened","renderer_rejected","workspace_hydrating","unsupported_command","private_mode","web_modal","access_unavailable","record_ambiguous","record_unavailable","record_private","task_unavailable","task_editor_rejected","renderer_exception"]
+                    let reason=receipt?["reason"] as? String ?? "missing_receipt"
+                    let declaredKind=receipt?["ackKind"] as? String ?? "object"
+                    let ackKind=receipt == nil ? "missing":(["boolean","empty","object","other"].contains(declaredKind) ? declaredKind:"invalid")
+                    recordQuickNavigation("renderer_ack_"+ackKind,reason:known.contains(reason) ? reason:"invalid_receipt",accepted:accepted)
+                    if let category=receipt?["exceptionCategory"] as? String,["TypeError","ReferenceError","SyntaxError","RangeError","DOMException","AbortError","Error"].contains(category) {recordQuickNavigation("renderer_exception",reason:category)}
+                    if accepted {compactWorkspacePreferred=true;return true}
+                } catch {
+                    recordQuickNavigation("renderer_call_failed",reason:webFocusGeneration==focusGeneration ? "current_generation":"generation_changed",error:error)
+                    guard webFocusGeneration == focusGeneration else{return false}
+                }
+                (spaceContent,returningFromModal,sawModal)=taskSurfaceBefore
+                compactWorkspacePreferred=quickCompactBefore
+                self.error=nativeUI("内容尚未打开，当前编辑已保留。请重试。", "The item did not open. Your current edit is retained. Try again.")
                 return false
             }
         }
@@ -333,7 +442,11 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         event.frequency=proposal["frequency"] as? String ?? "none";event.interval=proposal["interval"] as? Int ?? 1;event.weekdays=proposal["weekdays"] as? [Int] ?? []
         event.count=proposal["count"] as? Int;if let until=proposal["until"] as? Double {event.until=Date(timeIntervalSince1970:until/1000)}
         event.reminderMinutes=proposal["reminderMinutes"] as? Int;event.location=proposal["location"] as? String ?? "";event.details=(proposal["details"] as? String ?? "")+"\n\n来源随记："+(proposal["quote"] as? String ?? "")
-        event.documentID=documentID;event.documentKind=document == nil ? "":"note";event.projectID=document?.projectId ?? "";event.source=document == nil ? "对话":"随记"
+        let sourceConversations=(snapshot?.conversationLibrary ?? []).filter{$0.id == proposal["conversationId"] as? String && !$0.archived}
+        let conversationProjectID=sourceConversations.count == 1 ? sourceConversations[0].projectId:nil
+        event.documentID=documentID;event.documentKind=document == nil ? "":"note"
+        event.projectID=try AgendaProposalProject.resolve(proposal,sourceProjectID:document?.projectId,conversationProjectID:conversationProjectID,availableProjectIDs:snapshot?.projects.map(\.id) ?? [])
+        event.source=document == nil ? "对话":"随记"
         if document == nil {event.details=(proposal["details"] as? String ?? "")+"\n\n来源消息："+(proposal["quote"] as? String ?? "")}
         if proposal["endEstimated"] as? Bool == true {event.details += "\n结束时间未指定，默认时长1小时，请在保存前确认。"}
         try event.validate();selection="agenda";agendaDraft=event
@@ -506,7 +619,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         }
     }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame,message.frameInfo.request.url?.host==origin?.host,message.frameInfo.request.url?.port==origin?.port else{return}
+        guard let origin,message.frameInfo.isMainFrame,message.frameInfo.request.url?.scheme==origin.scheme,message.frameInfo.request.url?.host==origin.host,message.frameInfo.request.url?.port==origin.port else{if message.name=="workspace",!ready{recordStartupStatus("loading",reason:"snapshot_origin_rejected")};return}
         if message.name=="glassRegions" {
             let data=try? JSONSerialization.data(withJSONObject:message.body)
             let regions=data.flatMap{try? JSONDecoder().decode([GlassRegion].self,from:$0)}
@@ -515,8 +628,62 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             web.evaluateJavaScript("window.NativeGlassSurface?.acknowledge(\(active ? "true":"false"))",completionHandler:nil)
             return
         }
-        guard let data=try? JSONSerialization.data(withJSONObject:message.body),let value=try? JSONDecoder().decode(Snapshot.self,from:data) else{return}
+        receiveWorkspaceSnapshot(message.body)
+    }
+    private func snapshotFailure(_ reason:String,error:Error?=nil) {
+        if !ready {startupFailure=nativeUI("工作区状态尚未同步。可以重试连接，当前内容会保留。", "The workspace state has not synced. Retry the connection; content is retained.")}
+        recordStartupStatus(ready ? "degraded":"failed",stage:"snapshot_failed",reason:reason,error:error)
+    }
+    private func acknowledgeSnapshot(_ stamp:NativeSnapshotStamp) {
+        guard let data=try? JSONSerialization.data(withJSONObject:["version":stamp.version,"nonce":stamp.nonce,"sequence":stamp.sequence]),let json=String(data:data,encoding:.utf8) else{return}
+        let generation=snapshotNavigationGeneration
+        web.evaluateJavaScript("window.NativeSnapshotChannel?.acknowledge(\(json)) === true") { [weak self] accepted,error in
+            guard let self,generation==self.snapshotNavigationGeneration else{return}
+            if let error {self.recordStartupStatus(self.ready ? "degraded":"loading",stage:"snapshot_ack_delivery_failed",error:error)}
+            else if (accepted as? Bool)==true,self.ready,self.startupStage=="snapshot_ack_delivery_failed" {self.recordStartupStatus("ready",stage:"snapshot_ack_restored")}
+        }
+    }
+    private func receiveWorkspaceSnapshot(_ body:Any) {
+        guard snapshotNavigationCommitted else{if !ready{recordStartupStatus("loading",reason:"snapshot_before_commit")};return}
+        guard let object=body as? [String:Any],let metadata=object["_nativeSnapshot"] as? [String:Any],
+              let data=try? JSONSerialization.data(withJSONObject:metadata),
+              let stamp=try? JSONDecoder().decode(NativeSnapshotStamp.self,from:data),
+              stamp.version==1,UUID(uuidString:stamp.nonce) != nil,stamp.sequence>0,stamp.sequence<=9_007_199_254_740_991,
+              ["snapshot","ack-timeout"].contains(stamp.type) else{snapshotFailure("snapshot_protocol_invalid");return}
+        let generation=snapshotNavigationGeneration
+        let accept={ [weak self] in
+            guard let self,generation==self.snapshotNavigationGeneration,self.snapshotNavigationCommitted else{return}
+            guard self.snapshotDocumentNonce == nil || self.snapshotDocumentNonce==stamp.nonce else{return}
+            self.snapshotDocumentNonce=stamp.nonce
+            // A lost ACK must not reapply navigation, sync, notifications or
+            // store projections. It receives the same receipt, nothing else.
+            if stamp.sequence<=self.snapshotAcceptedSequence {self.acknowledgeSnapshot(stamp);return}
+            if stamp.type=="ack-timeout" {self.snapshotFailure("snapshot_ack_timeout");return}
+            do {
+                let bytes=try JSONSerialization.data(withJSONObject:object)
+                let value=try JSONDecoder().decode(Snapshot.self,from:bytes)
+                self.snapshotAcceptedSequence=stamp.sequence
+                self.applyWorkspaceSnapshot(value)
+                self.acknowledgeSnapshot(stamp)
+            } catch {self.snapshotFailure(error is DecodingError ? "snapshot_decode_failed":"snapshot_encode_failed",error:error)}
+        }
+        if let nonce=snapshotDocumentNonce {if nonce==stamp.nonce{accept()};return}
+        // Verify the first sender against the *current* document, not a queued
+        // message from the previous page at the same localhost origin.
+        guard let data=try? JSONSerialization.data(withJSONObject:stamp.nonce,options:.fragmentsAllowed),let json=String(data:data,encoding:.utf8) else{return}
+        web.evaluateJavaScript("window.NativeSnapshotChannel?.isCurrent(\(json)) === true") { [weak self] result,error in
+            guard let self,generation==self.snapshotNavigationGeneration else{return}
+            guard error == nil,(result as? Bool)==true else{if !self.ready{self.recordStartupStatus("loading",reason:"snapshot_document_unconfirmed",error:error)};return}
+            accept()
+        }
+    }
+    private func applyWorkspaceSnapshot(_ value:Snapshot) {
         let first = !ready; snapshot = value; ready = true
+        if value.privateMode != false {agendaAgent.invalidate()}
+        else {agendaAgent.refreshContext()}
+        if first {web.evaluateJavaScript("document.dispatchEvent(new Event('aibro-agenda-changed'))",completionHandler:nil)}
+        snapshotEverReady=true;startupFailure=nil;startupWatchdog?.cancel()
+        if first || startupStatus != "ready" {recordStartupStatus("ready",stage:"snapshot_accepted")}
         if ["daily","courses","research"].contains(value.view),let section=value.spaceSection,NativeWorkspaceLocation.validSpaceSection(section,view:value.view) {spaceSections[value.view]=section}
         let searchVersion=value.commandSearchNavigationVersion ?? 0
         // A reloaded WebView starts a new counter. Its first real activation
@@ -544,9 +711,9 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         reconcileTaskSurface(taskOpen:value.taskOpen == true,modalOpen:value.modalOpen == true,readingOpen:value.readingOpen == true,entry:projectNavigationRequest == nil ? value.taskEntry:nil)
         if first {
             glassHost?.publishPresentationVisibility(force:true)
-            recordStartupStatus("ready")
             setAppearance(appearance,force:true)
             requestAgendaSync()
+            agendaSyncTimer?.invalidate()
             agendaSyncTimer=Timer.scheduledTimer(withTimeInterval:10,repeats:true){[weak self]_ in Task{@MainActor in self?.requestAgendaSync()}}
             restoreCommittedLocation(value)
         }
@@ -561,9 +728,25 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         }
 
     }
-    func webView(_ webView:WKWebView,didStartProvisionalNavigation navigation:WKNavigation!){glassHost?.beginPresentationNavigation()}
-    func webView(_ webView:WKWebView,didCommit navigation:WKNavigation!){glassHost?.publishPresentationVisibility(force:true)}
-    func webView(_ webView:WKWebView,didFinish navigation:WKNavigation!){glassHost?.publishPresentationVisibility(force:true);publishNativeSpaceNavigation()}
+    func webView(_ webView:WKWebView,didStartProvisionalNavigation navigation:WKNavigation!){
+        startupNavigation=navigation
+        snapshotNavigationGeneration+=1;snapshotNavigationCommitted=false;snapshotDocumentNonce=nil;snapshotAcceptedSequence=0;startupNavigationFailed=false;startupContentTerminated=false
+        glassHost?.beginPresentationNavigation();if !ready{recordStartupStatus("loading",stage:"navigation_started");watchStartup()}
+    }
+    func webView(_ webView:WKWebView,didCommit navigation:WKNavigation!){guard navigation === startupNavigation else{return};snapshotNavigationCommitted=true;glassHost?.publishPresentationVisibility(force:true);if !ready{recordStartupStatus("loading",stage:"navigation_committed")}}
+    func webView(_ webView:WKWebView,didFinish navigation:WKNavigation!){guard navigation === startupNavigation else{return};glassHost?.publishPresentationVisibility(force:true);publishNativeSpaceNavigation();if !ready{recordStartupStatus("loading",stage:"awaiting_workspace_snapshot")}}
+    func webView(_ webView:WKWebView,didFail navigation:WKNavigation!,withError error:Error){
+        guard navigation === startupNavigation else{return}
+        startupNavigationFailed=true;startupWatchdog?.cancel()
+        if !ready {startupFailure=nativeUI("工作区页面未能载入。请重试启动。", "The workspace page could not load. Retry startup.")}
+        recordStartupStatus(ready ? "degraded":"failed",stage:"navigation_failed",error:error)
+    }
+    func webView(_ webView:WKWebView,didFailProvisionalNavigation navigation:WKNavigation!,withError error:Error){self.webView(webView,didFail:navigation,withError:error)}
+    func webViewWebContentProcessDidTerminate(_ webView:WKWebView){
+        startupNavigationFailed=true;startupContentTerminated=true;startupWatchdog?.cancel();snapshotNavigationCommitted=false;ready=false
+        startupFailure=nativeUI("工作区页面已停止。重试会重新载入已保存的内容；尚未保存的输入可能无法恢复。", "The workspace page stopped. Retry reloads saved content; unsaved input may not be recoverable.")
+        recordStartupStatus("failed",stage:"web_content_terminated")
+    }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
         if url.host == origin?.host && url.port == origin?.port && url.scheme == "http" { decisionHandler(navigationAction.shouldPerformDownload ? .download:.allow) }
@@ -770,6 +953,7 @@ struct GlassSurface: ViewModifier {
 struct MainView: View {
     @ObservedObject private var nativeLanguage = NativeL10n.shared
     @ObservedObject var model: Workspace
+    @ObservedObject var quickEntry: NativeQuickEntryCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var columns: NavigationSplitViewVisibility = .all
     @State private var conversationTarget:ConversationTarget?
@@ -824,7 +1008,12 @@ struct MainView: View {
                     }.coordinateSpace(name:"native-sidebar")
                         .onPreferenceChange(SidebarBounds.self){if sidebarFrames != $0 {sidebarFrames=$0}}
                 }.scrollIndicators(.hidden)
-                HStack { Button { model.openWorkspaceSettings() } label: { Label(nativeUI("设置", "Settings"),systemImage:"gearshape") }.buttonStyle(LiftStyle()).disabled(!model.ready || model.snapshot?.modalOpen == true);Spacer();Text(model.production ? nativeUI("本机工作区", "Local workspace"):nativeUI("本地预览", "Local preview")).font(.caption2).foregroundStyle(.tertiary) }.padding(20)
+                HStack {
+                    Button { model.openWorkspaceSettings() } label: { Label(nativeUI("设置", "Settings"),systemImage:"gearshape") }.buttonStyle(LiftStyle()).disabled(!model.ready || model.snapshot?.modalOpen == true)
+                    Spacer()
+                    Button { quickEntry.showPanel(screenIntent: .pointerSummon) } label: { Image(systemName:"rectangle.trailinghalf.inset.filled") }
+                        .buttonStyle(LiftStyle()).help(nativeUI("快捷入口", "Quick entry")).accessibilityLabel(nativeUI("快捷入口", "Quick entry"))
+                }.padding(20)
             }.navigationSplitViewColumnWidth(min:220,ideal:250,max:330)
         } detail: {
             VStack(spacing:0) {
@@ -842,7 +1031,12 @@ struct MainView: View {
                     if currentSpaceSection == "overview" {SpaceDashboard(model:model,space:space,projectID:nil).id(space)}
                 }
                 }
-                if !model.ready { ProgressView(nativeUI("正在启动本地工作区…", "Starting your local workspace…")).padding(24).background(.regularMaterial,in:RoundedRectangle(cornerRadius:16)) }
+                if !model.ready {
+                    VStack(spacing:12) {
+                        if let failure=model.startupFailure {Text(failure).multilineTextAlignment(.center).frame(maxWidth:360);Button(nativeUI("重试连接", "Retry connection")){model.retryStartupConnection()}}
+                        else {ProgressView(nativeUI("正在启动本地工作区…", "Starting your local workspace…"))}
+                    }.padding(24).background(.regularMaterial,in:RoundedRectangle(cornerRadius:16))
+                }
             }}}.navigationTitle(title)
             .toolbar {
                 if compactBrowserLayout && !model.browser.tabs.isEmpty && (model.compactWorkspacePreferred || !model.browser.visible) { ToolbarItem {Button {model.browser.visible=true} label:{Label(nativeUI("返回浏览器", "Return to browser"),systemImage:"globe")}.help(nativeUI("继续查看已打开的网页", "Continue with your open browser tabs")).disabled(workspaceOverlay)} }
@@ -1251,13 +1445,586 @@ struct NativeDraftQuitGate {
 }
 
 @MainActor final class Delegate:NSObject,NSApplicationDelegate {
-    var model:Workspace?
+    var model:Workspace? { didSet { if oldValue !== model { configureQuickEntry() } } }
+    let quickEntry=NativeQuickEntryCoordinator()
+    private let quickMedia=NativeQuickMediaStore()
+    private let speechShortcut=NativeSpeechShortcutStore()
+    private var speechDictation:NativeSpeechDictation?
+    private var voiceCommand:NativeVoiceCommandCoordinator?
+    private let quickUtilities=NativeQuickUtilitiesStore()
+    private let quickAgenda=NativeQuickAgendaStore()
+    private let quickLoginItem=NativeQuickLoginItemStore()
+    // These utilities never live in the synchronized knowledge workspace.
+    private static var quickLocalDirectory:URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support",isDirectory:true)
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio",isDirectory:true)
+            .appendingPathComponent("QuickTools",isDirectory:true)
+    }
+    private let quickClipboard=NativeQuickClipboardStore(directory:Delegate.quickLocalDirectory.appendingPathComponent("Clipboard",isDirectory:true))
+    private let quickClipboardPasteBack=NativeQuickClipboardPasteBack()
+    private let quickFileShelf=NativeQuickFileShelfStore(directory:Delegate.quickLocalDirectory.appendingPathComponent("FileShelf",isDirectory:true))
+    private let quickVault=NativeQuickVaultStore()
+    private var quickNotificationSources:NativeQuickNotificationSources?
+    private var quickNotificationPanel:NativeQuickNotificationPanel?
+    private var quickTaskReminders:NativeQuickTaskReminderStore?
+    private var quickExternalNotifications:NativeQuickExternalNotificationStore?
+    private var quickRecorderHosts=Set<String>()
+    private var quickEntrySubscriptions=Set<AnyCancellable>()
     private var draftQuit=NativeDraftQuitGate()
     private var draftQuitTimeout:DispatchWorkItem?
     private var draftQuitTask:Task<Void,Never>?
     private var draftQuitAlert:NSAlert?
+    private var draftQuitQuickCaptureBlocked=false
+    private var draftQuitQuickCommandsBlocked=false
+    private var draftQuitQuickTasksBlocked=false
+    private var draftQuitQuickAgendaBlocked=false
+    private var draftQuitQuickLinksBlocked=false
+    private var draftQuitQuickRecordingsBlocked=false
+    private var draftQuitQuickVaultBlocked=false
     private weak var draftQuitWindow:NSWindow?
     private var workspaceWindows:[ObjectIdentifier:NativeDraftQuitWindowDelegate]=[:]
+    private func configureQuickEntry(){
+        voiceCommand?.invalidate();voiceCommand=nil;quickEntry.updateVoiceStatus(nil)
+        speechDictation?.shutdown();speechDictation=nil;speechShortcut.setActive(false)
+        quickEntrySubscriptions.removeAll()
+        quickExternalNotifications?.shutdown();quickExternalNotifications=nil
+        quickTaskReminders?.shutdown();quickTaskReminders=nil
+        quickNotificationPanel?.stop();quickNotificationPanel=nil
+        quickNotificationSources?.accept(nil);quickNotificationSources=nil
+        quickUtilities.onCommittedCompletion=nil
+        quickEntry.captureLibrary.setAvailable(false)
+        quickEntry.links.setAvailable(false)
+        quickClipboard.setAvailable(false)
+        quickClipboardPasteBack.setAvailable(false)
+        quickClipboardPasteBack.onFeedback=nil
+        quickFileShelf.setAvailable(false)
+        quickVault.setAvailable(false)
+        quickMedia.recordings.setAvailable(false)
+        quickMedia.windows.setAvailable(false)
+        quickMedia.mirror.setAvailable(false)
+        quickEntry.canReceiveFiles = { false }
+        quickEntry.receiveFiles = { _ in false }
+        quickEntry.configure(onAction:{[weak self] action in self?.performQuickAction(action)},onQuit:{[weak self] in self?.requestQuit()})
+        quickClipboardPasteBack.configure(isPresented:{[weak quickEntry] in quickEntry?.isShowing(.clipboard) == true},collapse:{[weak quickEntry] in await quickEntry?.collapseForClipboardPaste() == true})
+        quickEntry.onClipboardPasteSessionBegan = {[weak self] in self?.quickClipboardPasteBack.beginSession()}
+        quickEntry.onClipboardPasteSessionEnded = {[weak self] in self?.quickClipboardPasteBack.endSession()}
+        guard let model else{return}
+        model.desktop?.openQuickPanel = {[weak self,weak model] request,verify in
+            guard let self,let model,self.model === model,model.ready,self.draftQuit.phase == .idle else{return .deferred(reason:"workspace_unavailable")}
+            guard model.snapshot?.privateMode == false else{return .denied(reason:"private_workspace")}
+            guard let section=NativeQuickPanelSection(rawValue:request.section.rawValue),
+                  self.quickEntry.visibleSections.contains(section) else{return .unsupported(reason:"section_unavailable")}
+            // This request runs inside the Agent itself. Global run-busy is not
+            // a navigation veto; only user-owned editors and active devices are.
+            let canPresent = { [weak self,weak model] in
+              guard let self,let model,self.model === model,model.ready,self.draftQuit.phase == .idle,
+                  model.snapshot?.privateMode == false,self.quickEntry.visibleSections.contains(section),
+                  model.web.window?.attachedSheet == nil,
+                  !NSApp.windows.contains(where:{$0.isVisible && $0 is NSSavePanel}),
+                  model.snapshot?.modalOpen != true,!model.agenda.hasUnsavedEditorDrafts,
+                  !self.quickAgenda.hasEditor,!self.quickAgenda.saving,
+                  !self.quickEntry.workbench.hasTaskEditor,
+                  !self.quickEntry.workbench.hasUnsavedTaskCreationFields,
+                  !self.quickEntry.workbench.creating,self.quickEntry.workbench.busyTaskIDs.isEmpty,
+                  self.quickEntry.taskDraft.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,
+                  !self.quickEntry.capture.saving,self.quickEntry.capture.pending == nil,
+                  !self.quickEntry.captureLibrary.hasUnsettledEditor,
+                  !self.quickEntry.captureLibrary.editing,
+                  !self.quickEntry.links.hasUnsettledEditor,
+                  !self.quickEntry.links.editing,
+                  self.quickEntry.capture.savedID != nil || self.quickEntry.capture.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,
+                  !self.quickUtilities.isEditingCommand,!self.quickMedia.recordings.isActive,
+                  !self.quickMedia.recordings.hasEditor,!self.quickMedia.recordings.hasUnsavedTranscriptDrafts,
+                  !self.quickVault.hasEditor,!self.quickVault.busy,
+                  !self.quickMedia.mirror.active,!self.quickMedia.mirror.starting else{return false}
+              if let editor=NSApp.keyWindow?.firstResponder as? NSTextView,
+                 editor.hasMarkedText() || editor.isEditable && !editor.string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {return false}
+              return true
+            }
+            guard canPresent() else{return .deferred(reason:"user_edit_in_progress")}
+            let show = { [weak self] in self?.quickEntry.showPanel(section:section) }
+            let isPresented = { [weak self] in self?.quickEntry.isShowing(section) == true && self?.quickEntry.presentation.contentVisible == true }
+            guard let id=request.recordID,let kind=request.recordType else {
+                self.quickEntry.showPanel(section:section)
+                return await NativeQuickPanelOpenResult.opened(section:request.section).confirmed(verify:verify,isPresented:{canPresent() && self.quickEntry.isShowing(section)})
+            }
+            let positioned:Bool
+            var targetStillPresented:()->Bool = {false}
+            switch (request.section,kind) {
+            case (.tasks,"task"):
+                guard await verify(),canPresent() else{return .deferred(reason:"authorization_or_editor_changed")}
+                targetStillPresented={self.quickEntry.workbench.recordFocus.isStillPresented(id:id)}
+                positioned=await self.quickEntry.workbench.focusTask(id:id,show:{show()},canPresent:canPresent,isPresented:isPresented)
+            case (.capture,"note"):
+                guard await self.quickEntry.captureLibrary.prepareRecordFocus(id:id,canPresent:canPresent) else{return .deferred(reason:"record_unavailable_or_draft")}
+                guard await verify(),canPresent() else{return .deferred(reason:"authorization_or_editor_changed")}
+                targetStillPresented={self.quickEntry.captureLibrary.recordFocus.isStillPresented(id:id)}
+                positioned=await self.quickEntry.captureLibrary.focusRecord(id:id,show:{self.quickEntry.selectCaptureLibrary(true);show()},canPresent:canPresent,isPresented:isPresented)
+            case (.links,"import"):
+                guard await self.quickEntry.links.prepareRecordFocus(id:id) else{return .deferred(reason:"record_unavailable_or_draft")}
+                guard await verify(),canPresent() else{return .deferred(reason:"authorization_or_editor_changed")}
+                targetStillPresented={self.quickEntry.links.recordFocus.isStillPresented(id:id)}
+                positioned=await self.quickEntry.links.focusRecord(id:id,show:{show()},canPresent:canPresent,isPresented:isPresented)
+            case (.agenda,"event"):
+                guard let event=self.quickAgenda.eventForFocus(id:id),let text=request.authorizedUserText else{return .denied(reason:"record_unavailable")}
+                let plain=text.replacingOccurrences(of:"```[\\s\\S]*?(?:```|$)|~~~[\\s\\S]*?(?:~~~|$)|(?m)^\\s*>.*$",with:"",options:.regularExpression)
+                let identified=id.count>=4 && plain.contains(id)
+                let named=event.title.count>=2 && plain.contains(event.title) && model.agenda.events.filter({!$0.deleted && $0.title==event.title}).count==1
+                guard identified || named else{return .denied(reason:"explicit_record_required")}
+                let owner=request.owner
+                let scopeAllowed = { [weak self,weak model] in
+                    guard let self,let model,self.quickAgenda.eventForFocus(id:id)==event else{return false}
+                    if let project=owner.projectID {return event.projectID==project}
+                    if event.projectID.isEmpty {return ["日常","auto"].contains(owner.workspace)}
+                    return model.snapshot?.projects.contains(where:{$0.id==event.projectID && (owner.workspace=="auto" || $0.workspace==owner.workspace)}) == true
+                }
+                guard scopeAllowed() else{return .denied(reason:"record_outside_scope")}
+                guard await verify(),canPresent(),scopeAllowed() else{return .deferred(reason:"authorization_or_editor_changed")}
+                positioned=await self.quickAgenda.focusEvent(id:id,show:{show()},canPresent:{canPresent() && scopeAllowed()},isPresented:isPresented)
+                if let occurrenceID=self.quickAgenda.recordFocus.highlightedID {targetStillPresented={self.quickAgenda.recordFocus.isStillPresented(id:occurrenceID)}}
+            default:return .unsupported(reason:"record_type_unavailable")
+            }
+            guard positioned else{return .deferred(reason:"record_not_visible")}
+            return await NativeQuickPanelOpenResult.positioned(section:request.section,recordType:kind,recordID:id).confirmed(verify:verify,isPresented:{canPresent() && isPresented() && targetStillPresented()})
+        }
+        configureQuickNotifications(model)
+        quickEntry.registerSettingsSection(id:"login-item",content:{[quickLoginItem] in AnyView(NativeQuickLoginItemView(store:quickLoginItem))})
+        quickMedia.configure(directory:model.dataDirectory)
+        // ASR settings use their own local encrypted record, outside workspace
+        // sync. Configuration only reads metadata; recording remains explicit.
+        try? FileManager.default.createDirectory(at:Self.quickLocalDirectory,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
+        quickMedia.mirror.configure(directory:Self.quickLocalDirectory.appendingPathComponent("Mirror",isDirectory:true))
+        quickMedia.recordings.configureRealtime(owner:model.dataDirectory,access:NativeQuickASRCredentialAdapter.access(
+            directory:Self.quickLocalDirectory.appendingPathComponent("ASR",isDirectory:true),
+            service:(Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio") + ".quick-asr"))
+        quickMedia.recordings.configureSpeech(owner:model.dataDirectory,access:NativeSpeechCredentialAdapter.access(
+            directory:Self.quickLocalDirectory.appendingPathComponent("Speech",isDirectory:true),
+            service:(Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio") + ".speech"))
+        configureSpeechEntry(model)
+        quickVault.configure(directory:Self.quickLocalDirectory.appendingPathComponent("Vault",isDirectory:true),
+            identity:(Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio") + ".quick-vault")
+        quickUtilities.configure(directory:model.dataDirectory)
+        quickAgenda.configure(agenda:model.agenda,context:{[weak self,weak model] in
+            let snapshot=model?.snapshot
+            return NativeQuickAgendaContext(
+                ready:model != nil && self?.model === model && model?.ready == true && snapshot != nil,
+                privateMode:snapshot?.privateMode ?? true,
+                projects:(snapshot?.projects ?? []).map{AgendaEditingProject(id:$0.id,title:$0.title)},
+                documents:(snapshot?.documents ?? []).map{AgendaEditingDocument(id:$0.id,title:$0.title,projectID:$0.projectId,kind:$0.kind)},
+                taskIDs:Set((snapshot?.tasks ?? []).map(\.id)),projectID:snapshot?.projectId)
+        },openTask:{[weak self] id in await self?.openQuickWorkbenchItem(id,run:false) ?? false},openAgenda:{[weak self] date in
+            guard let self,let model=self.model,self.canOpenQuickWorkbenchItem(model) else{return}
+            model.agenda.focusDate=date;model.openWorkspace("agenda")
+            self.quickEntry.dismiss(returnFocus:false);self.restoreWorkspaceWindow()
+        })
+        quickEntry.registerModule(.agenda,content:{[quickAgenda,weak quickEntry] in AnyView(NativeQuickAgendaView(store:quickAgenda,onFocus:{quickEntry?.activateInput()}))})
+        quickEntry.registerModule(.links,content:{[weak quickEntry] in
+            guard let quickEntry else{return AnyView(EmptyView())}
+            return AnyView(NativeQuickLinksView(store:quickEntry.links,onFocus:{[weak quickEntry] in quickEntry?.activateInput()}))
+        },onVisibilityChange:{[weak quickEntry] visible in
+            guard let quickEntry else{return}
+            quickEntry.links.setVisible(visible)
+            if visible {Task{@MainActor [weak quickEntry] in await quickEntry?.links.refresh()}}
+            else {_ = quickEntry.links.flushDraft()}
+        })
+        quickEntry.registerModule(.recordings,content:{[quickMedia,weak quickEntry] in AnyView(NativeQuickRecordingLibrary(store:quickMedia.recordings,onFocus:{quickEntry?.activateInput()},canFocus:{quickEntry?.isShowing(.recordings)==true && quickEntry?.presentation.contentVisible==true}))},onVisibilityChange:{[weak self] in self?.setQuickRecorderHost("recordings",visible:$0)})
+        quickEntry.registerModule(.vault,content:{[quickVault,weak quickEntry] in
+            AnyView(NativeQuickVaultView(store:quickVault,onFocus:{quickEntry?.activateInput()},
+                canFocus:{quickEntry?.isShowing(.vault)==true && quickEntry?.presentation.contentVisible==true}))
+        },onVisibilityChange:{[quickVault] in quickVault.setVisible($0)})
+        quickEntry.registerModule(.clipboard,content:{[quickClipboard,quickClipboardPasteBack,weak quickEntry] in
+            AnyView(NativeQuickClipboardView(store:quickClipboard,pasteBack:quickClipboardPasteBack,onFocus:{quickEntry?.activateInput()}))
+        },onVisibilityChange:{[quickClipboard] in quickClipboard.setVisible($0)})
+        quickEntry.registerModule(.shelf,content:{[quickFileShelf,weak quickEntry] in
+            AnyView(NativeQuickFileShelfView(store:quickFileShelf,onFocus:{quickEntry?.activateInput()}))
+        },onVisibilityChange:{[quickFileShelf] in quickFileShelf.setVisible($0)})
+        quickEntry.canReceiveFiles = {[weak self] in self?.quickFileShelf.canReceiveDrop == true}
+        quickEntry.receiveFiles = {[weak self] providers in self?.quickFileShelf.acceptProviders(providers) ?? false}
+        quickEntry.registerHomeModule(id:"recorder",title:nativeUI("快速录音", "Quick recording"),symbol:"waveform",content:{[quickMedia,weak quickEntry] in AnyView(NativeQuickRecorderCard(store:quickMedia.recordings,onFocus:{quickEntry?.activateInput()},canFocus:{quickEntry?.isShowing(.home)==true && quickEntry?.presentation.contentVisible==true}))},onVisibilityChange:{[weak self] in self?.setQuickRecorderHost("home",visible:$0)},canHide:{[quickMedia] in !quickMedia.recordings.isActive})
+        quickEntry.registerHomeModule(id:"mirror",title:nativeUI("镜子", "Mirror"),symbol:"camera",content:{[quickMedia] in AnyView(NativeQuickMirrorCard(store:quickMedia.mirror))},onVisibilityChange:{[quickMedia] in quickMedia.mirror.setVisible($0)})
+        quickEntry.registerHomeModule(id:"windows",title:nativeUI("当前窗口", "Windows"),symbol:"macwindow",content:{[quickMedia] in AnyView(NativeQuickWindowsCard(store:quickMedia.windows))},onVisibilityChange:{[quickMedia] in quickMedia.windows.setVisible($0)},onActivityChange:{[quickMedia] in quickMedia.windows.setActivity($0)})
+        quickEntry.registerHomeModule(id:"music",title:nativeUI("音乐", "Music"),symbol:"music.note",content:{[quickMedia] in AnyView(NativeQuickMusicCard(store:quickMedia.music))},onVisibilityChange:{[quickMedia] in quickMedia.music.setVisible($0)})
+        quickEntry.registerHomeModule(id:"pomodoro",title:nativeUI("番茄钟", "Focus timer"),symbol:"timer",content:{[quickUtilities] in AnyView(NativeQuickPomodoroView(store:quickUtilities))},onVisibilityChange:{[quickUtilities] in quickUtilities.setVisible($0)})
+        quickEntry.registerHomeModule(id:"commands",title:nativeUI("常用指令", "Prompts"),symbol:"text.bubble",content:{[quickUtilities] in AnyView(NativeQuickCommandsView(store:quickUtilities))})
+        quickEntry.configureCapture(directory:model.dataDirectory,save:{[weak model] payload in
+            guard let model else{throw NativeQuickCaptureError.unavailable}
+            return try await model.saveQuickCapture(payload)
+        })
+        quickEntry.captureLibrary.configure(directory:model.dataDirectory,request:{[weak self,weak model] payload in
+            guard let self,let model,self.model === model,model.ready,self.draftQuit.phase == .idle else{return ["status":"deferred","reason":"unavailable"]}
+            return try await model.quickCaptureLibraryRequest(payload)
+        },open:{[weak self] type,id in await self?.openQuickCaptureItem(type:type,id:id) ?? false})
+        quickMedia.recordings.configureTitleRequest { [weak self,weak model] payload in
+            guard let self,let model,self.model === model,model.ready else{return ["status":"deferred","reason":"unavailable"]}
+            // Closing the panel cancels its request before the quit gate settles.
+            // Cancellation remains valid while new generation is prohibited.
+            guard payload["action"] as? String == "cancel" || self.draftQuit.phase == .idle else{return ["status":"deferred","reason":"unavailable"]}
+            return try await model.quickRecordingTitleRequest(payload)
+        }
+        quickEntry.links.configure(directory:model.dataDirectory,request:{[weak self,weak model] payload in
+            guard let self,let model,self.model === model,model.ready,self.draftQuit.phase == .idle else{return ["status":"deferred","reason":"unavailable"]}
+            return try await model.quickLinksRequest(payload)
+        },openSource:{[weak self] id in await self?.openQuickCaptureItem(type:"import",id:id) ?? false},openURL:{url in NSWorkspace.shared.open(url)})
+        quickEntry.workbench.configure(directory:model.dataDirectory,command:{[weak self,weak model] payload in
+            guard let self,let model,self.model === model,model.ready,self.draftQuit.phase == .idle else{return ["status":"deferred","reason":"unavailable"]}
+            let result=try await model.web.callAsyncJavaScript("""
+            if (!window.NativeQuickWorkbench?.command) return {status:'deferred',reason:'unavailable'};
+            return await window.NativeQuickWorkbench.command(payload);
+            """,arguments:["payload":payload],in:nil,contentWorld:.page)
+            guard let receipt=result as? [String:Any] else{throw NativeQuickCaptureError.unconfirmed}
+            return receipt
+        },openTask:{[weak self] id in await self?.openQuickWorkbenchItem(id,run:false) ?? false},openRun:{[weak self] id in await self?.openQuickWorkbenchItem(id,run:true) ?? false})
+        model.$snapshot.combineLatest(model.$ready).sink{[weak self,weak model] snapshot,ready in
+            self?.quickEntry.update(busy:snapshot?.busy ?? false,unread:snapshot?.activityUnread ?? 0,ready:ready)
+            self?.quickEntry.workbench.accept(ready ? snapshot?.quickWorkbench:nil)
+            self?.quickEntry.captureLibrary.setAvailable(ready && snapshot?.privateMode == false)
+            self?.quickEntry.links.setAvailable(ready && snapshot?.privateMode == false)
+            self?.quickClipboard.setAvailable(ready && snapshot?.privateMode == false)
+            self?.quickClipboardPasteBack.setAvailable(ready && snapshot?.privateMode == false)
+            self?.quickFileShelf.setAvailable(ready && snapshot?.privateMode == false)
+            self?.quickVault.setAvailable(ready && snapshot?.privateMode == false)
+            self?.quickMedia.recordings.setAvailable(ready && snapshot?.privateMode == false && snapshot?.quickWorkbench?.status == "ready")
+            let voiceAvailable=ready && snapshot?.privateMode == false && snapshot?.quickWorkbench?.status == "ready"
+            self?.speechDictation?.setAvailable(voiceAvailable)
+            if !voiceAvailable {self?.voiceCommand?.invalidate()}
+            self?.quickMedia.windows.setAvailable(ready && snapshot?.privateMode == false)
+            self?.quickMedia.mirror.setAvailable(ready && snapshot?.privateMode == false)
+            // @Published emits before Workspace.snapshot stores the new value.
+            // Refresh the closure-backed calendar context after that assignment.
+            DispatchQueue.main.async{[weak self,weak model] in
+                guard let self,let model,self.model === model else{return}
+                self.quickAgenda.refreshContext()
+                self.acceptQuickNotificationSnapshot()
+                self.acceptVoiceExecutionSnapshot()
+            }
+        }.store(in:&quickEntrySubscriptions)
+        // Disabling the last background entry must never strand a hidden workspace.
+        quickEntry.$mode.dropFirst().removeDuplicates().sink{[weak self] mode in
+            if mode == .off {self?.restoreWorkspaceWindow()}
+            DispatchQueue.main.async{[weak self] in self?.acceptQuickNotificationSnapshot()}
+        }.store(in:&quickEntrySubscriptions)
+    }
+    func invokeVoiceCommand(){voiceCommand?.invoke()}
+    private func configureSpeechEntry(_ model:Workspace){
+        let dictation=NativeSpeechDictation(settings:quickMedia.recordings.speechSettings,
+            directory:Self.quickLocalDirectory.appendingPathComponent("Dictation",isDirectory:true),
+            canCapture:{[weak self,weak model] _ in
+                guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return false}
+                return model.voiceWorkspaceAvailable && self.quickMedia.recordings.phase == .idle
+                    && self.quickMedia.recordings.transcribingID == nil && !self.quickMedia.recordings.hasEditor
+            })
+        speechDictation=dictation;model.desktop?.speechDictation=dictation
+        let owner=model.dataDirectory,origin=model.origin
+        let voice=NativeVoiceCommandCoordinator(dictation:dictation,verify:{[weak self,weak model] in
+            guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return false}
+            return model.dataDirectory==owner && (origin == nil || model.origin==origin) && model.voiceWorkspaceAvailable
+        },submit:{[weak self,weak model] id,text in
+            guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return ["status":"deferred","requestId":id,"reason":"unavailable"]}
+            return await model.submitVoiceInstruction(requestID:id,text:text)
+        })
+        voiceCommand=voice
+        voice.autoSubmitProvider={ [weak speechShortcut] in speechShortcut?.autoSubmit == true }
+        voice.onPresent={ [weak self,weak voice] in
+            guard let self else{return}
+            self.updateVoiceIslandStatus()
+            if !self.quickEntry.showVoice() {voice?.cancel()}
+        }
+        voice.onDismiss={ [weak quickEntry] in quickEntry?.dismissVoice() }
+        voice.onAccepted={ [weak self] _ in self?.acceptVoiceExecutionSnapshot() }
+        voice.onOpenConversation={ [weak self,weak model,weak voice] id in
+            guard let receipt=voice?.execution,receipt.conversationID==id else{return}
+            Task { @MainActor in
+                guard let self,let model,self.model === model,self.draftQuit.phase == .idle,
+                      self.voiceCommand === voice,voice?.execution?.requestID==receipt.requestID,
+                      model.voiceWorkspaceAvailable,
+                      let navigation=model.command("conversation",id,quickEntry:true),await navigation.value,
+                      self.model === model,self.draftQuit.phase == .idle,model.voiceWorkspaceAvailable,
+                      self.voiceCommand === voice,voice?.execution?.requestID==receipt.requestID else{return}
+                self.quickEntry.dismissVoice(returnFocus:false);self.restoreWorkspaceWindow()
+            }
+        }
+        speechShortcut.onInvoke={ [weak voice,weak speechShortcut] in
+            if speechShortcut?.mode == .hold {voice?.beginHold()}else{voice?.invoke()}
+        }
+        speechShortcut.onRelease={ [weak voice] in voice?.endHold() }
+        speechShortcut.$mode.dropFirst().removeDuplicates().sink{[weak voice] _ in
+            voice?.cancelHeldCapture()
+        }.store(in:&quickEntrySubscriptions)
+        speechShortcut.$shortcut.dropFirst().removeDuplicates().sink{[weak voice] _ in
+            voice?.cancelHeldCapture()
+        }.store(in:&quickEntrySubscriptions)
+        speechShortcut.$active.dropFirst().removeDuplicates().sink{[weak voice] active in
+            if !active {voice?.cancelHeldCapture()}
+        }.store(in:&quickEntrySubscriptions)
+        speechShortcut.setActive(true)
+        quickEntry.registerSettingsSection(id:"voice-shortcut",content:{[speechShortcut] in AnyView(NativeSpeechShortcutView(store:speechShortcut))})
+        let openSettings:() async -> Bool = { [weak self,weak model] in
+            guard let self,let model,self.model === model,model.voiceWorkspaceAvailable,
+                  self.quickMedia.recordings.phase == .idle,!self.quickMedia.recordings.hasEditor,
+                  self.quickMedia.recordings.transcribingID == nil else{return false}
+            self.voiceCommand?.invalidate();self.quickEntry.showPanel(section:.recordings)
+            // The recording module becomes visible after the island expands.
+            // Wait only for that explicit presentation; never begin a settings
+            // draft under an unmounted/hidden recording owner.
+            for _ in 0..<40 {
+                guard !Task.isCancelled,self.model === model,model.voiceWorkspaceAvailable,self.quickEntry.isShowing(.recordings) else{return false}
+                self.quickMedia.recordings.beginSpeechSettings()
+                if self.quickMedia.recordings.speechSettingsDraft != nil {return true}
+                do {try await Task.sleep(nanoseconds:50_000_000)}catch{return false}
+            }
+            return false
+        }
+        model.desktop?.openSpeechSettings=openSettings
+        quickEntry.configureVoice(content:{[voice,dictation,speechShortcut,weak self] in
+            AnyView(NativeVoiceCommandView(coordinator:voice,dictation:dictation,speechSettings:dictation.settings,shortcut:speechShortcut,
+                settings:{Task{_ = await openSettings()}},stop:{[weak self,weak voice] id in
+                    guard let self,voice?.execution?.runID==id else{return false}
+                    return await self.quickEntry.workbench.cancelRun(id:id)
+                }))
+        },onEscape:{[weak voice] in voice?.cancel()},onHide:{[weak voice] in voice?.cancel()})
+        voice.objectWillChange.receive(on:RunLoop.main).sink{[weak self] _ in
+            self?.updateVoiceIslandStatus()
+            // Closing during submission suppresses onAccepted's reveal hook,
+            // but its durable receipt still needs the latest run projection.
+            // That snapshot may already have arrived before the send ACK.
+            if self?.voiceCommand?.execution?.status == "submitted" {self?.acceptVoiceExecutionSnapshot()}
+        }.store(in:&quickEntrySubscriptions)
+        quickMedia.recordings.$phase.dropFirst().sink{[weak dictation] phase in
+            if phase != .idle {dictation?.invalidate()}
+        }.store(in:&quickEntrySubscriptions)
+    }
+    private func updateVoiceIslandStatus(){
+        guard let voice=voiceCommand,voice.phase != .idle || voice.execution != nil else{
+            quickEntry.updateVoiceStatus(nil);return
+        }
+        quickEntry.updateVoiceStatus(.init(title:voice.presentationTitle,symbol:voice.presentationSymbol,isProcessing:voice.presentationBusy))
+    }
+    private func acceptVoiceExecutionSnapshot(){
+        guard let voice=voiceCommand,let receipt=voice.execution,let model,model.voiceWorkspaceAvailable,
+              let workbench=model.snapshot?.quickWorkbench,workbench.status == "ready" else{return}
+        let matches=workbench.runs.filter{item in
+            item.voiceRequestId==receipt.requestID && item.conversationId==receipt.conversationID
+                && (receipt.runID == nil || item.id==receipt.runID)
+                && (receipt.userMessageID == nil || item.userMessageId==receipt.userMessageID)
+        }
+        guard matches.count==1,let item=matches.first else{
+            // The durable send acknowledgement may precede the next published
+            // workbench projection. Wait for its first matching run snapshot.
+            if receipt.status == "submitted" {return}
+            voice.acceptExecution(runID:receipt.runID,voiceRequestID:receipt.requestID,conversationID:receipt.conversationID,
+                userMessageID:receipt.userMessageID,status:"unavailable",notificationReady:false,summary:"");return
+        }
+        voice.acceptExecution(runID:item.id,voiceRequestID:receipt.requestID,conversationID:receipt.conversationID,
+            userMessageID:item.userMessageId,status:item.status ?? "processing",notificationReady:item.notificationReady == true,
+            summary:item.resultSummary ?? "")
+    }
+    private func configureQuickNotifications(_ model:Workspace){
+        let ownerID=model.dataDirectory.standardizedFileURL.path
+        let queue=NativeQuickNotificationQueue(ownerID:ownerID)
+        let sources=NativeQuickNotificationSources(queue:queue)
+        quickNotificationSources=sources
+        quickClipboardPasteBack.onFeedback = {[weak self,weak model,weak sources] message in
+            guard let self,let model,let sources,self.model === model,
+                  model.ready,model.snapshot?.privateMode == false,
+                  model.snapshot?.quickWorkbench?.status == "ready",
+                  self.quickClipboard.available,self.quickEntry.mode != .off else{return}
+            _ = sources.acceptClipboardFeedback(id:UUID(),message:message,ownerID:ownerID)
+        }
+        let notificationTransport=NativeQuickExternalNotificationTransport()
+        let external=NativeQuickExternalNotificationStore(ownerID:ownerID,queue:queue,
+            endpointFile:NativeQuickExternalNotificationLocation.directory.appendingPathComponent("endpoint.json"),
+            hookFile:model.root.appendingPathComponent("app/external-notification-hook.cjs"),
+            request:{[weak model] path,body in
+                guard let model else{throw NativeQuickExternalNotificationError.unavailable}
+                return try await notificationTransport.request(origin:model.origin,token:model.nativeNotificationToken,path:path,body:body)
+            })
+        quickExternalNotifications=external
+        external.onEventsInvalidated = {[weak self] in self?.quickNotificationPanel?.reconcileHistory()}
+        quickEntry.registerSettingsSection(id:"external-notifications",content:{[weak self,external] in
+            AnyView(NativeQuickExternalNotificationSettingsView(store:external,entryDisabled:self?.quickEntry.mode == .off))
+        })
+        let reminders=NativeQuickTaskReminderStore(directory:Delegate.quickLocalDirectory.appendingPathComponent("TaskReminders",isDirectory:true),ownerID:ownerID,sources:sources)
+        quickTaskReminders=reminders
+        reminders.onEventsInvalidated = {[weak self] in self?.quickNotificationPanel?.reconcileHistory()}
+        quickEntry.registerSettingsSection(id:"task-reminders",content:{[weak self,reminders] in
+            AnyView(NativeQuickTaskReminderSettingsView(store:reminders,unavailableReason:self?.quickEntry.mode == .off
+                ? nativeUI("请先在上方选择常驻入口，提醒才能显示。", "Choose a persistent entry above so reminders can appear.") : nil))
+        })
+        sources.onQueueFull = {[weak self,weak model] in
+            guard let self,let model,self.model === model,model.snapshot?.privateMode == false else{return}
+            // A full visual queue does not erase the run or claim delivery.
+            NSApp.requestUserAttention(.informationalRequest)
+        }
+        quickNotificationPanel=NativeQuickNotificationPanel(queue:queue,open:{[weak self,weak model] destination in
+            guard let self,let model,self.model === model else{return false}
+            return await self.openQuickNotification(destination,model:model)
+        },onOccupiedRegionChanged:{[weak quickEntry] region in quickEntry?.setNotificationOccupiedRegion(region)})
+        quickUtilities.onCommittedCompletion = {[weak self,weak model,weak sources] event in
+            guard let self,let model,self.model === model,
+                  event.directory.standardizedFileURL == model.dataDirectory.standardizedFileURL else{return false}
+            // Privacy suppresses delivery without falling back to an attention
+            // request. No title/identity is queued for later replay.
+            if model.snapshot?.privateMode == true {return true}
+            guard self.quickEntry.mode != .off else{return false}
+            return sources?.acceptPomodoro(runID:event.runID,phase:event.phase.rawValue,duration:event.duration,
+                completedAt:event.completedAt,ownerID:ownerID) ?? false
+        }
+        quickEntry.objectWillChange.receive(on:RunLoop.main).sink{[weak self] _ in
+            self?.refreshQuickNotificationPresentation()
+        }.store(in:&quickEntrySubscriptions)
+    }
+    private func acceptQuickNotificationSnapshot(){
+        guard let model,let sources=quickNotificationSources else{return}
+        let snapshot=model.snapshot
+        let available=model.ready && snapshot?.privateMode == false && quickEntry.mode != .off && snapshot?.quickWorkbench?.version == 1 && snapshot?.quickWorkbench?.status == "ready"
+        sources.accept(available ? snapshot?.quickWorkbench?.runs.map{.init(id:$0.id,title:$0.title,status:$0.status,
+            finishedAt:$0.finishedAt,notificationReady:$0.notificationReady == true)}:nil)
+        quickTaskReminders?.accept(tasks:available ? snapshot?.quickWorkbench?.tasks:nil,
+            disabledTaskIDs:Set(snapshot?.tasks?.filter{$0.reminderDisabled == true}.map(\.id) ?? []))
+        quickExternalNotifications?.updateContext(ready:model.ready,available:available)
+        if !available {quickNotificationPanel?.closeHistory()}
+        else {quickNotificationPanel?.reconcileHistory()}
+        refreshQuickNotificationPresentation()
+    }
+    private func refreshQuickNotificationPresentation(){
+        guard let panel=quickNotificationPanel else{return}
+        guard let screen=quickEntry.notificationScreen else{panel.updateContext(nil);return}
+        panel.updateContext(.init(screen:screen,
+            allowed:quickNotificationSources?.available == true && quickEntry.mode != .off && draftQuit.phase == .idle,
+            protectedFrame:quickEntry.notificationProtectedFrame,reducedMotion:quickEntry.reduceMotion))
+    }
+    private func openQuickNotification(_ destination:NativeQuickNotificationEvent.Destination,model:Workspace) async -> Bool {
+        guard canOpenQuickWorkbenchItem(model),model.snapshot?.privateMode == false,
+              !quickAgenda.hasEditor,!quickAgenda.saving,
+              !quickEntry.workbench.hasTaskEditor,!quickEntry.workbench.hasUnsavedTaskCreationFields,
+              !quickEntry.workbench.creating,quickEntry.workbench.busyTaskIDs.isEmpty,
+              !quickEntry.capture.saving,quickEntry.capture.pending == nil,
+              !quickEntry.captureLibrary.hasUnsettledEditor,!quickEntry.links.hasUnsettledEditor,
+              !quickUtilities.isEditingCommand,!quickMedia.recordings.isActive,
+              !quickMedia.recordings.hasEditor,!quickMedia.recordings.hasUnsavedTranscriptDrafts,
+              !quickVault.hasEditor,!quickVault.busy,
+              !quickMedia.mirror.active,!quickMedia.mirror.starting,
+              quickEntry.flushCaptureDraft() else{return false}
+        switch destination {
+        case .run(let id): return await openQuickWorkbenchItem(id,run:true)
+        case .task(let id):
+            guard let reminders=quickTaskReminders,let token=reminders.navigationToken(taskID:id),quickEntry.visibleSections.contains(.tasks) else{return false}
+            let valid = {[weak self,weak model,weak reminders] in
+                guard let self,let model,let reminders else{return false}
+                return self.model === model && self.canOpenQuickWorkbenchItem(model) && reminders.canOpen(token)
+            }
+            let opened=await quickEntry.workbench.focusTask(id:id,show:{[weak quickEntry] in quickEntry?.showPanel(section:.tasks)},
+                canPresent:valid,isPresented:{[weak quickEntry] in quickEntry?.isShowing(.tasks) == true && quickEntry?.presentation.contentVisible == true})
+            return opened && valid()
+        case .pomodoro(let id):
+            guard quickUtilities.ready,quickUtilities.currentPomodoroRunID == id else{return false}
+            let opened=await quickEntry.showHomeModule("pomodoro")
+            return opened && self.model === model && model.snapshot?.privateMode == false && quickUtilities.currentPomodoroRunID == id
+        case .clipboard(let id):
+            guard let sources=quickNotificationSources else{return false}
+            let ownerID=model.dataDirectory.standardizedFileURL.path
+            let valid = {[weak self,weak model,weak sources] in
+                guard let self,let model,let sources else{return false}
+                return self.model === model && self.canOpenQuickWorkbenchItem(model)
+                    && model.snapshot?.privateMode == false && self.quickClipboard.available
+                    && self.quickEntry.mode != .off && self.quickEntry.visibleSections.contains(.clipboard)
+                    && sources.hasClipboardFeedback(id:id,ownerID:ownerID)
+            }
+            guard valid() else{return false}
+            quickEntry.showPanel(section:.clipboard)
+            return valid() && quickEntry.isShowing(.clipboard)
+        case .history(let ids): return quickNotificationPanel?.showHistory(ids) ?? false
+        case .external(let id): return quickNotificationPanel?.showHistory([id]) ?? false
+        case .agenda: return false
+        }
+    }
+    private func setQuickRecorderHost(_ key:String,visible:Bool){
+        if visible {quickRecorderHosts.insert(key)}else{quickRecorderHosts.remove(key)}
+        // Home and library share the same recorder. Merge a tab transition's
+        // disappearance/appearance before releasing the recording device.
+        DispatchQueue.main.async{[weak self] in
+            guard let self else{return}
+            self.quickMedia.recordings.setVisible(!self.quickRecorderHosts.isEmpty)
+        }
+    }
+    @discardableResult private func restoreWorkspaceWindow()->NSWindow? {
+        guard let window=model?.web.window ?? workspaceWindows.values.compactMap({$0.window}).first else{return nil}
+        NSApp.unhide(nil)
+        if window.isMiniaturized {window.deminiaturize(nil)}
+        window.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+        if let sheet=window.attachedSheet {sheet.makeKeyAndOrderFront(nil)}
+        return window
+    }
+    private func canOpenQuickWorkbenchItem(_ model:Workspace,diagnose:Bool=false)->Bool {
+        func blocked(_ reason:String)->Bool {if diagnose{model.recordQuickNavigation("native_guard",reason:reason)};return false}
+        guard self.model === model else{return blocked("workspace_changed")}
+        guard model.ready else{return blocked("workspace_not_ready")}
+        guard draftQuit.phase == .idle else{return blocked("quit_in_progress")}
+        guard !NSApp.windows.contains(where:{$0.isVisible && $0 is NSSavePanel}) else{return blocked("save_panel")}
+        guard let window=model.web.window ?? workspaceWindows.values.compactMap({$0.window}).first else{return blocked("window_unavailable")}
+        guard window.attachedSheet == nil else{return blocked("native_sheet")}
+        guard !model.agenda.hasUnsavedEditorDrafts else{return blocked("agenda_draft")}
+        guard model.snapshot?.modalOpen != true else{return blocked("web_modal")}
+        guard model.snapshot?.privateMode != true else{return blocked("private_mode")}
+        return true
+    }
+    private func openQuickWorkbenchItem(_ id:String,run:Bool) async -> Bool {
+        guard let model else{return false}
+        model.recordQuickNavigation("requested",reason:run ? "run":"task")
+        guard canOpenQuickWorkbenchItem(model,diagnose:true) else{return false}
+        var destination=id
+        if run {
+            do {
+                let result=try await model.web.callAsyncJavaScript("return window.NativeShell?.quickRunConversation(id) || '';",arguments:["id":id],in:nil,contentWorld:.page)
+                guard let conversation=result as? String,!conversation.isEmpty else{model.recordQuickNavigation("run_lookup",reason:"conversation_unavailable");return false}
+                guard canOpenQuickWorkbenchItem(model,diagnose:true) else{return false}
+                destination=conversation
+            } catch {model.recordQuickNavigation("run_lookup_failed",error:error);return false}
+        }
+        // The bridge revalidates the run-to-conversation association and live
+        // modal/privacy state, including after the document's draft flush.
+        guard let navigation=model.command(run ? "conversation":"task",destination,quickEntry:true,runId:run ? id:nil) else{model.recordQuickNavigation("command_unavailable");return false}
+        guard await navigation.value else{model.recordQuickNavigation("command_rejected");return false}
+        guard self.model === model,draftQuit.phase == .idle else{model.recordQuickNavigation("command_cancelled",reason:"workspace_or_quit_changed");return false}
+        quickEntry.dismiss(returnFocus:false)
+        let restored=restoreWorkspaceWindow() != nil
+        model.recordQuickNavigation("window_restore",accepted:restored);return restored
+    }
+    private func openQuickCaptureItem(type:String,id:String) async -> Bool {
+        guard ["note","import","task"].contains(type),let model,canOpenQuickWorkbenchItem(model),
+              let navigation=model.command(type,id,quickEntry:true),await navigation.value,
+              self.model === model,draftQuit.phase == .idle else{return false}
+        quickEntry.dismiss(returnFocus:false)
+        return restoreWorkspaceWindow() != nil
+    }
+    private func performQuickAction(_ action:NativeQuickAction){
+        quickEntry.dismiss(returnFocus:false)
+        let window=restoreWorkspaceWindow()
+        guard let model,action != .resume else{return}
+        // Quick entry shares the main window's draft and modal ownership. It
+        // never starts a second route behind an unresolved native editor sheet.
+        guard model.ready,draftQuit.phase == .idle,window?.attachedSheet == nil,
+              !model.agenda.hasUnsavedEditorDrafts,model.snapshot?.modalOpen != true else{return}
+        switch action {
+        case .resume: break
+        case .newChat:
+            if let project=model.snapshot?.projectId,!project.isEmpty,
+               model.selection?.hasPrefix("project:") == true || model.selection?.hasPrefix("chat:") == true {
+                model.command("new-project-conversation",project)
+            }else{model.command("new")}
+        case .quickNotes: model.openWorkspace("captures")
+        case .search: model.command("search")
+        case .agenda: model.openWorkspace("agenda")
+        case .activity: model.command("activity-center")
+        case .settings: model.openWorkspaceSettings()
+        }
+    }
+    func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {
+        let workspaceVisible=workspaceWindows.values.contains{$0.window?.isVisible == true && $0.window?.isMiniaturized != true}
+        if !workspaceVisible {restoreWorkspaceWindow()}
+        return true
+    }
     func applicationDidFinishLaunching(_ notification:Notification){NSApp.setActivationPolicy(.regular);NSApp.activate(ignoringOtherApps:true)}
     func observeWorkspaceWindow(_ window:NSWindow){
         workspaceWindows=workspaceWindows.filter{$0.value.window != nil}
@@ -1270,15 +2037,43 @@ struct NativeDraftQuitGate {
         guard draftQuit.phase != .approved else{return false}
         let others=workspaceWindows.values.compactMap{$0.window}.filter{$0 !== window && $0.isVisible}
         guard others.isEmpty else{return false}
+        if quickEntry.keepRunning {
+            // Keep the same Workspace/WebView alive, including parked and
+            // unsaved drafts. Cmd-Q still uses the original checked quit path.
+            guard draftQuit.phase == .idle,window.attachedSheet == nil,
+                  model?.agenda.hasUnsavedEditorDrafts != true else{
+                (window.attachedSheet ?? window).makeKeyAndOrderFront(nil);return true
+            }
+            window.orderOut(nil)
+            return true
+        }
         draftQuitWindow=window;requestQuit();return true
     }
     // Run the entire draft check before asking AppKit to begin termination.
     // In particular, SwiftUI must not dismantle an agenda sheet while the user
     // is still deciding whether to keep editing its in-memory form.
     func requestQuit(){
+        voiceCommand?.invalidate();speechDictation?.invalidate()
+        quickEntry.dismiss(returnFocus:false)
         if draftQuit.phase == .approved{terminateApproved();return}
         guard let token=draftQuit.begin() else{draftQuitAlert?.window.makeKeyAndOrderFront(nil);return}
         draftQuitWindow=model?.web.window ?? workspaceWindows.values.compactMap{$0.window}.first(where:{$0.isVisible})
+        let captureSaved=quickEntry.flushCaptureDraft()
+        let commandsSaved=quickUtilities.flushPendingDraft()
+        let linksSaved=quickEntry.links.flushForQuit()
+        let recordingsSaved=quickMedia.recordings.flushForQuit()
+        let vaultSaved=quickVault.flushForQuit()
+        draftQuitQuickCaptureBlocked = !captureSaved
+        draftQuitQuickCommandsBlocked = !commandsSaved
+        draftQuitQuickTasksBlocked = quickEntry.workbench.hasUnsavedTaskEditorDraft
+            || !quickEntry.taskDraft.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty
+            || quickEntry.workbench.hasUnsavedTaskCreationFields
+            || quickEntry.workbench.creating || !quickEntry.workbench.busyTaskIDs.isEmpty
+        draftQuitQuickAgendaBlocked = quickAgenda.hasUnsavedEditorDraft || quickAgenda.saving
+        draftQuitQuickLinksBlocked = !linksSaved
+        draftQuitQuickRecordingsBlocked = !recordingsSaved
+        draftQuitQuickVaultBlocked = !vaultSaved
+        guard captureSaved && commandsSaved && linksSaved && recordingsSaved && vaultSaved && !draftQuitQuickTasksBlocked && !draftQuitQuickAgendaBlocked else{completeDraftQuit(token,success:false);return}
         guard let model else{completeDraftQuit(token,success:true);return}
         guard model.web.url != nil || model.agenda.hasUnsavedEditorDrafts else{completeDraftQuit(token,success:true);return}
         let timeout=DispatchWorkItem{[weak self] in self?.completeDraftQuit(token,success:false)}
@@ -1315,6 +2110,8 @@ struct NativeDraftQuitGate {
         guard draftQuit.acknowledge(token,success:success) else{return}
         draftQuitTimeout?.cancel();draftQuitTimeout=nil;draftQuitTask=nil
         if success{terminateApproved();return}
+        // A menu-bar quit may start while another application owns focus.
+        restoreWorkspaceWindow()
         let alert=NSAlert();draftQuitAlert=alert;alert.alertStyle = .warning
         alert.messageText=nativeUI("还有修改尚未确认保存", "Changes have not been confirmed saved")
         alert.informativeText=nativeUI("AI Bro 尚未确认当前修改已保存到本机。请返回编辑，保存修改或等待保存完成后再退出；仍然退出可能丢失未保存的内容。", "AI Bro has not confirmed that your current changes are saved on this device. Return to editing to save them or wait for saving to finish before quitting. Quitting anyway may lose unsaved content.")
@@ -1332,12 +2129,35 @@ struct NativeDraftQuitGate {
             guard let self,self.draftQuit.decide(token,exit:response == .alertSecondButtonReturn) else{return}
             self.draftQuitAlert=nil
             if response != .alertSecondButtonReturn {
+                let reopenCapture=self.draftQuitQuickCaptureBlocked
+                let reopenCommands=self.draftQuitQuickCommandsBlocked
+                let reopenTasks=self.draftQuitQuickTasksBlocked
+                let reopenAgenda=self.draftQuitQuickAgendaBlocked
+                let reopenLinks=self.draftQuitQuickLinksBlocked
+                let reopenRecordings=self.draftQuitQuickRecordingsBlocked
+                let reopenVault=self.draftQuitQuickVaultBlocked
+                self.draftQuitQuickCaptureBlocked=false
+                self.draftQuitQuickCommandsBlocked=false
+                self.draftQuitQuickTasksBlocked=false
+                self.draftQuitQuickAgendaBlocked=false
+                self.draftQuitQuickLinksBlocked=false
+                self.draftQuitQuickRecordingsBlocked=false
+                self.draftQuitQuickVaultBlocked=false
                 if let window=presentingWindow ?? self.draftQuitWindow {
                     if window.isMiniaturized{window.deminiaturize(nil)}
                     // Let AppKit end the alert's sheet session first, then
                     // return focus to the still-mounted agenda editor.
                     DispatchQueue.main.async {
-                        window.makeKeyAndOrderFront(nil)
+                        if reopenCapture {self.quickEntry.showCapture()}
+                        else if reopenCommands {
+                            self.quickEntry.setHomeModule("commands",visible:true)
+                            self.quickEntry.showPanel(section:.home)
+                        } else if reopenTasks {self.quickEntry.showPanel(section:.tasks)}
+                        else if reopenAgenda {self.quickEntry.showPanel(section:.agenda)}
+                        else if reopenLinks {self.quickEntry.showPanel(section:.links)}
+                        else if reopenRecordings {self.quickEntry.showPanel(section:.recordings)}
+                        else if reopenVault {self.quickEntry.showPanel(section:.vault)}
+                        else {window.makeKeyAndOrderFront(nil)}
                     }
                 }
                 NSApp.activate(ignoringOtherApps:true)
@@ -1348,14 +2168,14 @@ struct NativeDraftQuitGate {
             alert.beginSheetModal(for:window,completionHandler:decision)
         }else{decision(alert.runModal())}
     }
-    func applicationWillTerminate(_ notification:Notification){draftQuitTimeout?.cancel();draftQuitTask?.cancel();model?.stop()}
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool{true}
+    func applicationWillTerminate(_ notification:Notification){voiceCommand?.invalidate();speechDictation?.shutdown();speechShortcut.setActive(false);quickExternalNotifications?.shutdown();quickTaskReminders?.shutdown();quickNotificationPanel?.stop();quickNotificationSources?.accept(nil);quickUtilities.onCommittedCompletion=nil;quickClipboard.shutdown();quickClipboardPasteBack.shutdown();quickVault.shutdown();quickFileShelf.setAvailable(false);quickMedia.shutdown();quickUtilities.setVisible(false);quickEntry.stop();quickEntrySubscriptions.removeAll();draftQuitTimeout?.cancel();draftQuitTask?.cancel();model?.stop()}
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool{!quickEntry.keepRunning}
 }
 @main struct AIBroApp:App {
     @ObservedObject private var nativeLanguage = NativeL10n.shared
     @NSApplicationDelegateAdaptor(Delegate.self) var delegate
     @StateObject private var model=Workspace()
-    var body:some Scene {WindowGroup("AI Bro"){MainView(model:model).background(NativeDraftQuitWindow(delegate:delegate)).frame(minWidth:950,minHeight:650).onAppear{delegate.model=model}}.defaultSize(width:1280,height:850).windowToolbarStyle(.unified).commands{CommandGroup(replacing:.appTermination){Button(nativeUI("退出 AI Bro", "Quit AI Bro")){delegate.requestQuit()}.keyboardShortcut("q",modifiers:.command)};CommandGroup(replacing:.appSettings){Button(nativeUI("设置…", "Settings…")){model.openWorkspaceSettings()}.keyboardShortcut(",",modifiers:.command).disabled(!model.ready || model.snapshot?.modalOpen == true)};CommandGroup(replacing:.newItem){Button(nativeUI("新对话", "New chat")){model.command("new")}.keyboardShortcut("n").disabled(!model.ready)};CommandGroup(after:.textEditing){Button(nativeUI("搜索与命令", "Search and commands")){model.command("search")}.keyboardShortcut("k",modifiers:.command).disabled(!model.ready)}}
+    var body:some Scene {WindowGroup("AI Bro"){MainView(model:model,quickEntry:delegate.quickEntry).background(NativeDraftQuitWindow(delegate:delegate)).frame(minWidth:950,minHeight:650).onAppear{delegate.model=model}}.defaultSize(width:1280,height:850).windowToolbarStyle(.unified).commands{CommandGroup(replacing:.appTermination){Button(nativeUI("退出 AI Bro", "Quit AI Bro")){delegate.requestQuit()}.keyboardShortcut("q",modifiers:.command)};CommandGroup(replacing:.appSettings){Button(nativeUI("设置…", "Settings…")){model.openWorkspaceSettings()}.keyboardShortcut(",",modifiers:.command).disabled(!model.ready || model.snapshot?.modalOpen == true);Button(nativeUI("快捷入口…", "Quick entry…")){delegate.quickEntry.showPanel(screenIntent: .pointerSummon)};Button(nativeUI("语音指令…", "Voice command…")){delegate.invokeVoiceCommand()}};CommandGroup(replacing:.newItem){Button(nativeUI("新对话", "New chat")){model.command("new")}.keyboardShortcut("n").disabled(!model.ready)};CommandGroup(after:.textEditing){Button(nativeUI("搜索与命令", "Search and commands")){model.command("search")}.keyboardShortcut("k",modifiers:.command).disabled(!model.ready)}}
     }
 
 }

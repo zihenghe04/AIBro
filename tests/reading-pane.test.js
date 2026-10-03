@@ -42,11 +42,11 @@ function dom({withMain=false}={}) {
   add('taskDialog','dialog');add('paperDialog','dialog');
   return {document,add,placements,$:q=>document.querySelector(q)};
 }
-function harness({real=false,getBlob,beforeLeave,WorkspaceLayout,nativeShell,withMain=false,reading=Reading,hooks={}}={}) {
+function harness({real=false,getBlob,beforeLeave,WorkspaceLayout,HalaskaUI,nativeShell,withMain=false,reading=Reading,hooks={}}={}) {
   const d=dom({withMain});const state={projects:[{id:'p',name:'课程'}],imports:[{id:'a',name:'原件.pdf',mimeType:'application/pdf',projectId:'p'},{id:'b',name:'图片.png',mimeType:'image/png',projectId:'p'}],notes:[{id:'n',title:'研究笔记',content:'实际笔记',projectId:'p',sourceAttachmentIds:['a']}],papers:[],tasks:[{id:'t',title:'任务'}],previewRecord:null,openTaskId:'t'};
   const calls=[],revoked=[];let api,serial=0,context;
   if(real){
-    context=vm.createContext({NoteMarkdown:require('../app/note-markdown'),state,$:d.$,document:d.document,window:{AttachmentAnalysis},AttachmentAnalysis,URL:{createObjectURL:()=>`blob:test-${++serial}`,revokeObjectURL:url=>revoked.push(url)},Blob,AbortController,previewObjectUrl:null,pdfPreviewVersion:0,pdfPreviewAbort:{abort:()=>calls.push(['abort'])},
+    context=vm.createContext({NoteMarkdown:require('../app/note-markdown'),state,$:d.$,document:d.document,window:{AttachmentAnalysis,TaskWorkflow:require('../app/task-workflow')},AttachmentAnalysis,URL:{createObjectURL:()=>`blob:test-${++serial}`,revokeObjectURL:url=>revoked.push(url)},Blob,AbortController,previewObjectUrl:null,pdfPreviewVersion:0,pdfPreviewAbort:{abort:()=>calls.push(['abort'])},
       esc:String,uiIcon:()=>'',toast:message=>calls.push(['toast',message]),renderRichText:content=>`<p>${content}</p>`,visibleProject:p=>!p.archived,visibleImport:i=>!i.archived,visibleNote:n=>!n.archived,
       fileStoreGet:async (id,options)=>getBlob?getBlob(id,options):new Blob(['file'],{type:state.imports.find(x=>x.id===id)?.mimeType}),mountPdfPreview:(container,item,blob,page)=>{container.innerHTML='PDF rendered';calls.push(['pdf',item.id,page]);},renderTaskDialog:()=>calls.push(['render-task']),openPaper:()=>{},openProject:()=>{},dataUrlToBlob:()=>new Blob(['file'])});
     vm.runInContext(source.slice(source.indexOf('const taskEditorContexts ='), source.indexOf('function taskSources(')), context);
@@ -54,7 +54,7 @@ function harness({real=false,getBlob,beforeLeave,WorkspaceLayout,nativeShell,wit
     vm.runInContext(source.slice(source.indexOf('let previewRequestVersion ='),source.indexOf('\nconst searchTypeLabel =')),context);
   }
   const getItem=(kind,id)=>real?context.previewItem(kind,id):(kind==='note'?state.notes:state.imports).find(x=>x.id===id&&!x.archived&&!x.deletedAt&&state.projects.some(p=>p.id===x.projectId&&!p.archived));
-  api=reading.createController({getItem,beforeLeave,beforeSwitch:real?(options)=>context.beforePreviewSwitch(options):undefined,onSuspend:()=>real?context.suspendPreview():calls.push(['suspend']),onSelect:(kind,id,page)=>{calls.push(['select',kind,id,page]);return real?context.openPreview(kind,id,page):api.present(kind,id,page);},...hooks},{document:d.document,WorkspaceLayout,nativeShell,matchMedia:()=>({matches:false})});
+  api=reading.createController({getItem,beforeLeave,beforeSwitch:real?(options)=>context.beforePreviewSwitch(options):undefined,onSuspend:()=>real?context.suspendPreview():calls.push(['suspend']),onSelect:(kind,id,page)=>{calls.push(['select',kind,id,page]);return real?context.openPreview(kind,id,page):api.present(kind,id,page);},...hooks},{document:d.document,WorkspaceLayout,HalaskaUI,nativeShell,matchMedia:()=>({matches:false})});
   if(real){context.window.ReadingPane=api;context.ReadingPane=api;}
   return {...d,state,api,calls,context,revoked,open:(kind,id,page)=>real?context.openPreview(kind,id,page):api.present(kind,id,page)};
 }
@@ -70,6 +70,17 @@ test('native reader is first mounted before main while web keeps its existing tr
     assert.equal(h.document.activeElement,h.$('#agentInput'),'initial placement must not steal composer focus');
     assert.equal(h.$('#readingToggle').parentElement,h.$('.top-actions'));
   }
+});
+
+test('a PDF-named URL bookmark uses ordinary reader layout until content is actually available', () => {
+  const h = harness(), source = h.state.imports[0];
+  Object.assign(source, { parser: 'bookmark', url: 'https://example.org/reference.pdf', fileStored: false, content: '', pages: [] });
+  h.open('import', source.id);
+  assert.equal(h.document.body.classList.contains('reading-pdf'), false);
+  assert.equal(h.$('#readingTabs').parentElement, h.$('#readingPane'));
+  source.fileStored = true; h.open('import', source.id);
+  assert.equal(h.document.body.classList.contains('reading-pdf'), true);
+  assert.notEqual(h.$('#readingTabs').parentElement, h.$('#readingPane'));
 });
 test('native detection uses the injected workspace bridge before native CSS classes exist and respects an explicit web override',()=>{
   const context=vm.createContext({webkit:{messageHandlers:{workspace:{postMessage(){}}}}});
@@ -446,7 +457,7 @@ test('return-to-task waits for the dirty reader guard and never opens a task aft
   assert.equal(h.$('#taskDialog').open,true);assert.equal(h.$('#previewDialog').hidden,true);assert.deepEqual(h.revoked,[url]);assert.equal(h.calls.filter(x=>x[0]==='render-task').length,1);
 });
 test('cloud reconciliation waits for visible or retained document sessions, including the no-controller fallback',()=>{
-  const h=harness();const context=vm.createContext({window:{ReadingPane:h.api},state:{},serverSaveInFlight:false,serverConflict:false,importMaterials:{},storageHydrated:true,approvalBusy:()=>false,stageAnswerFeedbackDraft:{},commitConversationOrganization:{},draftSaveTimer:null,sendMessage:{},purgeTrash:{},contentDeletePending:false,$:h.$,document:{activeElement:null,querySelector:selector=>selector==='#previewDialog:not([hidden])'&&!h.$('#previewDialog').hidden?h.$('#previewDialog'):null}});
+  const h=harness();const context=vm.createContext({window:{ReadingPane:h.api},state:{},serverSaveInFlight:false,serverConflict:false,importMaterials:{},storageHydrated:true,approvalBusy:()=>false,stageAnswerFeedbackDraft:{},commitConversationOrganization:{},commitConversationPath:{},draftSaveTimer:null,sendMessage:{},purgeTrash:{},contentDeletePending:false,$:h.$,document:{activeElement:null,querySelector:selector=>selector==='#previewDialog:not([hidden])'&&!h.$('#previewDialog').hidden?h.$('#previewDialog'):null}});
   vm.runInContext(source.slice(source.indexOf('function cloudHostBusy()'),source.indexOf('\nfunction adoptCloudSnapshot(')),context);
   assert.equal(context.cloudHostBusy(),false);h.open('note','n');assert.equal(context.cloudHostBusy(),true);
   assert.equal(context.cloudConnectionBusy(),false,'reading a document does not prevent opening a connection');
@@ -540,6 +551,92 @@ test('each tab origin survives a metadata roundtrip without title, body or trans
  const restored=harness();assert.equal(restored.api.restoreSession(saved),true);assert.deepEqual(restored.api.sessionMetadata().tabs.map(tab=>tab.origin),saved.tabs.map(tab=>tab.origin));
  restored.api.present('note','n');assert.deepEqual(restored.api.snapshot().tabs[0].origin,saved.tabs[0].origin,'An internal refresh without an explicit origin retains it');
  restored.api.present('note','n',undefined,{origin:{view:'overview'}});assert.deepEqual(restored.api.snapshot().tabs[0].origin,{view:'overview'},'An explicit external entry replaces only that tab origin');assert.deepEqual(restored.api.snapshot().tabs[1].origin,saved.tabs[1].origin);
+});
+
+test('document chat action is opt-in, supports only described tabs, and rechecks live disabled state before dispatch',async()=>{
+  const without=harness();without.open('note','n');assert.equal(without.$('.reading-chat-action').hidden,true);
+  let disabled=false,count=0;
+  const h=harness({hooks:{getItem:(_kind,id)=>({id,title:id}),chatAction:tab=>['note','import','local-file'].includes(tab.kind)?{label:'引用到对话',disabled}:null,onChat:()=>{count++;}}});
+  for(const kind of ['note','import','local-file']){h.open(kind,'x');assert.equal(h.$('.reading-chat-action').hidden,false);}
+  for(const kind of ['review','local-review']){h.open(kind,'x');assert.equal(h.$('.reading-chat-action').hidden,true);await h.$('#readingChat').onclick();}
+  assert.equal(count,0);h.open('note','n');disabled=true;
+  await h.$('#readingChat').onclick();assert.equal(count,0,'a changed target state is checked even before a repaint');
+  h.api.reconcile();assert.equal(h.$('#readingChat').disabled,true);
+  disabled=false;h.api.reconcile();assert.equal(h.$('#readingChat').disabled,false);
+  h.api.revealWorkspace({force:true});await h.$('#readingChat').onclick();assert.equal(count,0,'a parked reader cannot dispatch its hidden action');
+});
+
+test('chat toolbar captures the current document bookmark before dispatch and gives the hook the real button anchor',async()=>{
+  const saved=[],received=[];let selection=22;
+  const h=harness({hooks:{chatAction:()=>({label:'引用到对话'}),captureView:()=>({mode:'edit',scrollTop:901,selection:{start:selection,end:selection+4},content:'never hand over the body'}),isDirty:()=>true,
+    saveSession:value=>saved.push(value),onChat:(tab,options)=>{received.push({tab,options,persisted:saved.at(-1)});tab.bookmark.selection.start=0;return true;}}});
+  h.api.present('note','n',1,{origin:{view:'project',projectId:'p',section:'outputs'}});
+  h.api.present('import','a',7);selection=42;const anchor=h.$('#readingChat'),event={currentTarget:anchor};
+  const content=h.add('editor-retained-for-chat','article',h.$('#previewContent'));
+  assert.equal(await anchor.onclick(event),true);assert.equal(received.length,1);
+  const result=received[0];assert.equal(result.tab.kind,'import');assert.equal(result.tab.id,'a');assert.equal(result.tab.page,7);
+  assert.equal(result.options.anchor,anchor);assert.equal(result.options.event,event);assert.equal(result.options.isCurrent(),true);
+  assert.equal(result.persisted.tabs.find(tab=>tab.id==='a').bookmark.selection.start,42);
+  assert.equal(h.api.bookmark('import','a').selection.start,42,'delegated snapshot cannot mutate retained metadata');
+  assert.doesNotMatch(JSON.stringify(result.tab),/never hand over|content/);
+  assert.equal(result.tab.draftPending,true);assert.equal(h.$('#editor-retained-for-chat'),content);assert.deepEqual(h.calls,[]);
+});
+
+test('chat action mounts one Kit Button and updates labels and availability without replacing the focused node',()=>{
+  let h,label='引用到对话',disabled=false;const mounts=[];
+  const kit={mount(host,name,initial){
+    const control=h.document.createElement('button');host.append(control);mounts.push({host,name,control});
+    const update=props=>{control.id=props.id;control.textContent=props.children;control.title=props.title;control.disabled=!!(props.disabled||props.loading);control.onclick=props.onClick;control.setAttribute('aria-label',props['aria-label']);};
+    update(initial);return {update};
+  }};
+  h=harness({HalaskaUI:kit,hooks:{chatAction:()=>({label,title:'引用已保存的版本',disabled}),onChat:()=>true}});
+  h.open('note','n');const control=h.$('#readingChat');control.focus();
+  label='Reference in chat';disabled=true;h.api.reconcile();
+  assert.equal(h.$('#readingChat'),control);assert.equal(h.document.activeElement,control);assert.equal(control.textContent,label);assert.equal(control.disabled,true);assert.equal(control.title,'引用已保存的版本');
+  disabled=false;h.api.refreshTabs();assert.equal(h.$('#readingChat'),control);assert.equal(control.disabled,false);assert.equal(h.document.activeElement,control);
+  const own=mounts.filter(item=>item.host.className==='reading-chat-action');assert.equal(own.length,1);assert.equal(own[0].name,'Button');
+});
+
+test('a synchronous document chat hook opens the real menu with an enabled anchor and retains menu focus',async()=>{
+  let menu,hookCalls=0;
+  const h=harness({hooks:{chatAction:()=>({label:'引用到对话'}),onChat:(_tab,{anchor})=>{
+    hookCalls++;assert.equal(anchor.disabled,false,'menu handoff must precede the toolbar busy paint');
+    return menu.open({anchor,label:'引用到对话',items:[{id:'current',label:'当前对话',onSelect:()=>true}]});
+  }}});
+  const doc=h.document,create=doc.createElement;
+  doc.createElement=tag=>{const node=create(tag);node.remove=()=>{if(node.parent)node.parent.children=node.parent.children.filter(child=>child!==node);};return node;};
+  doc.documentElement={classList:{contains:()=>false}};
+  doc.addEventListener=()=>{};doc.removeEventListener=()=>{};
+  const context=vm.createContext({document:doc,innerWidth:900,innerHeight:700,
+    addEventListener(){},removeEventListener(){},requestAnimationFrame:()=>1,cancelAnimationFrame(){},matchMedia:()=>({matches:false}),
+    MutationObserver:class{observe(){}disconnect(){}},
+    HalaskaUI:{componentNames:['BenchoAddMenu'],mount(host,name){
+      assert.equal(name,'BenchoAddMenu');const panel=doc.createElement('div');panel.setAttribute('role','menu');host.append(panel);
+      return {update(){},unmount(){host.replaceChildren();}};
+    }}
+  });
+  vm.runInContext(fs.readFileSync(require.resolve('../app/composer-add-menu'),'utf8'),context);menu=context.ComposerAddMenu;
+  h.open('note','n');const anchor=h.$('#readingChat');anchor.isConnected=true;
+  anchor.getBoundingClientRect=()=>({left:600,top:30,right:690,bottom:58,width:90,height:28});anchor.getClientRects=()=>[anchor.getBoundingClientRect()];anchor.focus();
+  try{
+    assert.equal(await anchor.onclick({currentTarget:anchor}),true);assert.equal(hookCalls,1);assert.equal(menu.isOpen(),true);
+    assert.equal(anchor.disabled,false);assert.equal(anchor.getAttribute('aria-expanded'),'true');
+    const focused=doc.activeElement;assert.equal(focused.getAttribute('role'),'menu');assert.equal(h.$('#composerAddMenu').contains(focused),true);
+    h.api.reconcile();assert.equal(doc.activeElement,focused,'toolbar refresh must not reclaim focus from the open menu');
+  }finally{menu.close();}
+  assert.equal(menu.isOpen(),false);assert.equal(doc.activeElement,anchor);
+});
+
+test('a pending document chat handoff cannot duplicate or claim a newer document and failures preserve the reader',async()=>{
+  const gate=deferred(),errors=[];let called=0,current;
+  const h=harness({hooks:{chatAction:()=>({label:'引用到对话'}),onChat:async(_tab,options)=>{called++;current=options.isCurrent;await gate.promise;throw Error('reference was not saved');},onError:error=>errors.push(error.message)}});
+  h.open('note','n');h.api.setExpanded(true);const content=h.add('draft-retained','article',h.$('#previewContent'));
+  const action=h.$('#readingChat'),pending=action.onclick({currentTarget:action});
+  assert.equal(action.disabled,true);assert.equal(await action.onclick(),false);assert.equal(called,1);assert.equal(current(),true);
+  await h.api.beforeNavigate('import','a');h.open('import','a',4);assert.equal(current(),false);
+  gate.resolve();assert.equal(await pending,false);assert.deepEqual(errors,['reference was not saved']);
+  assert.equal(h.api.snapshot().activeKey,JSON.stringify(['import','a']));assert.equal(h.api.snapshot().visible,true);assert.equal(h.api.snapshot().expanded,true);
+  assert.equal(h.$('#draft-retained'),content);assert.equal(action.disabled,false);assert.equal(h.calls.some(call=>call[0]==='suspend'),false);
 });
 
 test('failed return retains active document, draft metadata, expansion and mounted content',async()=>{
@@ -638,4 +735,117 @@ test('a later workspace route cancels post-close focus recovery while replacemen
   h.open('import','a');h.open('note','n');h.document.body.focus();const closing=h.api.close();
   h.api.revealWorkspace({force:true});h.$('#agentInput').focus();loaded.resolve();await closing;
   assert.equal(h.api.snapshot().visible,false);assert.equal(h.document.activeElement,h.$('#agentInput'));
+});
+
+// E46: real reader + production citation/route functions; only document drawing
+// and the final workspace renderer are synthetic. No user workspace is read.
+function referenceTrailHarness() {
+  const Origin = require('../app/document-origin'), Evidence = require('../app/citation-evidence'), Provenance = require('../app/artifact-provenance');
+  let h, leave = () => true, privateMode = false;
+  const views = new Map([['note:n', {mode:'edit',scrollTop:247,selection:{start:2,end:8,direction:'forward'}}],['import:a',{scrollTop:91}]]);
+  h = harness({real:true,hooks:{
+    captureView:(kind,id)=>views.get(`${kind}:${id}`),
+    resolveOrigin:origin=>h.context.resolveDocumentOrigin(origin),
+    onReturn:(origin,options)=>h.context.returnToDocumentOrigin(origin,options),
+    onSelect:(kind,id,page,options)=>h.context.openPreview(kind,id,page,undefined,undefined,options)
+  }});
+  Object.assign(h.state,{currentConversationId:'branch',currentProjectId:'p',ui:{},agentRuns:[],trash:[],conversations:[
+    {id:'original',projectId:'p',title:'Original',messages:[]},{id:'branch',projectId:'p',title:'Branch',messages:[]}
+  ]});
+  h.document.body.dataset.view='agent';
+  const run={id:'run',conversationId:'original',projectId:'p',status:'completed'};h.state.agentRuns.push(run);
+  const citation=Evidence.capture(run,{type:'import',id:'a',page:2,title:'Original PDF',projectId:'p',excerpt:'Fictional evidence'},h.state);
+  h.state.notes[0].sourceConversationId='branch';
+  h.state.notes[0].provenance=Provenance.capture(h.state,run,{type:'note',id:'n',record:h.state.notes[0],variant:'body',operation:'captured',at:5});
+  const showView=view=>{showView.navigationVersion++;h.document.body.dataset.view=view;};showView.navigationVersion=0;
+  Object.assign(h.context,{DocumentOrigin:Origin,storageHydrated:true,serverConflict:false,showView,
+    openConversation:id=>{h.state.currentConversationId=id;showView('agent');},requestAnimationFrame:fn=>fn()});
+  Object.assign(h.context.window,{DocumentOrigin:Origin,CitationEvidence:Evidence,PrivateMode:{isOn:()=>privateMode,shows:item=>!item.private}});
+  h.context.PrivateMode=h.context.window.PrivateMode;
+  const cut=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
+  vm.runInContext(cut('let workspaceRouteIntent =','\nlet pdfPreviewVersion ='),h.context);
+  vm.runInContext(cut('async function openSavedDocumentSource(',"\ndocument.addEventListener('click'"),h.context);
+  h.context.beforePreviewSwitch=async options=>(await leave())!==false && (!options?.isCurrent||options.isCurrent());
+  h.seed=async()=>{
+    await h.context.openPreview('import','a',3,undefined,undefined,{origin:{view:'agent',conversationId:'original'}});
+    await h.context.openPreview('note','n',undefined,undefined,undefined,{origin:{view:'agent',conversationId:'branch'}});
+  };
+  h.reference=(options={anchor:h.$('#previewContent')})=>h.context.openSavedDocumentSource('n','#aibro-source-'+encodeURIComponent(citation.sourceId),options);
+  h.tab=(kind,id)=>h.api.snapshot().tabs.find(tab=>tab.kind===kind&&tab.id===id);
+  h.setLeave=fn=>{leave=fn;};h.setPrivate=value=>{privateMode=value;};h.views=views;
+  return h;
+}
+
+test('E46 reused PDF citation returns to the current note then branch, preserving pages and editor bookmark',async()=>{
+  const h=referenceTrailHarness();await h.seed();const body=h.state.notes[0].content;
+  assert.equal(await h.reference(),true);
+  assert.deepEqual(h.tab('import','a').origin,{view:'document',kind:'note',id:'n'});
+  assert.equal(h.tab('import','a').page,2);assert.deepEqual(h.calls.filter(c=>c[0]==='pdf').at(-1),['pdf','a',2]);
+  assert.notEqual(await h.api.returnToOrigin(),false);assert.equal(h.api.isActive('note','n'),true);
+  assert.deepEqual(h.api.bookmark('note','n'),h.views.get('note:n'));assert.equal(h.state.notes[0].content,body);
+  assert.equal(await h.api.returnToOrigin(),true);assert.equal(h.state.currentConversationId,'branch');assert.equal(h.api.snapshot().visible,false);
+  assert.equal(h.tab('import','a').page,2,'returning does not reset the retained PDF page');
+});
+
+test('E46 explicit entry never makes direct or longer typed document cycles',async()=>{
+  const h=referenceTrailHarness();await h.seed();
+  for(const trail of ['direct','long']){
+    h.api.present('note','n',undefined,{origin:{view:'agent',conversationId:'branch'}});
+    h.api.present('import','a',2,{origin:{view:'document',kind:'note',id:'n'}});
+    if(trail==='long'){h.api.present('import','b',1,{origin:{view:'document',kind:'import',id:'a'}});}
+    const from=trail==='long'?{kind:'import',id:'b'}:{kind:'import',id:'a'};
+    assert.equal(h.api.referenceOrigin('note','n',from),undefined);
+    const before=h.tab('note','n').origin;
+    await h.context.openPreview('note','n',undefined,undefined,undefined,{sourceDocument:from});
+    assert.deepEqual(h.tab('note','n').origin,before);
+  }
+  // Same IDs in different collections are different documents.
+  h.state.imports.push({id:'n',name:'Different.pdf',projectId:'p',mimeType:'application/pdf'});
+  assert.deepEqual(h.api.referenceOrigin('import','n',{kind:'note',id:'n'}),{view:'document',kind:'note',id:'n'});
+});
+
+test('E46 ordinary tab switches and inline save refresh retain the accepted reference trail',async()=>{
+  const h=referenceTrailHarness();await h.seed();await h.reference();
+  const before=JSON.stringify(h.api.sessionMetadata());
+  h.api.refreshTabs();assert.equal(JSON.stringify(h.api.sessionMetadata()),before);
+  await h.$('#readingTabs').querySelectorAll('[role="tab"]')[1].onclick();
+  await h.$('#readingTabs').querySelectorAll('[role="tab"]')[0].onclick();
+  assert.deepEqual(h.tab('import','a').origin,{view:'document',kind:'note',id:'n'});assert.equal(h.tab('import','a').page,2);
+  const restored=harness();restored.api.restoreSession(h.api.sessionMetadata());
+  assert.deepEqual(restored.api.snapshot().tabs.find(t=>t.id==='a').origin,h.tab('import','a').origin);
+});
+
+test('E46 editor source navigation uses its verified note identity when its link has no reader DOM anchor',async()=>{
+  const h=referenceTrailHarness();await h.seed();h.$('#agentInput').focus();
+  assert.equal(await h.reference({}),true);
+  assert.deepEqual(h.tab('import','a').origin,{view:'document',kind:'note',id:'n'});
+});
+
+test('E46 dirty-note cancellation keeps the old PDF entry and source draft untouched; save accepts the new entry',async()=>{
+  const h=referenceTrailHarness();await h.seed();const gate=deferred(),before=JSON.stringify(h.tab('import','a'));h.setLeave(()=>gate.promise);
+  const pending=h.reference();assert.equal(h.api.isActive('note','n'),true);assert.equal(JSON.stringify(h.tab('import','a')),before);
+  gate.resolve(false);assert.equal(await pending,false);assert.equal(h.api.isActive('note','n'),true);assert.equal(JSON.stringify(h.tab('import','a')),before);
+  h.setLeave(()=>{h.state.notes[0].content+='\nSaved edit';return true;});assert.equal(await h.reference(),true);assert.match(h.state.notes[0].content,/Saved edit/);
+  assert.deepEqual(h.tab('import','a').origin,{view:'document',kind:'note',id:'n'});
+});
+
+test('E46 revoked source or owner and newer navigation during draft approval cannot replace the old entry',async()=>{
+  for(const change of ['source','owner','private','route','document','close']){
+    const h=referenceTrailHarness();await h.seed();const gate=deferred(),before=JSON.stringify(h.tab('import','a'));h.setLeave(()=>gate.promise);
+    const pending=h.reference();
+    if(change==='source')h.state.imports[0].private=true;
+    if(change==='owner')h.state.notes[0].private=true;
+    if(change==='private')h.setPrivate(true);
+    if(change==='route')h.context.showView('settings');
+    if(change==='document')void h.api.beforeNavigate('import','b');
+    if(change==='close')h.api.revealWorkspace({force:true});
+    gate.resolve(true);assert.equal(await pending,false,change);
+    assert.equal(JSON.stringify(h.tab('import','a')),before,change);
+  }
+});
+
+test('E46 return rechecks the saved note after approval and never opens an unavailable predecessor',async()=>{
+  const h=referenceTrailHarness();await h.seed();await h.reference();const gate=deferred();h.setLeave(()=>gate.promise);
+  const pending=h.api.returnToOrigin();h.state.notes[0].deletedAt=100;gate.resolve(true);
+  assert.equal(await pending,false);assert.equal(h.api.isActive('import','a'),true);assert.equal(h.state.currentConversationId,'branch');
 });

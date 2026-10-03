@@ -173,6 +173,55 @@ test('Wiki and typed document links resolve live, while code and escaped Wiki ex
   assert.ok(!render('[[bad]]', { resolveLink: () => ({ kind: 'script', id: 'x' }) }).includes('<button'));
 });
 
+test('bare workspace references use actual titles and existing note, task and project navigation', () => {
+  const calls = [], titles = { note: '第一讲 · 观察', task: '补记候车时间', project: '交互设计方法' };
+  const raw = '来源 [note:n-1]，下一步 **[task:t_1]**，归属 [project:p1]。';
+  const html = render(raw, { resolveReference: target => { calls.push(target); const [kind, id] = target.split(':'); return { kind, id, title: titles[kind] }; } });
+  assert.deepEqual(calls, ['note:n-1', 'task:t_1', 'project:p1']);
+  assert.match(html, /data-open-note="n-1" aria-label="打开笔记：第一讲 · 观察">第一讲 · 观察<\/button>/);
+  assert.match(html, /<strong><button[^>]+data-open-task="t_1"[^>]*>补记候车时间<\/button><\/strong>/);
+  assert.match(html, /data-open-project="p1"[^>]*>交互设计方法<\/button>/);
+  assert.equal(render(raw).includes('data-open-'), false, 'A document without workspace context retains literal references');
+  assert.ok(raw.includes('[note:n-1]'), 'Rendering never changes the saved Markdown');
+});
+
+test('bare reference parsing respects code, links, escapes, entities and authored token positions', () => {
+  const calls = [], resolveReference = target => { calls.push(target); const [kind,id] = target.split(':'); return { kind,id,title:'Resolved' }; };
+  const raw = '\\[note:n] [note:n] &#91;note:n] [note:n]\n\n`[task:t]`\n\n```md\n[project:p]\n```\n\n[caption [note:n]](https://example.org)\n\n[label](note:n)\n\n[[note:n]]\n\n<div>[note:n]</div>';
+  const html = render(raw, { resolveReference });
+  assert.deepEqual(calls, ['note:n', 'note:n']);
+  assert.equal(count(html, /document-record-link/g), 2);
+  assert.match(html, /<code>\[task:t\]<\/code>/);
+  assert.match(html, /caption \[note:n\]<\/a>/);
+  assert.match(html, /&lt;div&gt;\[note:n\]&lt;\/div&gt;/);
+  assert.equal(count(render('&amp; [note:n] \\\\[note:n]', { resolveReference }), /document-record-link/g), 2, 'Unrelated entities and escaped backslashes do not disable real references');
+});
+
+test('bare references fail closed without leaking a retired label or creating unsafe attributes', () => {
+  const raw = '[note:n] [task:t] [project:p]';
+  const data = renderWithMetadata(raw, { resolveReference: () => null });
+  assert.deepEqual(data.warnings, ['unavailable-reference']);
+  assert.ok(!data.html.includes('<button'));
+  assert.match(data.html, /笔记不可用/); assert.match(data.html, /任务不可用/); assert.match(data.html, /项目不可用/);
+  for (const resolved of [{ kind:'script', id:'n', title:'unsafe' }, { kind:'note', id:'different', title:'unsafe' }, { kind:'note', id:'n', title: { html:'unsafe' } }]) {
+    const html = render('[note:n]', { resolveReference: () => resolved });
+    assert.ok(!html.includes('unsafe')); assert.ok(!html.includes('<button'));
+  }
+  const html = render('[note:n]', { resolveReference: () => ({ kind:'note', id:'n', title:'<img src=x onerror="bad"> & title' }) });
+  assert.ok(!html.includes('<img')); assert.match(html, /&lt;img src=x onerror=&quot;bad&quot;&gt; &amp; title/);
+  assert.ok(!render('[note:n"onclick=x] [task:../x] [project:javascript:bad]', { resolveReference: () => { throw Error('Malformed references must not resolve'); } }).includes('document-record-link'));
+  assert.ok(!renderWithMetadata('[note:n]', { resolveReference: () => { throw Error('gone'); } }).html.includes('<button'));
+});
+
+test('cached Markdown resolves references again when records are renamed or become inaccessible', () => {
+  const raw = '[note:n]', record = { title:'Original title', available:true };
+  const options = { resolveReference: () => record.available ? { kind:'note',id:'n',title:record.title } : null };
+  assert.match(render(raw,options), /Original title/);
+  record.title='Renamed title'; assert.match(render(raw,options), /Renamed title/);
+  record.available=false;
+  const html=render(raw,options); assert.ok(!html.includes('title')); assert.ok(!html.includes('data-open-note')); assert.match(html,/笔记不可用/);
+});
+
 test('GFM tables align headers and preserve formatting, pipe code, strikethrough and autolinks', () => {
   const html = render('| Left | Center | Right |\n| :--- | :----: | ----: |\n| **strong** | `a\\|b` | ~~gone~~ |\n\nhttps://example.org');
   assert.match(html, /<div class="markdown-table-scroll"><table><thead><tr><th scope="col" style="text-align:left">Left/);
@@ -263,8 +312,8 @@ test('browser production bundle has the same offline renderer semantics', async 
   assert.equal(typeof api.renderWithMetadata, 'function');
   assert.equal(typeof api.headings, 'function');
   assert.equal(Object.isFrozen(api), true);
-  const raw = '# A &amp; B ##\n\n- [x] ready\n\n[ref][r] ![photo](/__files/asset)\n\n[r]: https://example.org\n\n$$\n\\begin{matrix}1 & 2\\end{matrix}\n$$';
-  const options = { idPrefix: 'actual', resolveImage: url => url };
+  const raw = '# A &amp; B ##\n\n- [x] ready\n\n[ref][r] ![photo](/__files/asset)\n\n[note:n]\n\n[r]: https://example.org\n\n$$\n\\begin{matrix}1 & 2\\end{matrix}\n$$';
+  const options = { idPrefix: 'actual', resolveImage: url => url, resolveReference: () => ({kind:'note',id:'n',title:'Actual source'}) };
   assert.equal(api.render(raw, options), render(raw, options));
   assert.equal(nodes, 1, 'only upstream named entity decoding uses the DOM');
 });

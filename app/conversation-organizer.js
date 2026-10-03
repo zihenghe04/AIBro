@@ -10,31 +10,63 @@
  const visible=chat=>core().eligible(chat)&&(!root.PrivateMode?.shows||root.PrivateMode.shows(chat));
  const failed=()=>t('本机保存未完成，请重试。','Local saving did not finish. Please try again.');
  const syncSidebarBusy=()=>root.document?.querySelectorAll('[data-organizer-pin]').forEach(button=>{button.disabled=busy;});
- function model(){
-  const state=current(),conversations=core().sort((state.conversations||[]).filter(visible));
+ function model(state=current(),conversations=core().sort((state.conversations||[]).filter(visible)),recommendations=true){
   return {
    conversations:conversations.map(chat=>({id:chat.id,title:chat.title||t('新对话','New conversation'),folderId:chat.folderId||null,pinned:core().isPinned(chat),projectId:chat.projectId||null,
     projectName:(state.projects||[]).find(project=>project.id===chat.projectId)?.name||'',workspace:chat.workspace||'',updatedAt:core().activity(chat),messageCount:(chat.messages||[]).filter(m=>['user','agent','assistant'].includes(m.role)&&!m.hidden&&!m.internal&&!m.deletedAt&&!m.deleted&&!['analysis','reasoning','tool'].includes(m.channel)).length})),
    folders:(state.folders?.conversations||[]).filter(core().active).map(folder=>({id:folder.id,name:folder.name})),
-   recommendations:core().recommend({...state,conversations},{limit:8})
+   recommendations:recommendations?core().recommend({...state,conversations},{limit:8}):[]
   };
+ }
+ // Compare the exact public inputs used by summarize, not message identity or
+ // updatedAt. Streaming text is not an outcome until live/pending is cleared.
+ function summaryFor(conversation,maxLength=900){
+  const language=/^en(?:-|$)/i.test(root.document.documentElement.lang)?'en':'zh';
+  const inputs=[conversation.title,language,maxLength];
+  for(const message of conversation.messages||[]){
+   if(!['user','agent','assistant'].includes(message.role)||message.hidden||message.internal||message.deletedAt||message.deleted||['analysis','reasoning','tool'].includes(message.channel))continue;
+   inputs.push(message.id,message.role,!!message.live,!!message.pending);
+   if(message.role==='user'||(!message.live&&!message.pending)){
+    if(typeof message.text==='string')inputs.push(message.text);
+    else if(typeof message.content==='string')inputs.push(message.content);
+    else inputs.push((Array.isArray(message.content)?message.content:[]).filter(part=>part?.type==='text').map(part=>part.text||'').join('\n'));
+   }
+  }
+  const key=JSON.stringify([conversation.id,maxLength]),cached=shell?.summaries.get(key);
+  if(cached&&cached.inputs.length===inputs.length&&inputs.every((value,index)=>value===cached.inputs[index]))return cached.value;
+  const value={id:conversation.id,title:conversation.title||t('新对话','New conversation'),...core().summarize(conversation,{maxLength,language})};
+  shell?.summaries.set(key,{conversationId:conversation.id,inputs,value});return value;
  }
  function summary(id){
   const conversation=(current().conversations||[]).find(chat=>chat.id===id&&visible(chat));
-  if(!conversation)return null;
-  return {id:conversation.id,title:conversation.title||t('新对话','New conversation'),...core().summarize(conversation,{maxLength:900,language:/^en(?:-|$)/i.test(root.document.documentElement.lang)?'en':'zh'})};
+  return conversation?summaryFor(conversation):null;
  }
  function render(){
   if(!shell||shell.closed)return;
-  shell.dialog.setAttribute('aria-label',t('整理对话','Organize conversations'));
-  const selected=summary(shell.conversationId);
-  root.HalaskaUI.mount(shell.host,'ConversationOrganizerView',{
-   ...shell.model,initialTab:shell.tab,initialConversationId:shell.conversationId,selection:selected,busy,error:shell.error,notice:shell.notice,generation:shell.generation,
-   onClose:close,onRefresh:()=>refresh({reset:true}),
-   onInspect:id=>{if(busy)return;shell.conversationId=id;render();},
-   onCommand:command=>commit(command),
-   onOpenConversation:id=>{if(busy)return;const item=(current().conversations||[]).find(chat=>chat.id===id&&visible(chat));if(!item)return;close();hooks.openConversation?.(id);}
+  const owner=shell,state=current(),conversations=core().sort((state.conversations||[]).filter(visible));
+  const readable=new Map(conversations.map(chat=>[chat.id,chat]));
+  for(const [key,cached] of owner.summaries)if(!readable.has(cached.conversationId))owner.summaries.delete(key);
+  const projection=model(state,conversations,false);
+  // Keep the reviewed grouping identity/sourceStamp: a presentation update must
+  // not reset React drafts or silently turn an old proposal into a new command.
+  // Withdraw a whole unreadable group, including its cached reason and name.
+  projection.recommendations=owner.model.recommendations.filter(item=>item.conversationIds.every(id=>readable.has(id))).map(item=>({...item,members:item.members.map(member=>{
+   const chat=readable.get(member.id);return {...member,title:chat.title||t('新对话','New conversation'),projectId:chat.projectId||null,workspace:chat.workspace||'',summary:summaryFor(chat,180)};
+  })}));
+  const selected=readable.has(owner.conversationId)?summaryFor(readable.get(owner.conversationId)):null;
+  const props={...projection,initialTab:owner.tab,initialConversationId:owner.conversationId,selection:selected,busy,error:owner.error,notice:owner.notice,generation:owner.generation};
+  // All values here are display projections, never full transcripts. Activity
+  // timestamps affect sorting but aren't drawn; unchanged streams do not mount.
+  const renderKey=JSON.stringify(props,(key,value)=>key==='updatedAt'?undefined:value);
+  if(owner.renderKey===renderKey)return;
+  owner.dialog.setAttribute('aria-label',t('整理对话','Organize conversations'));
+  root.HalaskaUI.mount(owner.host,'ConversationOrganizerView',{
+   ...props,onClose:()=>shell===owner&&close(),onRefresh:()=>shell===owner&&refresh({reset:true}),
+   onInspect:id=>{if(busy||shell!==owner||owner.closed)return;owner.conversationId=id;render();},
+   onCommand:command=>shell===owner&&!owner.closed?commit(command):false,
+   onOpenConversation:id=>{if(busy||shell!==owner||owner.closed)return;const item=(current().conversations||[]).find(chat=>chat.id===id&&visible(chat));if(!item)return;close();hooks.openConversation?.(id);}
   });
+  owner.renderKey=renderKey;
  }
  function refresh({reset=false}={}){
   if(!shell||busy)return;
@@ -63,10 +95,10 @@
  }
  function open(options={}){
   if(!core()||!root.HalaskaUI?.componentNames?.includes('ConversationOrganizerView')){hooks.toast?.(t('对话整理组件尚未就绪，请重新打开应用。','Conversation organizer is not ready. Reopen the app.'));return false;}
-  if(shell&&!shell.closed){if(options.conversationId){shell.conversationId=options.conversationId;shell.tab='all';shell.generation++;render();}shell.dialog.focus();return true;}
+  if(shell&&!shell.closed){if(options.conversationId){shell.conversationId=options.conversationId;shell.tab='all';shell.generation++;}render();shell.dialog.focus();return true;}
   const document=root.document,dialog=document.createElement('dialog'),host=document.createElement('div'),opener=document.activeElement;
   dialog.className='conversation-organizer-dialog';dialog.append(host);
-  shell={dialog,host,opener,closed:false,error:'',notice:'',conversationId:options.conversationId||null,tab:options.tab||(options.conversationId?'all':'suggestions'),generation:0,model:{conversations:[],folders:[],recommendations:[]}};
+  shell={dialog,host,opener,closed:false,error:'',notice:'',conversationId:options.conversationId||null,tab:options.tab||(options.conversationId?'all':'suggestions'),generation:0,summaries:new Map(),renderKey:null,model:{conversations:[],folders:[],recommendations:[]}};
   let outsideStart=false;
   const outside=event=>{const r=dialog.getBoundingClientRect();return event.target===dialog&&(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom);};
   dialog.addEventListener('pointerdown',event=>{outsideStart=outside(event);});
@@ -74,11 +106,14 @@
   dialog.addEventListener('cancel',event=>{event.preventDefault();if(!event.isComposing)close();});
   dialog.addEventListener('keydown',event=>{if(event.key==='Escape'&&(event.isComposing||event.keyCode===229))event.preventDefault();});
   dialog.addEventListener('close',()=>{if(shell?.dialog!==dialog)return;if(busy){dialog.showModal();return;}close();});
-  shell.onLanguage=()=>refresh();document.addEventListener('workstation-language-change',shell.onLanguage);
+  shell.onLanguage=()=>{shell.renderKey=null;render();};document.addEventListener('workstation-language-change',shell.onLanguage);
   document.body.append(dialog);refresh();dialog.showModal();dialog.querySelector('#organizerClose')?.focus({preventScroll:true});return true;
  }
  function dropId(event){return event.dataTransfer?.getData(MIME)||'';}
  function enhanceSidebar(container=root.document?.getElementById('conversationList')){
+  // The host already calls this after completion, deletion and private-mode
+  // changes. Refresh the open island without timers or rebuilding proposals.
+  if(shell&&!shell.closed)render();
   if(!container||!core())return;
   for(const button of container.querySelectorAll('[data-conversation-id]')){
    const id=button.dataset.conversationId,chat=(current().conversations||[]).find(item=>item.id===id&&visible(item));if(!chat)continue;

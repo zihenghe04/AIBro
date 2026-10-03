@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const PdfTextIndex = require('../app/pdf-text-index');
 const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 const start = source.indexOf('async function importMaterials(');
 assert.ok(start >= 0, 'import handler must exist');
@@ -25,10 +26,14 @@ function harness(files = [{ name: 'lesson.pdf', type: 'application/pdf', size: 1
     fileStorePut: async (id,blob) => { c.cache.push({id,blob}); if(options.cacheFails) throw Error('browser cache unavailable'); if(options.cacheStalls) return new Promise(()=>{}); },
     fetch: (url,init) => { c.calls.push({url,init}); return url === '/__parse' ? parsing.promise : uploading ? uploading.promise : Promise.resolve(options.uploadError ? response({error:'磁盘空间不足'}, false) : response()); },
   };
+  const ordinaryFetch=c.fetch;
+  c.fetch=(url,init)=>url.includes('/read-text?')?(c.calls.push({url,init}),parsing.promise.then(async responseValue=>{const parsed=await responseValue.json(),text=parsed.pages?.[0]?.text||parsed.content||'';return response({parts:[{page:1,offset:0,text,totalChars:[...text].length,nextOffset:null}],pageCount:1,nextPage:null,nextOffset:null,sourceHash:'a'.repeat(64)});})):ordinaryFetch(url,init);
+  const queue=PdfTextIndex.create({getState:()=>c.state,persist:()=>c.saveDocumentDurably(),fetch:(...args)=>c.fetch(...args),setTimer:()=>1,clearTimer(){}});
+  c.window={PdfTextIndex:{enqueue(id){queue.enqueue(id);c.indexPromise=queue.pump();}}};
   c.$('#fileInput').files = files;
   vm.createContext(c); c.importMaterials = vm.runInContext(`(${fn})`, c);
-  c.finish = async (value={content:'第一页课程内容',pages:[{page:1,text:'第一页课程内容'}],parser:'local'}) => { const jobs = [...(c.importMaterials.indexJobs?.values() || [])]; parsing.resolve(response(value)); await Promise.all(jobs); };
-  c.failIndex = async () => { const jobs=[...c.importMaterials.indexJobs.values()]; parsing.reject(Error('解析器不可用')); await Promise.all(jobs); };
+  c.finish = async (value={content:'第一页课程内容',pages:[{page:1,text:'第一页课程内容'}],parser:'local'}) => { parsing.resolve(response(value)); await c.indexPromise; };
+  c.failIndex = async () => { parsing.reject(Error('解析器不可用')); await c.indexPromise; };
   return c;
 }
 
@@ -39,9 +44,9 @@ test('PDF original is durable and attached before background parsing completes; 
   assert.equal(item.mimeType,'application/pdf');assert.equal(item.fileStored,true);assert.equal(item.dataUrl,null);
   assert.equal(item.content,'');assert.equal(item.indexStatus,'pending');assert.equal(item.status,'original-only');
   assert.equal(c.calls[0].url,`/__files/${item.id}`);assert.equal(c.calls[0].init.body,file);
-  assert.equal(c.calls[1].url,'/__parse');assert.equal(c.importMaterials.busy,false);assert.equal(c.$('#importDialog').closed,true);
+  assert.match(c.calls[1].url,/\/read-text\?batch=1&page=1&offset=0$/);assert.equal(c.importMaterials.busy,false);assert.equal(c.$('#importDialog').closed,true);
   assert.deepEqual([...c.state.conversations[0].attachments],[item.id]);
-  await c.finish(); assert.equal(c.state.imports[0].content,'第一页课程内容');assert.equal(c.state.imports[0].indexStatus,'ready');assert.equal(c.importMaterials.indexJobs.size,0);
+  await c.finish(); assert.equal(c.state.imports[0].pages[0].text,'第一页课程内容');assert.equal(c.state.imports[0].indexStatus,'ready');assert.equal(c.importMaterials.indexJobs.size,0);
 });
 
 test('images skip text parsing and a blocked/failed preview cache never prevents importing the saved original', async () => {
@@ -87,12 +92,12 @@ test('failed original upload does not report success, attach metadata, or begin 
   assert.equal(c.calls.length,1);assert.match(c.$('#importProgress').textContent,/磁盘空间不足/);assert.equal(c.message,undefined);assert.equal(c.importMaterials.busy,false);
 });
 
-test('background index updates latest record by id, preserving rename, project, folder and tags after state replacement', async () => {
+test('background index updates latest record by id, preserving rename, folder and tags after state replacement', async () => {
   const c=harness();await c.importMaterials(event);const id=c.state.imports[0].id;
   c.state=JSON.parse(JSON.stringify(c.state));c.state.projects.push({id:'course',workspace:'课程'});
-  Object.assign(c.state.imports[0],{name:'第一讲.pdf',projectId:'course',workspace:'课程',folderPath:'讲义/第一周',tags:['人工标签']});
+  Object.assign(c.state.imports[0],{name:'第一讲.pdf',folderPath:'讲义/第一周',tags:['人工标签']});
   await c.finish({name:'wrong-name.pdf',id:'wrong-id',content:'indexed',pages:[{page:47,text:'实践'}],parser:'local'});
-  const item=c.state.imports[0];assert.equal(item.id,id);assert.equal(item.name,'第一讲.pdf');assert.equal(item.projectId,'course');assert.equal(item.folderPath,'讲义/第一周');assert.deepEqual([...item.tags],['人工标签']);assert.equal(item.content,'indexed');
+  const item=c.state.imports[0];assert.equal(item.id,id);assert.equal(item.name,'第一讲.pdf');assert.equal(item.projectId,undefined);assert.equal(item.folderPath,'讲义/第一周');assert.deepEqual([...item.tags],['人工标签']);assert.equal(item.pages[0].text,'实践');
 });
 
 test('background parser never resurrects deleted attachments or mutates their trash snapshots', async () => {
@@ -133,7 +138,7 @@ test('deletion or archiving during original upload does not attach to another co
 
 test('failed or unavailable text indexes preserve a usable original and never turn upload into a failed import', async () => {
   const c=harness();await c.importMaterials(event);await c.failIndex();const item=c.state.imports[0];
-  assert.equal(item.fileStored,true);assert.equal(item.status,'original-only');assert.equal(item.indexStatus,'failed');assert.match(item.error,/原件仍可预览/);assert.equal(c.importMaterials.indexJobs.size,0);
+  assert.equal(item.fileStored,true);assert.equal(item.status,'original-only');assert.equal(item.indexStatus,'failed');assert.match(item.error,/原件与已保存段落保留/);assert.equal(c.importMaterials.indexJobs.size,0);
   const scanned=harness();await scanned.importMaterials(event);await scanned.finish({content:'',pages:[],warning:'扫描版 PDF'});
   assert.equal(scanned.state.imports[0].indexStatus,'unavailable');assert.equal(scanned.state.imports[0].fileStored,true);
 });
@@ -190,7 +195,7 @@ test('capture removed during upload retains failed file for retry and never atta
 });
 
 function workspaceUI(c, targetOptions = () => ({ conversationId: 'a' })) {
-  const events = []; c.window = { ImportWorkspace: {
+  const events = []; c.window = { ...c.window, ImportWorkspace: {
     targetOptions, begin: data => events.push({ kind: 'begin', data }),
     fileStatus: (index, data) => events.push({ kind: 'file', index, data }),
     finish: data => events.push({ kind: 'finish', data })
@@ -205,7 +210,7 @@ test('an import waits for actual metadata acknowledgement before success, select
   let complete = false; const pending = c.importMaterials(event).then(value => { complete = true; return value; });
   await ticks(); assert.equal(complete, false); assert.equal(c.message, undefined);
   assert.equal(c.state.imports.length, 1); assert.equal(c.$('#fileInput').value, 'chosen.pdf');
-  assert.equal(c.calls.some(call => call.url === '/__parse'), false);
+  assert.equal(c.calls.some(call => call.url.includes('/read-text?')), false);
   assert.equal(events.some(entry => entry.data.status === 'saved'), false);
   receipt.resolve(true); const result = await pending;
   assert.equal(result.imported.length, 1); assert.equal(c.$('#fileInput').value, '');
@@ -327,4 +332,13 @@ test('saving the same capture again resumes its pending metadata with no duplica
   assert.equal(a.pendingSave.count, 1);
   const b = await c.importMaterials(event,{files:[file],captureNoteId:'capture'});
   assert.equal(b.imported.length, 1); assert.equal(c.calls.length, 1); assert.equal(c.state.notes[0].sourceAttachmentIds.length, 1);
+});
+
+
+test('URL PDF saved by the local fetch service joins the same background original indexing queue after metadata ACK', async()=>{
+  const c=harness([]);c.$('#urlInput').value='https://fixture.invalid/course.pdf';
+  const originalFetch=c.fetch;c.fetch=(url,init)=>url==='/__fetch'?Promise.resolve(response({id:'url-pdf',name:'remote.pdf',mimeType:'application/pdf',fileStored:true,content:'',pages:[]})):originalFetch(url,init);
+  const result=await c.importMaterials(event);assert.equal(result.imported.length,1);assert.equal(result.imported[0].indexStatus,'pending');
+  assert.equal(c.calls.filter(call=>call.url==='/__files/url-pdf').length,0,'never re-upload or fetch the public URL for indexing');
+  await c.finish();assert.equal(result.imported[0].pages[0].text,'第一页课程内容');assert.equal(result.imported[0].indexStatus,'ready');
 });

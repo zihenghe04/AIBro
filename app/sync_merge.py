@@ -1,5 +1,6 @@
 """Pure three-way merge for local snapshots and background cloud updates."""
 import copy
+import json
 from datetime import datetime, timezone
 import math
 
@@ -66,6 +67,14 @@ def _index(items, path, folder_kind=False):
     return output
 
 
+def _validate_library_folders(items):
+    seen = set()
+    for item in items:
+        key = json.dumps([item.get('workspace'), item.get('projectId') or None, item.get('folderPath')], ensure_ascii=False)
+        if key in seen: raise MergeConflict(['folders', 'library'], '同一位置存在重复资料目录')
+        seen.add(key)
+
+
 def _validate(snapshot):
     if not isinstance(snapshot, dict): raise MergeConflict([], '快照必须为对象')
     for collection in COLLECTIONS:
@@ -75,8 +84,9 @@ def _validate(snapshot):
     folders = snapshot.get('folders', {})
     if isinstance(folders, list): _index(folders, ['folders'], True)
     elif isinstance(folders, dict):
-        for group in ('projects', 'conversations'): _index(folders.get(group, []), ['folders', group])
+        for group in ('projects', 'conversations', 'library'): _index(folders.get(group, []), ['folders', group])
     else: raise MergeConflict(['folders'], '文件夹集合格式无效')
+    if isinstance(folders, dict) and 'library' in folders: _validate_library_folders(folders['library'])
 
 
 def _merge_value(base, proposed, current, path):
@@ -148,8 +158,9 @@ def merge_local_snapshot(base, proposed, current):
             result['folders'] = _merge_list(*values, ['folders'], folder_kind=True)
         else:
             result['folders'] = _copy(values[1])
-            for group in ('projects', 'conversations'):
+            for group in ('projects', 'conversations', 'library'):
                 if any(group in value for value in values): result['folders'][group] = _merge_list(*(value.get(group, []) for value in values), ['folders', group])
+    if isinstance(result.get('folders'), dict) and 'library' in result['folders']: _validate_library_folders(result['folders']['library'])
     if '_revision' in current: result['_revision'] = _copy(current['_revision'])
     else: result.pop('_revision', None)
     return result

@@ -2,6 +2,10 @@
   'use strict';
   const Core = root.WorkstationCore;
   const SSEFrames = root.SSEFrameScanner || (typeof require === 'function' ? require('./sse-frame-scanner.js') : null);
+  const Reception = root.StreamReception || (typeof require === 'function' ? require('./stream-reception.js') : null);
+  const activitySession = typeof root.crypto?.randomUUID === 'function' ? root.crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  let activityRequestSequence = 0;
+  const nextActivityNamespace = () => `${activitySession}:${(++activityRequestSequence).toString(36)}`;
   const messageText = item => (Array.isArray(item?.content) ? item.content : []).filter(part => ['output_text', 'text'].includes(part?.type) && typeof part.text === 'string').map(part => part.text).join('');
   const jsonText = data => data?.output_text || data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || (Array.isArray(data?.output) ? data.output : []).filter(item => item?.type === 'message' && item.phase !== 'commentary').map(messageText).join('') || '';
   const toolLabels = Object.freeze({ web_search_call: '网页搜索', file_search_call: '资料检索', code_interpreter_call: '代码执行', mcp_call: 'MCP 工具', function_call: '函数调用', custom_tool_call: '自定义工具', computer_call: '计算机操作', shell_call: '命令执行', local_shell_call: '命令执行', image_generation_call: '图像生成', apply_patch_call: '文件修改' });
@@ -49,6 +53,28 @@
     return error;
   };
   const nativeProtocolError = () => Object.assign(new Error('模型返回了当前连接未接入的原生工具调用，尚未执行这些调用。请按 AI Bro 的 knowledgeRequests JSON 协议重试。'), { code: 'MODEL_PROTOCOL_ERROR', protocolKind: 'native_tool_call', recoverable: true });
+  // PKU MaaS documents thinking.type as its canonical DeepSeek switch. Keep
+  // automatic effort upstream-owned and do not guess other gateways' contracts.
+  const isPkuDeepSeek = (base, model) => {
+    if (typeof model !== 'string' || !/^deepseek(?:-|$)/i.test(model)) return false;
+    let url; try { url = new URL(base); } catch (_) { return false; }
+    return url.protocol === 'https:' && url.hostname === 'chat.pku.edu.cn' && !url.port && !url.username && !url.password;
+  };
+  const pkuDeepSeekThinking = (base, model, effort) => {
+    if (!isPkuDeepSeek(base, model) || typeof effort !== 'string' || !effort || effort === 'auto') return null;
+    return { type: effort === 'none' || effort === 'off' ? 'disabled' : 'enabled' };
+  };
+  // The Auto preference must not pass originals or unknown fields through a
+  // converter that cannot represent them. Validate against its exact vocabulary.
+  const chatCompatibleInput = input => typeof input === 'string' || Array.isArray(input) && input.length > 0 && Array.from(input).every(item =>
+    item && typeof item === 'object' && !Array.isArray(item) && ['developer', 'system', 'assistant', 'user'].includes(item.role)
+    && Object.keys(item).every(key => ['role', 'content'].includes(key)) && Array.isArray(item.content) && item.content.length > 0
+    && Array.from(item.content).every(part => part && typeof part === 'object' && !Array.isArray(part) && (
+      part.type === 'input_text' && typeof part.text === 'string' && Object.keys(part).every(key => ['type', 'text'].includes(key))
+      || part.type === 'input_image' && typeof part.image_url === 'string' && part.image_url.length > 0
+        && (part.detail === undefined || ['auto', 'low', 'high'].includes(part.detail))
+        && Object.keys(part).every(key => ['type', 'image_url', 'detail'].includes(key))
+    )));
   const toolName = (value, fallback) => typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_.:-]{0,79}$/.test(value) ? value : fallback;
   const contextOverflow = (failure, message = '') => {
     const code = typeof failure === 'object' ? failure?.code || failure?.type : '';
@@ -170,7 +196,7 @@
       finally { options.signal?.removeEventListener('abort', cancelRecovery); }
       if (options.signal?.aborted) throw Object.assign(new Error('已停止本次执行'), { code: 'CANCELLED' });
       if (!input || JSON.stringify(input).length >= JSON.stringify(options.input).length) throw error;
-      options.onActivity?.({ id: 'commentary:context-recovery', kind: 'commentary', status: 'completed', name: '上下文恢复', text: '服务报告上下文过长，已缩减较早对话并重试一次；近期用户要求与已执行记录保留。' });
+      options.onActivity?.({ id: `commentary:${nextActivityNamespace()}:context-recovery`, source: 'transport', ...(error.attemptId ? { attemptId: error.attemptId } : {}), kind: 'commentary', status: 'completed', name: '上下文恢复', text: '服务报告上下文过长，已缩减较早对话并重试一次；近期用户要求与已执行记录保留。' });
       // This is one model request, not a replay of the host tool loop. Do not
       // recurse: another overflow terminates, as does any other provider error.
       try { return await requestOnce({ ...options, input, protocol: error.requestProtocol || options.protocol }); }
@@ -183,8 +209,17 @@
       }
     }
   }
-  async function requestOnce({ provider = 'api', base, model, effort = '', token, input, webSearch = false, protocol, requirePlanProtocol = false, onDelta, onPhase, onActivity, onSources, onUsage, signal }) {
+  async function requestOnce({ provider = 'api', base, model, effort = '', token, input, webSearch = false, protocol, requirePlanProtocol = false, onDelta, onPhase, onActivity, onAttempt, onSources, onUsage, onReception, signal }) {
     const controller = new AbortController();
+    const reception = typeof onReception === 'function' ? Reception?.createEmitter(onReception) : null;
+    let receptionOutcome = 'failed';
+    let attemptId = null, attemptSettled = true;
+    const finishAttempt = status => {
+      if (!attemptId || attemptSettled) return;
+      attemptSettled = true;
+      onAttempt?.({ id: attemptId, status });
+    };
+    const publishDelta = (output, delta) => onDelta?.(output, delta, { attemptId });
     let reader, readerDone = false, rejectOnAbort, receivedContent = false, usedProtocol, pendingNativeToolCall = false;
     const interruptionError = () => { const error = new Error('已停止本次执行'); error.code = 'CANCELLED'; return error; };
     const cancel = () => controller.abort();
@@ -209,6 +244,17 @@
     signal?.addEventListener('abort', cancel, { once: true });
     if (signal?.aborted) cancel();
     const activities = new Map(), messagePhases = new Map();
+    // A run can call the provider repeatedly after tools. Provider-local IDs
+    // (especially Chat's synthetic thinking IDs) must not overwrite prior rounds.
+    let activityNamespace;
+    const activityKeys = new Map();
+    const activityKey = (kind, id) => {
+      const local = typeof id === 'string' && id.length > 0 && id.length <= 200 ? id : '_legacy', key = `${kind}:${local}`;
+      // Keep the full local identity in the map. The stable ordinal prevents
+      // long provider IDs or summary indexes colliding at the UI's 180-char cap.
+      if (!activityKeys.has(key)) activityKeys.set(key, `${kind}:${activityNamespace}:${activityKeys.size.toString(36)}:${local.slice(0,64)}`);
+      return activityKeys.get(key);
+    };
     const sources = new Map();
     const observeSources = values => {
       let changed = false;
@@ -222,37 +268,46 @@
         if (previous?.type === 'url_citation' && source.type !== 'url_citation') continue;
         if (JSON.stringify(previous) !== JSON.stringify(source)) { sources.set(source.url, source); changed = true; }
       }
-      if (changed) { receivedContent = true; onSources?.([...sources.values()].map(source => ({ ...source }))); }
+      if (changed) { receivedContent = true; reception?.content('source'); onSources?.([...sources.values()].map(source => ({ ...source }))); }
     };
     const identifier = value => typeof value === 'string' && value.length > 0 && value.length <= 160 ? value : '_legacy';
     // 用量只在服务端明确返回时记录（responses 与 chat 两种字段名），缺失就保持为空：
     // 不用本地估算值冒充实测用量。
     const observeUsage = usage => {
       if (!usage || typeof usage !== 'object') return;
-      const total = Number(usage.total_tokens); if (!Number.isFinite(total) || total <= 0) return;
-      const pick = value => { const number = Number(value); return Number.isFinite(number) && number >= 0 ? Math.round(number) : null; };
-      onUsage?.({ input: pick(usage.input_tokens ?? usage.prompt_tokens), output: pick(usage.output_tokens ?? usage.completion_tokens), total: Math.round(total) });
+      const pick = value => { const number = typeof value === 'number' || typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN; return Number.isSafeInteger(number) && number >= 0 ? number : null; };
+      const input = pick(usage.input_tokens ?? usage.prompt_tokens), output = pick(usage.output_tokens ?? usage.completion_tokens);
+      let total = pick(usage.total_tokens), totalSource = total === null ? null : 'reported';
+      // Both APIs define total as input + output. Adding reported components
+      // is exact accounting, not a tokenizer estimate; missing remains null.
+      if (usage.total_tokens == null && input !== null && output !== null && Number.isSafeInteger(input + output)) { total = input + output; totalSource = 'components'; }
+      if (input === null && output === null && total === null) return;
+      onUsage?.({ input, output, total }, { attemptId, totalSource });
+      if (controller.signal.aborted) throw interruptionError();
     };
+    const observeErrorUsage = body => { let data; try { data = JSON.parse(body); } catch (_) { return; } observeUsage((data?.response || data)?.usage); };
     const activity = (kind, id, text, status, name, append = false) => {
-      const key = `${kind}:${typeof id === 'string' && id.length > 0 && id.length <= 200 ? id : '_legacy'}`;
+      const key = activityKey(kind, id);
       const previous = activities.get(key);
       if (previous && ['completed', 'failed', 'cancelled'].includes(previous.status) && ['pending', 'running'].includes(status)) return;
       if (typeof text !== 'string') return;
       text = (append ? previous?.text || '' : '') + text;
       if (!text && kind !== 'tool') return;
       if (id !== 'protocol-fallback') receivedContent = true;
-      const value = { id: key, kind, status, name, text };
+      const value = { id: key, kind, status, name, text, attemptId, ...(id === 'protocol-fallback' ? { source: 'transport' } : {}) };
       if (previous && previous.text === text && previous.status === status && previous.name === name) return;
+      if (id !== 'protocol-fallback') reception?.content(kind);
       activities.set(key, value); onActivity?.({ ...value });
       if (kind !== 'tool') onPhase?.('reasoning', [...activities.values()].filter(item => item.kind !== 'tool').map(item => item.text).join('\n\n').slice(0, 16000));
     };
     // 段级呼吸的“完成”信号：把仍处 running 的段收束为 completed（内容不改写）。
     // chat 协议的明文思考没有 done 事件，由调用方在正文/工具开始时触发收束。
     const settle = (kind, id, status = 'completed') => {
-      const key = `${kind}:${typeof id === 'string' && id.length > 0 && id.length <= 200 ? id : '_legacy'}`;
+      const key = activityKey(kind, id);
       const previous = activities.get(key);
       if (!previous || previous.status === status) return;
       const value = { ...previous, status };
+      reception?.content(kind);
       activities.set(key, value); onActivity?.({ ...value });
     };
     const publicText = (event, text, append = false, status = 'running') => {
@@ -275,7 +330,7 @@
         if (pending && requirePlanProtocol) pendingNativeToolCall = true;
         const status = ['failed', 'error'].includes(item.status) || item.error ? 'failed' : ['cancelled', 'canceled', 'incomplete'].includes(item.status) ? 'cancelled' : pending ? 'pending' : completed || item.status === 'completed' ? 'completed' : 'running';
         const id = item.id || item.call_id;
-        const previous = activities.get(`tool:${identifier(id)}`);
+        const previous = activities.get(activityKey('tool', identifier(id)));
         activity('tool', id, pending ? '工具调用已提出；当前连接未执行此宿主操作' : toolLabels[item.type], status, toolName(item.name, previous?.name || toolLabels[item.type]));
         if (item.type === 'web_search_call') observeSources(item.action?.sources);
       }
@@ -285,9 +340,13 @@
       if (controller.signal.aborted) { await wait(Promise.resolve()); throw interruptionError(); }
       const explicitProtocol = preferredProtocol(protocol);
       const autoProtocol = provider !== 'openai-auth' && explicitProtocol !== 'responses' && explicitProtocol !== 'chat';
-      const requestProtocol = protocolOf(provider, base, explicitProtocol);
+      const pkuAuto = autoProtocol && !webSearch && isPkuDeepSeek(base, model);
+      const compatibleChat = pkuAuto && chatCompatibleInput(input);
+      // A host-level learned protocol cannot override this request's originals.
+      const requestProtocol = pkuAuto ? compatibleChat ? 'chat' : 'responses' : protocolOf(provider, base, explicitProtocol);
       // 按指定协议构造并发送一次请求；自动回退需要用另一种协议重建请求体。
       const send = async chosen => {
+        if (controller.signal.aborted) { await wait(Promise.resolve()); throw interruptionError(); }
         usedProtocol = chosen;
         const url = provider === 'openai-auth' ? '/__codex/respond' : `/__proxy?url=${encodeURIComponent(Core.endpoint(base, chosen === 'chat' ? 'chat/completions' : 'responses'))}`;
         const headers = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
@@ -304,11 +363,20 @@
             body.include = ['web_search_call.action.sources'];
           }
         }
+        const thinking = chosen === 'chat' ? pkuDeepSeekThinking(base, model, effort) : null;
+        if (thinking) body.thinking = thinking;
         if (effort && effort !== 'auto') {
           if (provider === 'openai-auth') body.effort = effort;
-          else if (chosen === 'chat') body.reasoning_effort = effort;
-          else body.reasoning = { effort };
+          else if (chosen === 'chat') {
+            if (!(thinking && effort === 'off')) body.reasoning_effort = effort;
+          } else body.reasoning = { effort };
         }
+        attemptId = nextActivityNamespace();
+        activityNamespace = attemptId;
+        attemptSettled = false;
+        onAttempt?.({ id: attemptId, status: 'running' });
+        if (controller.signal.aborted) { await wait(Promise.resolve()); throw interruptionError(); }
+        reception?.start();
         onPhase?.('waiting');
         try { return await wait(fetch(url, { method: 'POST', signal: controller.signal, headers, body: JSON.stringify(body) })); }
         catch (error) {
@@ -324,12 +392,14 @@
         let errorBody = '';
         try { errorBody = await readText(response); }
         catch (error) { if (controller.signal.aborted) throw error; }
+        observeErrorUsage(errorBody);
         const failure = errorFrom(response, errorBody);
         // 自动判定模式下，若失败特征指向“该服务不提供这条协议路径”，改用另一协议重试
         // 一次：成功即记住该来源，并把这次切换如实展示给用户（不静默改写协议）。
         // 用户显式选定的协议、以及开启网页搜索（仅 Responses 支持）时不做回退。
         const mismatched = provider !== 'openai-auth' && requestProtocol === 'responses' && failure.protocolMismatch && !failure.contextHasGeneration;
-        if (mismatched && autoProtocol && !webSearch && !controller.signal.aborted) {
+        if (mismatched && autoProtocol && !webSearch && !controller.signal.aborted && (!pkuAuto || compatibleChat)) {
+          finishAttempt('failed');
           const retry = await send('chat');
           if (retry.ok) {
             const source = sourceOf(base);
@@ -341,6 +411,7 @@
             let retryBody = '';
             try { retryBody = await readText(retry); }
             catch (error) { if (controller.signal.aborted) throw error; }
+            observeErrorUsage(retryBody);
             const retryFailure = errorFrom(retry, retryBody);
             if (retryFailure.diagnostic) retryFailure.diagnostic.fallbackAttempted = true;
             if (retryFailure.code === 'CONTEXT_LENGTH_EXCEEDED') throw retryFailure;
@@ -350,7 +421,8 @@
           }
         } else {
           if (controller.signal.aborted) throw interruptionError();
-          if (mismatched) failure.message += webSearch
+          if (mismatched && pkuAuto && !compatibleChat) failure.message += '\n\n当前输入需要保留 Responses 格式；请选择支持此格式和附件的服务。';
+          else if (mismatched) failure.message += webSearch
             ? '\n\n该服务可能只提供 Chat Completions（它不支持内置网页搜索）。可在连接设置中切换接口协议并关闭网页搜索后重试。'
             : '\n\n该服务可能只提供 Chat Completions。可在连接设置中将接口协议改为“Chat Completions”后重试。';
           throw failure;
@@ -362,6 +434,7 @@
           if (contentType.includes('json')) { const error = new Error('API 返回的 JSON 响应不完整或格式无效，本次未执行操作。'); error.code = 'INVALID_RESPONSE'; throw error; }
           data = { output_text: body };
         }
+        observeUsage((data?.response || data)?.usage);
         receivedContent ||= containsGeneration(data);
         const failure = generationError(data, '', 'response') || generationError(data, data?.type || '', 'response'); if (failure) throw failure;
         data = data?.response || data;
@@ -371,7 +444,10 @@
         if (pendingNativeToolCall) throw nativeProtocolError();
         const output = jsonText(data); if (typeof output !== 'string' || !output.trim()) { const error = new Error('模型未返回可用内容，本次未执行操作。请检查账号和模型后重试。'); error.code = 'EMPTY_RESPONSE'; throw error; }
         const protocolFailure = protocolError(output); if (protocolFailure) throw protocolFailure;
-        receivedContent = true; onDelta?.(output); if (controller.signal.aborted) throw interruptionError(); return output;
+        const thinking = [data?.choices?.[0]?.message?.reasoning_content, data?.choices?.[0]?.message?.reasoning].find(value => typeof value === 'string' && value);
+        if (thinking) publicText({ item_id: '_chat_thinking', summary_index: 0 }, thinking, false, 'completed');
+        if (controller.signal.aborted) throw interruptionError();
+        receivedContent = true; reception?.content('output'); publishDelta(output); if (controller.signal.aborted) throw interruptionError(); receptionOutcome = 'completed'; return output;
       }
       if (!response.body) { const error = new Error('API 没有提供可读取的事件流，本次未执行操作。'); error.code = 'STREAM_INCOMPLETE'; throw error; }
       reader = response.body.getReader(); const decoder = new TextDecoder(); let output = '';
@@ -389,9 +465,10 @@
         const value = [...outputParts.values()].join('');
         const protocolFailure = protocolError(value, { final: false }); if (protocolFailure) throw protocolFailure;
         if (inspectProtocolOutput(value, { final: false })?.kind === 'pending') return;
-        if (value !== output) { const delta = value.startsWith(output) ? value.slice(output.length) : undefined; output = value; onPhase?.('output'); onDelta?.(output, delta); }
+        if (value !== output) { const delta = value.startsWith(output) ? value.slice(output.length) : undefined; output = value; reception?.content('output'); onPhase?.('output'); publishDelta(output, delta); }
       };
       const dispatch = raw => {
+        if (controller.signal.aborted) throw interruptionError();
         const lines = raw.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()); if (!lines.length) return;
         const dataText = lines.join('\n'); if (!dataText) return;
         if (dataText === '[DONE]') { if (streamFormat === 'chat') completed = true; return; }
@@ -400,6 +477,7 @@
         const type = event.type || raw.split(/\r?\n/).find(line=>line.startsWith('event:'))?.slice(6).trim() || '';
         receivedContent ||= containsGeneration(event);
         if (type === 'response.output_item.added' && event.item && !['message','reasoning'].includes(event.item.type)) receivedContent = true;
+        if (Array.isArray(event.choices) || type.startsWith('response.')) observeUsage((event.response || event).usage);
         const failure = generationError(event,type); if (failure) throw failure;
         if (requirePlanProtocol && /^response\.(?:function_call_arguments|custom_tool_call_input)\./.test(type)) pendingNativeToolCall = true;
         const format = type.startsWith('response.') ? 'responses' : Array.isArray(event.choices) ? 'chat' : null;
@@ -425,7 +503,6 @@
           }
           if (typeof delta === 'string') publishOutput({item_id:'_chat'},delta,true);
           else if (typeof choice?.message?.content === 'string') publishOutput({item_id:'_chat'},choice.message.content);
-          observeUsage(event.usage);
           return;
         }
         if (type === 'response.reasoning_summary_text.delta') { publicText(event, event.delta, true); return; }
@@ -449,8 +526,7 @@
           const data = event.response || event;
           (Array.isArray(data.output) ? data.output : []).forEach(item => observeItem(item, true));
           if (pendingNativeToolCall) throw nativeProtocolError();
-          const complete = jsonText(data); if (complete && output !== complete) { const protocolFailure = protocolError(complete); if (protocolFailure) throw protocolFailure; receivedContent = true; output = complete; onDelta?.(output); }
-          observeUsage(data.usage);
+          const complete = jsonText(data); if (complete && output !== complete) { const protocolFailure = protocolError(complete); if (protocolFailure) throw protocolFailure; receivedContent = true; output = complete; reception?.content('output'); publishDelta(output); }
           completed = true;
         }
         // Raw reasoning, encrypted content, tool arguments/results and unknown
@@ -469,9 +545,11 @@
       if (!completed) { const error = new Error('连接已结束，但未收到模型的明确完成事件。本次结果可能不完整，未执行任何操作。请重试或检查 API 的流协议兼容性。'); error.code = 'STREAM_INCOMPLETE'; throw error; }
       if (pendingNativeToolCall) throw nativeProtocolError();
       const protocolFailure = protocolError([...outputParts.values()].join('') || output); if (protocolFailure) throw protocolFailure;
-      if (!output.trim()) throw new Error('模型未返回内容，请检查账号和模型后重试。'); return output;
+      if (!output.trim()) throw new Error('模型未返回内容，请检查账号和模型后重试。'); receptionOutcome = 'completed'; return output;
     } catch (error) {
-      if (controller.signal.aborted || error?.name === 'AbortError') throw interruptionError();
+      receptionOutcome = controller.signal.aborted || error?.name === 'AbortError' || error?.code === 'CANCELLED' ? 'cancelled' : 'failed';
+      if (controller.signal.aborted || error?.name === 'AbortError') throw Object.assign(interruptionError(), attemptId ? { attemptId } : {});
+      if (attemptId) error.attemptId = attemptId;
       if (error?.code === 'CONTEXT_LENGTH_EXCEEDED') { error.contextRecoveryAllowed = !receivedContent && !error.contextHasGeneration; error.requestProtocol = usedProtocol; }
       const diagnostic = root.RunFailureDiagnostics?.capture(error)
         || (error?.name === 'TypeError' && response ? root.RunFailureDiagnostics?.receipt('UPSTREAM_STREAM_INTERRUPTED', { phase: 'stream' }) : null);
@@ -483,12 +561,14 @@
       }
       throw error;
     } finally {
+      reception?.finish(receptionOutcome);
       signal?.removeEventListener('abort', cancel); controller.signal.removeEventListener('abort', rejectOnAbort);
       controller.abort();
       if (reader) {
         if (!readerDone) { try { Promise.resolve(reader.cancel()).catch(() => {}); } catch (_) {} }
         try { reader.releaseLock(); } catch (_) {}
       }
+      finishAttempt(receptionOutcome);
     }
   }
   root.AgentTransport = { requestPlan, configure, protocolOf, chatMessages, inspectProtocolOutput, protocolError };

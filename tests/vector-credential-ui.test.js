@@ -20,7 +20,7 @@ test('encrypted-file embedding store has no unlock button and only uses ordinary
  assert.equal(f.nodes.get('embeddingUnlockHost').hidden,true);assert.equal(f.nodes.has('embeddingUnlockKey'),false);
  assert.match(f.nodes.get('embeddingKeyHelp').textContent,/无需钥匙串密码/);
  f.nodes.get('embeddingKey').value='file-fixture';await f.click('embeddingSave');await f.click('embeddingClearKey');
- assert.deepEqual(f.calls,['save','remove']);assert.ok([...f.stored.values()].every(v=>!v.includes('file-fixture')));
+ assert.deepEqual(f.calls,['save','status','remove']);assert.ok([...f.stored.values()].every(v=>!v.includes('file-fixture')));
 });
 test('embedding explicit unlock preserves unsaved key and uses the Kit button',async()=>{
  const f=fixture();f.nodes.get('embeddingKey').value='unsaved-synthetic';assert.equal(f.nodes.get('embeddingUnlockHost').hidden,false);
@@ -35,8 +35,8 @@ test('embedding unlock cancellation is not retried and leaves the supplied form 
  await f.click('embeddingUnlockKey');await settle();assert.deepEqual(f.calls,['unlock']);assert.equal(f.nodes.get('embeddingKey').value,'unsaved');assert.match(f.nodes.get('embeddingStatus').textContent,/已取消/);assert.equal(f.nodes.get('embeddingUnlockKey').disabled,false);
 });
 test('embedding explicit save and remove use authorized actions while preserving the legacy bridge fallback',async()=>{
- const f=fixture();f.nodes.get('embeddingKey').value='synthetic-new';await f.click('embeddingSave');await f.click('embeddingClearKey');assert.deepEqual(f.calls,['authorizeSave','authorizeRemove']);assert.equal(f.nodes.get('embeddingKey').value,'');assert.ok([...f.stored.values()].every(value=>!value.includes('synthetic-new')));
- const old=fixture({unlock:undefined,authorizeSave:undefined,authorizeRemove:undefined});old.nodes.get('embeddingKey').value='synthetic';await old.click('embeddingSave');await old.click('embeddingClearKey');assert.deepEqual(old.calls,['save','remove']);assert.equal(old.nodes.get('embeddingUnlockHost').hidden,true);
+ const f=fixture();f.nodes.get('embeddingKey').value='synthetic-new';await f.click('embeddingSave');await f.click('embeddingClearKey');assert.deepEqual(f.calls,['authorizeSave','status','authorizeRemove']);assert.equal(f.nodes.get('embeddingKey').value,'');assert.ok([...f.stored.values()].every(value=>!value.includes('synthetic-new')));
+ const old=fixture({unlock:undefined,authorizeSave:undefined,authorizeRemove:undefined});old.nodes.get('embeddingKey').value='synthetic';await old.click('embeddingSave');await old.click('embeddingClearKey');assert.deepEqual(old.calls,['save','status','remove']);assert.equal(old.nodes.get('embeddingUnlockHost').hidden,true);
 });
 test('embedding pending authorization blocks duplicate unlock, test, save and delete operations',async()=>{
  let resolve;const pending=new Promise(done=>{resolve=done;});const f=fixture({unlock:async()=>{f.calls.push('unlock');return pending;}});

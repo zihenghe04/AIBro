@@ -4,12 +4,15 @@ const assert = require('node:assert/strict');
 // This controller only moves owned DOM, sets attributes and renders existing
 // tool records. Native interaction/streaming are exercised by renderer tests.
 class Element {
-  constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.attributes = {}; this.className = ''; this.textContent = ''; this.hidden = false; this.open = false; this.parentElement = null; }
+  constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.attributes = {}; this.className = ''; this._textContent = ''; this.hidden = false; this.open = false; this.parentElement = null; }
+  get textContent() { return this._textContent + this.children.map(child => child.textContent).join(''); }
+  set textContent(value) { this._textContent = String(value); this.children = []; }
   append(...nodes) { for (const node of nodes) this.insertBefore(node, null); }
   insertBefore(node, reference) { node.remove(); const index = reference ? this.children.indexOf(reference) : this.children.length; this.children.splice(index, 0, node); node.parentElement = this; return node; }
   remove() { if (this.parentElement) { const parent = this.parentElement; parent.children.splice(parent.children.indexOf(this), 1); this.parentElement = null; } }
   replaceChildren(...nodes) { for (const node of [...this.children]) node.remove(); this.append(...nodes); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
+  addEventListener() {} // Keyboard behavior uses the real DOM fixture in conversation-tool-text.
   getAttribute(name) { return this.attributes[name] ?? null; }
   matches(selector) {
     if (selector.startsWith('.')) return this.className.split(' ').includes(selector.slice(1));
@@ -50,7 +53,7 @@ test('selection is pure, prefers an available saved tab, and falls back to recor
   assert.equal(JSON.stringify({ message: value.message, run: value.run }), before);
   assert.equal(Process.chooseView({ processView: 'tools', steps: [{}] }, {}), 'progress');
   assert.equal(Process.chooseView({ processView: 'progress' }, { toolCalls: [tool()] }), 'tools');
-  assert.equal(Process.chooseView({ processView: 'unknown', activities: [{}] }, {}), 'progress');
+  assert.equal(Process.chooseView({ processView: 'unknown', activities: [{text:'Recorded detail'}] }, {}), 'progress');
   assert.equal(Process.chooseView({}, {}), null);
 });
 
@@ -59,7 +62,7 @@ test('only explicit current tool inspection pins affect the fallback choice', ()
     assert.equal(Process.chooseView({ activities: [{}] }, { toolCalls: [tool()], toolLedgerPins: pins }), 'tools');
   }
   for (const pins of [{ ledger: 'true' }, { 'raw:removed': true }, { tool1: false }]) {
-    assert.equal(Process.chooseView({ activities: [{}] }, { toolCalls: [tool()], toolLedgerPins: pins }), 'progress');
+    assert.equal(Process.chooseView({ activities: [{text:'Recorded detail'}] }, { toolCalls: [tool()], toolLedgerPins: pins }), 'progress');
   }
 });
 
@@ -155,4 +158,17 @@ test('ledger summary uses the recorded source title and keeps unknown tool outco
   assert.doesNotMatch(title, /note1|undefined|完成/);
   const capabilities = ToolScheduler.card({ toolCalls: [{ id: 'cap', type: 'capabilities', status: 'completed', request: {} }] });
   assert.equal(capabilities.querySelector('.tool-ledger-row').children[0].textContent, '操作说明 · 完成');
+});
+
+test('stage-only histories default to actual tool receipts without erasing the stage timeline', () => {
+  const value = fixture({ activities:false, message:{steps:[{id:'prep',text:'准备上下文',status:'done'}]} });
+  Process.compose(value.wrapper,value.message,value.run);
+  assert.equal(nav(value.wrapper).dataset.view,'tools');
+  assert.ok(panel(value.wrapper,'progress').querySelector('.conversation-reasoning-note'));
+  assert.equal(value.message.processView,undefined);
+  assert.equal(Process.chooseView({...value.message,processView:'progress'},value.run),'progress');
+  const withReasoning={...value.message,activities:[{kind:'summary',text:'实际内容'}]};
+  assert.equal(Process.chooseView(withReasoning,value.run),'progress');
+  Process.compose(value.wrapper,withReasoning,value.run);
+  assert.equal(panel(value.wrapper,'progress').querySelector('.conversation-reasoning-note'),null);
 });

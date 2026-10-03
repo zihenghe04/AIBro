@@ -8,6 +8,7 @@ const PlanReview = require('../app/plan-review');
 const TaskContext = require('../app/task-context');
 const WorkstationPermissionPolicy = require('../app/permission-policy');
 const ReviewerDelegate = require('../app/reviewer-delegate');
+const ApprovalIntent = require('../app/approval-intent');
 const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
 function cut(start, end) {
@@ -39,14 +40,16 @@ function fixture(actions = [{ type: 'create_task', title: 'Approved task' }], sa
   };
   const calls = { execute: 0, preview: 0, save: 0, durable: 0, render: 0, sound: 0, goal: 0, requests: [], errors: [], queuedSnapshots: [], durableSnapshots: [] };
   let serial = 0, durable = async () => true, transport = async () => JSON.stringify({ verdict: 'approve', reasons: ['Synthetic review'], risks: [] });
-  const window = { TaskContext, WorkstationPermissionPolicy, ReviewerDelegate, AlertSound: { play: () => calls.sound++ }, GoalLoop: { onRoundFinished: () => calls.goal++ } };
+  const window = { TaskContext, WorkstationPermissionPolicy, ReviewerDelegate, ApprovalIntent, AlertSound: { play: () => calls.sound++ }, GoalLoop: { onRoundFinished: () => calls.goal++ } };
   const c = vm.createContext({ state, window, structuredClone, AbortController, setTimeout, clearTimeout,
     Core: { ...Core, applyPlan: (...args) => { calls.execute++; return Core.applyPlan(...args); } },
-    WorkstationPermissionPolicy, ReviewerDelegate, TaskContext,
+    WorkstationPermissionPolicy, ReviewerDelegate, TaskContext, workspaceName: value => value || '日常',
     uid: prefix => `${prefix}-fixture-${++serial}`, normalizeStateShape() {},
     addRunStep: (run, text, status = 'done') => run.steps.push({ text, status }),
     save: () => { calls.save++; calls.queuedSnapshots.push(clone(c.state)); },
     saveDocumentDurably: async () => { calls.durable++; calls.durableSnapshots.push(clone(c.state)); return durable(c); },
+    // This fixture covers approvals with no path transaction; branch-host tests load the real lock.
+    conversationPathSaving: () => false,
     renderAll: () => { calls.render++; }, renderConversation: () => { calls.render++; }, toast: message => calls.errors.push(String(message)),
     captureApiConnection: () => ({ protocol: 'responses' }),
     getApiConnection: async () => ({ base: 'https://synthetic.invalid', token: 'synthetic-only' }),
@@ -55,7 +58,9 @@ function fixture(actions = [{ type: 'create_task', title: 'Approved task' }], sa
   });
   vm.runInContext([
     cut('function commitAttachmentAnalysis(', '\nfunction fallbackWorkflow('),
+    cut('function actionsNeedApproval(', '\nfunction grantSessionAllow('),
     cut('function grantSessionAllow(', '\nconst ACTION_LABELS'),
+    cut('function sessionAllowMarkup(', '\nlet runCheckpointController'),
     cut('function approvalBusy(', '\nasync function fetchWithTimeout('),
     cut('function assertRunActive(', '\nlet activeRunController'),
     cut('async function requestReviewerOpinion(', '\nfunction reviewerMarkup('),
@@ -318,4 +323,106 @@ test('all-rejected task fields can be rechecked and later accepted without widen
   f.plan.decideField('run',row.key,'patch.title',true); await f.plan.save('run');
   assert.equal(await f.c.approveRun('run'),true);
   assert.equal(f.c.state.tasks[0].title,'Proposed title'); assert.equal(f.c.state.tasks[0].description,'Human update');
+});
+
+function explicitReviewFixture() {
+  const f=fixture([{type:'update_task',taskId:'task',patch:{workflowCategory:'P3'}}]);
+  f.c.state.tasks.push({id:'task',title:'Synthetic course task',projectId:'project',workspace:'科研',status:'todo',workflowCategory:'P1'});
+  f.run.taskContext=TaskContext.build(f.c.state,f.chat,{candidateTaskIds:['task']});
+  f.run.permissionMode=f.chat.permissionMode='smart';f.c.state.settings.permissions.科研='auto';
+  const submittedMessage={id:'user',role:'user',text:'把任务分类改成日常，生成修改审阅让我确认。'};
+  f.chat.messages.push(submittedMessage);
+  f.c.run=f.run;f.c.submittedMessage=submittedMessage;f.c.options={};
+  // Execute the current production run-capture seam, not a test-only setter.
+  vm.runInContext(cut('  run.userMessageId = submittedMessage?.id', '\n  const readScope ='),f.c);
+  f.chat.messages[0].text=ApprovalIntent.messageFor(f.run,'pending','分类 P1 → P3');
+  return f;
+}
+
+test('E28 actual host risk policy honors current user preview before session allowance',()=>{
+  const f=explicitReviewFixture();f.chat.sessionAllows={update_task:1};
+  assert.ok(f.run.approvalIntent);
+  for(const mode of ['smart','legacy']) {
+    f.run.permissionMode=mode;
+    assert.equal(f.c.actionsNeedApproval(f.run),true,mode+' + space auto cannot bypass current review intent');
+    assert.equal(f.c.actionsNeedApproval({...f.run,approvalIntent:null}),false,mode+' ordinary update remains automatic');
+  }
+  assert.equal(f.c.sessionAllowsRun(f.run),false);assert.equal(f.c.sessionAllowMarkup(f.run),'');
+  assert.equal(f.c.state.tasks[0].workflowCategory,'P1','Dry-run must not apply the patch');
+  const ordinary={...f.run,approvalIntent:null};
+  assert.equal(f.c.actionsNeedApproval(ordinary),false,'Same ordinary update remains automatic under risk mode');
+  f.run.status='awaiting-save';f.run.approvalReceipt={id:'receipt'};f.c.approveRun.busy=new Set(['run']);
+  assert.equal(f.c.grantSessionAllow(f.run,'receipt'),false);
+});
+
+test('E28 real checkpoint host refuses automatic apply even after current mode switches to full',async()=>{
+  const f=explicitReviewFixture();f.run.status='running';f.chat.permissionMode='full';
+  await assert.rejects(f.c.runCheckpoints().prepare('run','message',{answer:'请审阅确认'}),{code:'CHECKPOINT_REVIEW_REQUIRED'});
+  assert.equal(f.calls.execute,0);assert.equal(f.c.state.tasks[0].workflowCategory,'P1');
+  assert.equal(f.run.executionReceipt.phase,'prepared');
+  const restarted=fixture(undefined,clone(f.c.state));
+  await assert.rejects(restarted.c.runCheckpoints().continue('run'),{code:'CHECKPOINT_REVIEW_REQUIRED'});
+  assert.equal(restarted.calls.execute,0);assert.equal(restarted.c.state.tasks[0].workflowCategory,'P1');
+});
+
+test('E28 scheduled delegate and forged reviewer entry cannot satisfy personal confirmation',async()=>{
+  const f=explicitReviewFixture();
+  f.c.scheduleDelegatedReview(f.run);
+  assert.equal(vm.runInContext('delegatedReviewTimer',f.c),null);
+  assert.equal(await f.c.runDelegatedReview('run'),false);assert.equal(f.calls.requests.length,0);
+  const token=f.plan.capture('run');
+  f.run.reviewer={status:'done',verdict:'approve',planFingerprint:Core.contentStamp(token.fingerprint)};
+  assert.equal(await f.c.approveRun('run',{token,reviewer:true}),false);
+  assert.equal(f.calls.execute,0);assert.equal(f.c.state.tasks[0].workflowCategory,'P1');
+});
+
+test('E28 actual human approval applies the selected category once and replaces pending wording',async()=>{
+  const f=explicitReviewFixture();
+  assert.equal(await f.c.approveRun('run',{sessionAllow:true}),true);
+  assert.equal(f.c.state.tasks[0].workflowCategory,'P3');assert.equal(f.calls.execute,1);
+  assert.equal(f.run.approvedBy,'user');assert.equal(f.chat.sessionAllows,undefined);
+  assert.match(f.chat.messages[0].text,/执行并保存/);
+  assert.doesNotMatch(f.chat.messages[0].text,/尚未执行|请核对|待确认|请审阅/);
+  assert.equal(await f.c.approveRun('run'),false);assert.equal(f.calls.execute,1);
+});
+
+test('E28 approval save failure says applied but unsaved and retry cannot replay',async()=>{
+  const f=explicitReviewFixture();f.setDurable(async()=>{throw Error('Synthetic unavailable disk');});
+  assert.equal(await f.c.approveRun('run'),false);
+  assert.equal(f.run.status,'awaiting-save');assert.equal(f.c.state.tasks[0].workflowCategory,'P3');
+  assert.match(f.chat.messages[0].text,/正在保存/);assert.doesNotMatch(f.chat.messages[0].text,/尚未执行|请核对/);
+  f.setDurable(async()=>true);assert.equal(await f.c.retryApprovalSave('run'),true);
+  assert.equal(f.calls.execute,1);assert.match(f.chat.messages[0].text,/执行并保存/);
+});
+
+test('E28 final reviewer guard observes a newly imposed review constraint after an await',async()=>{
+  const f=explicitReviewFixture(),intent=f.run.approvalIntent;f.run.approvalIntent=null;
+  const token=f.plan.capture('run');f.run.reviewer={status:'done',verdict:'approve',planFingerprint:Core.contentStamp(token.fingerprint)};
+  const gate=f.pauseValidation(),pending=f.c.approveRun('run',{token,reviewer:true});
+  f.run.approvalIntent=intent;gate.resolve();
+  assert.equal(await pending,false);assert.equal(f.calls.execute,0);assert.equal(f.c.state.tasks[0].workflowCategory,'P1');
+});
+
+test('E28 automatic job and model prose do not invent a current-user review constraint',()=>{
+  const f=explicitReviewFixture();
+  for(const options of [{automaticJobId:'scheduled'},{researchQueueId:'queue'},{goalLoopContinuation:true}]) {
+    f.run.approvalIntent=null;f.c.options=options;
+    vm.runInContext(cut('  run.userMessageId = submittedMessage?.id', '\n  const readScope ='),f.c);
+    assert.equal(f.run.approvalIntent,null);
+  }
+  f.c.options={retry:true};f.c.submittedMessage.intentSource='automatic';
+  vm.runInContext(cut('  run.userMessageId = submittedMessage?.id', '\n  const readScope ='),f.c);
+  assert.equal(f.run.approvalIntent,null,'Retry of an automatic message retains its non-human origin');
+  f.run.goal='ordinary task update';f.chat.messages[0].text='请审阅确认';
+  assert.equal(f.c.actionsNeedApproval(f.run),false,'A model reply is not user intent');
+});
+
+test('E28 actual Halaska review hook hides session approval only for the constrained run',()=>{
+  const f=explicitReviewFixture();
+  // Execute the function supplied by the real host to PlanReview, not the old
+  // fallback markup. This hook feeds PlanReviewSurface.canSessionApprove.
+  const expression=source.match(/canSessionApprove:\s*(run\s*=>[^\n]+)/)?.[1];
+  assert.ok(expression);const canSessionApprove=vm.runInContext('('+expression+')',f.c);
+  assert.equal(canSessionApprove(f.run),false);
+  assert.equal(canSessionApprove({...f.run,approvalIntent:null}),true);
 });

@@ -23,10 +23,13 @@
    if(command.output||command.error){const details=el('details','command-output'),title=el('summary','',t('命令输出','Command output')+(command.truncated?t(' · 已截断',' · truncated'):''));details.open=command.status==='running';details.append(title,el('pre','',command.output||command.error));item.append(details);}box.append(item);
   }return box;
  }
- async function execute(req,state,run,{signal,refresh,save}){
+ async function execute(req,state,run,{signal,refresh,save,toolCallId}){
   if((run.commands||[]).length>=8)throw Error(t('本轮已达到 8 次命令，请检查结果后继续对话。','Review this turn’s 8 commands before continuing.'));
   if(signal?.aborted)throw Object.assign(Error('Stopped'),{code:'CANCELLED'});
-  const command=await request('propose',payload(req,state,run));(run.commands||=[]).push(command);
+  const command=await request('propose',payload(req,state,run));
+  // Link only the host scheduler's immutable call id; never infer by argv/time.
+  if(typeof toolCallId==='string'&&toolCallId)command.toolCallId=toolCallId;
+  (run.commands||=[]).push(command);
   let wake,delay=350,cancellation;
   const publish=result=>{let changed=false;for(const [key,value] of Object.entries(result||{})){if(JSON.stringify(command[key])!==JSON.stringify(value)){command[key]=value;changed=true;}}if(changed){save();refresh();}return changed;};
   // Quiet processes remain live. Back off only observation, never restart work,

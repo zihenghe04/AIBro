@@ -20,14 +20,19 @@
    const kitMore=root.ComposerUI?.createAction('composerMore',{className:'attach-btn composer-more'});
    more=kitMore?.button||make('button','attach-btn composer-more');more.id='composerMore';more.type='button';if(!kitMore){more.innerHTML=svg('more');more.title='更多工具';more.setAttribute('aria-label','更多工具');}more.setAttribute('aria-expanded','false');more.setAttribute('aria-controls',extras.id);
    const move=(ids,parent)=>ids.forEach(id=>{const n=doc.getElementById(id);if(n)parent.append(root.ComposerUI?.rootFor(n)||n);});
-   move(['composerContext','composerModel'],contextRow);move(['chatAttach','composerReference','composerContextWorkbench','composerPermission'],primary);primary.append(kitMore?.host||more);move(['agentSend'],primary);move(['composerBrowserToggle','composerLocal','composerSkill','polishControls'],extras);
+   // The prompt pattern has one action rail. Move whole Kit roots, so the
+   // editor, popup anchors and their already-bound listeners retain identity.
+   move(['chatAttach','composerReference'],primary);
+   move(['composerContext','composerModel'],contextRow);primary.append(contextRow);
+   move(['composerPermission'],primary);primary.append(kitMore?.host||more);move(['agentSend'],primary);
+   move(['composerContextWorkbench','composerBrowserToggle','composerLocal','composerSkill','polishControls'],extras);
    // Preserve late-added extensions without losing their existing listeners.
-   [...footer.children].forEach(node=>extras.append(node));footer.append(contextRow,primary,extras);
+   [...footer.children].forEach(node=>extras.append(node));footer.append(primary,extras);
    const closeMore=restore=>{if(extras.hidden)return;extras.hidden=true;more.setAttribute('aria-expanded','false');if(restore)more.focus();};
    on(more,'click',()=>{extras.hidden=!extras.hidden;more.setAttribute('aria-expanded',String(!extras.hidden));if(!extras.hidden)extras.querySelector('button')?.focus();});
    on(doc,'pointerdown',e=>{if(!extras.contains(e.target)&&!more.contains(e.target))closeMore(false);});
    on(doc,'keydown',e=>{if(e.key==='Escape'&&!extras.hidden){e.preventDefault();closeMore(true);}});
-   on(extras,'click',e=>{if(e.target.closest('#composerPermission,#composerLocal,#composerSkill'))closeMore(false);});
+   on(extras,'click',e=>{if(e.target.closest('#composerContextWorkbench,#composerPermission,#composerLocal,#composerSkill'))closeMore(false);});
   }
   function indicators(){
    for(const group of doc.querySelectorAll('.inspector-tabs,.note-document-toolbar,.local-document-toolbar,.section-tabs,.review-tabs,.native-choices')){

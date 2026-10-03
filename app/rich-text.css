@@ -38,6 +38,27 @@ body.light-mode {
   user-select: none;
 }
 
+/* Conversation reading only: a model's checklist is not a saved Task editor.
+   Keep normal ordered markers, including mixed ordered/checklist content. */
+.message-body :is(ul, ol) { margin: .65em 0 .95em; padding-inline-start: 1.65em; list-style-position: outside; }
+.message-body li { padding-block: .18em; }
+.message-body li::marker { color: var(--muted); }
+.message-body li > :is(ul, ol) { margin-block: .35em .15em; }
+.message-body li > p { margin: .45em 0; }
+.message-body ul > li.markdown-task-item { list-style: none; }
+.message-body .markdown-task-item > label { display: block; position: relative; margin: 0; padding-inline-start: 1.6em; color: inherit; font: inherit; cursor: default; }
+.message-body .markdown-task-item > label > input[type="checkbox"] { position: absolute; inset-inline-start: 0; top: .42em; width: .95em; height: .95em; margin: 0; accent-color: var(--accent); cursor: default; }
+.message-body ul > .markdown-task-item > label { padding-inline-start: 0; }
+.message-body ul > .markdown-task-item > label > input[type="checkbox"] { inset-inline-start: -1.45em; }
+.message-body blockquote { margin: 1em 0; padding: .1em 0 .1em 1em; border-inline-start: 2px solid var(--line-strong); border-radius: 0; background: transparent; color: inherit; }
+.message-body blockquote p { margin: .55em 0; }
+.message-body blockquote > :first-child { margin-top: 0; }
+.message-body blockquote > :last-child { margin-bottom: 0; }
+.message-body blockquote blockquote { margin-block: .65em; }
+.message-body .message-code { max-width: 100%; white-space: pre; overflow-wrap: normal; line-height: 1.7; }
+.message-body .message-code:has(> .message-code-lang) { padding-top: 30px; }
+.message-body .message-code > code { display: block; white-space: inherit; overflow-wrap: normal; }
+
 /* ── 数学排版（HTML 实现，零依赖） ───────────────────────── */
 /* 变量与函数名按习惯用斜体；符号与 \text{} 为正体。 */
 .math-inline { font-style: italic; white-space: nowrap; }

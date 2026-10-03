@@ -88,19 +88,38 @@
    select(Math.max(0,options.findIndex(option=>option.value===previous)),{scroll:false});if(!previous)box.scrollTop=0;else ensureVisible(options[active]?.node);
   }
   function close(reason='cancel'){closingReason=reason;if(dialog.open)dialog.close();}
-  function failActivation(failure){pending=false;error=String(failure?.message||failure);if(destroyed)return;render(lastRows,query);if(!dialog.open)dialog.showModal();input.setAttribute('aria-expanded','true');input.focus({preventScroll:true});}
+  function show(){
+   if(dialog.open)return;
+   // The native glass host hides the preceding workspace during a modal.
+   // WK can then omit a later dialog from AX traversal, as with the retained
+   // import dialog. Put this same closed node first; never move an open editor
+   // or replace the search input/results and their existing listeners.
+   const nativeShell=!!env.webkit?.messageHandlers?.workspace||doc.body?.classList.contains('aibro-native');
+   if(nativeShell&&dialog.parentElement===doc.body&&doc.body.firstElementChild!==dialog)doc.body.prepend(dialog);
+   dialog.showModal();
+  }
+  function failActivation(failure){pending=false;error=String(failure?.message||failure);if(destroyed)return;if(hooks.render)hooks.render(query);else render(lastRows,query);show();input.setAttribute('aria-expanded','true');input.focus({preventScroll:true});}
   function activate(value=options[active]?.value){if(composing||pending||!value)return false;const option=options.find(option=>option.value===value);if(!option)return false;
    if(option.row?.type==='command'){
     // Re-evaluate dynamic availability on activation, not just when displayed.
     const fresh=registry.rows(query).find(row=>row.id===option.row.id);if(!fresh||fresh.disabled){error=fresh?.disabledReason||text('这条命令已不可用。','This command is no longer available.');render(lastRows,query);return false;}
     pending=true;close('selection');Promise.resolve(registry.execute(option.row.id)).then(()=>{pending=false;error='';if(!destroyed){notifySuccess();if(dialog.open)render(lastRows,query);}},failActivation);return true;
    }
-   pending=true;close('selection');Promise.resolve().then(()=>hooks.open?.(value)).then(result=>{
+   // Keep the query that produced the activated row, not mutable input/DOM
+   // page metadata. The host resolves this typed ID against current records.
+   const selection={query};pending=true;close('selection');Promise.resolve().then(()=>hooks.open?.(value,selection)).then(result=>{
+    if(result?.status==='obsolete'){
+     pending=false;error='';
+     // A newer route/privacy context owns focus now. Do not reopen the old
+     // search or leave its cached record titles/excerpts in the closed host.
+     if(!destroyed&&!dialog.open){island?.unmount();island=null;lastRows=[];options=[];active=-1;box.replaceChildren();meta.textContent='';input.value='';query='';input.removeAttribute('aria-activedescendant');}
+     return;
+    }
     if(result===false){failActivation(text('已保留当前位置，所选内容尚未打开。','Your current location was kept; the selected content was not opened.'));return;}
     pending=false;error='';if(!destroyed)notifySuccess();
    },failActivation);return true;
   }
-  function open(){if(destroyed)return false;if(dialog.open){input.focus({preventScroll:true});input.select();return true;}opener=doc.activeElement;closingReason='cancel';input.value='';hooks.render?.('');dialog.showModal();input.setAttribute('aria-expanded','true');focusFrame=env.requestAnimationFrame(()=>{focusFrame=null;if(dialog.open)input.focus({preventScroll:true});});return true;}
+  function open(){if(destroyed)return false;if(dialog.open){input.focus({preventScroll:true});input.select();return true;}opener=doc.activeElement;closingReason='cancel';input.value='';hooks.render?.('');show();input.setAttribute('aria-expanded','true');focusFrame=env.requestAnimationFrame(()=>{focusFrame=null;if(dialog.open)input.focus({preventScroll:true});});return true;}
   function onClose(){if(dialog.open)return;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');if(focusFrame!==null){env.cancelAnimationFrame(focusFrame);focusFrame=null;}if(closingReason!=='selection'&&opener?.isConnected&&opener.getClientRects().length)opener.focus({preventScroll:true});closingReason='cancel';}
   function onCancel(event){event.preventDefault();close();}
   function onKey(event){if(event.isComposing||event.keyCode===229||composing)return;if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();return;}if(event.metaKey||event.ctrlKey||event.altKey)return;if(event.target!==input&&!event.target.closest('.search-result'))return;

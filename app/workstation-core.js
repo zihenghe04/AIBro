@@ -8,9 +8,18 @@
   const Wiki = typeof module === 'object' && module.exports ? require('./research-wiki.js') : globalThis.ResearchWiki;
   const Provenance = typeof module === 'object' && module.exports ? require('./artifact-provenance.js') : globalThis.ArtifactProvenance;
   const Dependencies=typeof module==='object'&&module.exports?require('./task-dependencies'):globalThis.TaskDependencies;
+  const Assignment=typeof module==='object'&&module.exports?require('./record-assignment'):globalThis.RecordAssignment;
+  const taskWorkflow = () => typeof module === 'object' && module.exports ? require('./task-workflow.js') : globalThis.TaskWorkflow;
   const spaces = ['日常', '课程', '科研'];
   const norm = value => String(value || '').trim().toLowerCase().replace(/[\s·_-]+/g, '');
   const clone = value => JSON.parse(JSON.stringify(value));
+  // Synced calendar notes are projections of AgendaStore, not editable
+  // Markdown. Agent mutations must use the versioned native event contract.
+  const agendaRecord = note => {
+    if (note?.kind === '日程') return true;
+    try { return JSON.parse(note?.content || '{}')?.format === 'aibro.agenda.v1'; } catch { return false; }
+  };
+  const requireOrdinaryNote = note => { if (agendaRecord(note)) throw new Error('这是日程记录，请先使用 agenda_read 读取，再通过 agendaProposals 修改或删除；不能用笔记操作改写日程。'); };
   const folderPath = value => String(value || '').split(/[\\/]+/).map(x => x.trim()).filter(x => x && x !== '.' && x !== '..').slice(0, 6).join('/');
   const runLabel = status => ({ completed: '已完成', 'completed-local': '已完成 · 本地', 'completed-local-fallback': '已完成 · 本地', failed: '执行失败', cancelled: '已停止', interrupted: '已中断', rejected: '已拒绝', 'awaiting-save': '等待保存结果', 'awaiting-approval': '等待审批', running: '执行中' }[status] || '已结束');
   function endpoint(base, resource = 'responses') {
@@ -143,6 +152,7 @@
   labels.upsert_wiki = '保存科研 Wiki';
   labels.upsert_paper = '保存论文分析';
   labels.delete_attachment = '资料移入回收站';
+  labels.assign_record = '修改记录归属';
   // The delete guard only needs to answer one question: "did this attachment change
   // since the plan was read?" Storing the full attachment body for every in-scope item
   // (40 attachments ~= 700 KB per run) made workspace.json grow into tens of megabytes,
@@ -178,6 +188,13 @@
   }
   function applyPlan(original, actions, context = {}) {
     if (!Array.isArray(actions) || actions.length > 80) throw new Error('单次最多执行 80 个动作，请分批整理');
+    const assignments=new Set();
+    for(const action of actions.filter(a=>a?.type==='assign_record')){
+      if(!Assignment)throw Error('记录归属模块尚未加载，请重启应用');
+      const key=`${action.recordType}:${action.recordId}`;
+      if(assignments.has(key))throw Error('同一计划不能重复修改一条记录的归属');
+      assignments.add(key);Assignment.preflight(original,action,context);
+    }
     // Compare against the pre-plan state, so a rename in the same transaction is allowed,
     // but edits made by the user while the model was planning are never deleted silently.
     for(const action of actions.filter(a=>a?.type==='delete_attachment')) {
@@ -236,6 +253,7 @@
       Provenance.attach(original, context.provenanceRun, { type, id: item.id, record: item, operation, variant: operation === 'drafted' ? 'draft' : 'body', at: now });
     };
     const record = (type, item, text, operation) => {
+      if(assignments.has(`${type}:${item?.id}`))throw Object.assign(Error('同一计划不能同时修改记录归属和该记录的其他内容，请分两步执行'),{code:'ASSIGN_RECORD_CONFLICT'});
       recordProvenance(type, item, operation);
       results.push({ type, id: item?.id, text, operation, projectId: item?.projectId || (type === 'project' ? item.id : null) });
     };
@@ -273,6 +291,8 @@
       }
     }
     function applyNoteProposal(item, proposal, sources) {
+      requireOrdinaryNote(item);
+      requireOrdinaryNote(proposal);
       if(item.kind?.startsWith('科研 Wiki/')&&context.protectNoteUpdates)throw new Error('科研 Wiki 更新请使用 upsert_wiki，先完整读取正文与已有草稿。');
       if(item.kind==='随记'&&context.protectNoteUpdates)throw new Error('原始随记不可由 Agent 改写，请创建独立整理笔记并使用不同标题。');
       const content = typeof proposal.content === 'string' ? proposal.content : String(item.content || '');
@@ -312,7 +332,8 @@
     }
     function cleanTaskPatch(patch, previous = {}) {
       const result = {};
-      for (const key of ['title', 'description', 'status', 'priority', 'startAt', 'dueAt', 'reminderMinutes', 'checklist', 'dependsOn']) if (Object.prototype.hasOwnProperty.call(patch, key)) result[key] = patch[key];
+      for (const key of ['title', 'description', 'status', 'priority', 'workflowCategory', 'startAt', 'dueAt', 'reminderMinutes', 'checklist', 'dependsOn']) if (Object.prototype.hasOwnProperty.call(patch, key)) result[key] = patch[key];
+      if (Object.hasOwn(result, 'workflowCategory') && !taskWorkflow()?.validCategory(result.workflowCategory)) throw new Error('任务分类无效，请使用 P0 至 P3，或 null 清除分类');
       if ('title' in result) result.title = required(result.title, '任务名称');
       if ('status' in result && !['todo', 'in_progress', 'done', 'blocked'].includes(result.status)) throw new Error('任务状态无效');
       if ('priority' in result && !['low', 'medium', 'high'].includes(result.priority)) throw new Error('任务优先级无效');
@@ -333,6 +354,20 @@
     for (const action of actions) {
       if (!action || !labels[action.type]) throw new Error(`暂不支持操作：${action?.type || '空操作'}`);
       const type = action.type; let workspace = space(action.workspace);
+      if(type==='assign_record'){
+        const change=Assignment.preflight(state,action,context),item=change.record;
+        if(action.recordType==='note')requireOrdinaryNote(item);
+        if(change.changed){
+          if(action.recordType==='task')Dependencies.validate(state,{...item,...change.after},item.dependsOn||[]);
+          Object.assign(item,change.after,{updatedAt:now});
+          if(change.sourceProject)touchedProjects.add(change.sourceProject.id);
+          if(change.target)touchedProjects.add(change.target.id);
+        }
+        // Routing is not an AI rewrite. Keep existing provenance, source links,
+        // original body and draft/revision history exactly as read.
+        results.push({type:action.recordType,id:item.id,text:`${change.changed?'修改归属':'归属未变'}：${item.title||item.id}`,operation:change.changed?'updated':'unchanged',projectId:change.after.projectId,actionType:type,before:change.before,after:change.after,recordVersion:Assignment.version(item),requiresAssignmentReview:change.requiresReview&&!(context.recordAssignmentApprovals||[]).includes(change.approvalKey)});
+        continue;
+      }
       if (type === 'set_workspace') { context = { ...context, workspace }; continue; }
       if (type === 'create_project') {
         const name = required(action.name || action.title, '项目名称'); let project = findProject(name, workspace); const existing = !!project;
@@ -421,6 +456,7 @@
         paper.noteId ||= `note_${paper.id}`;
         const markdown = Research.paperMarkdown(paper);
         let note = state.notes.find(item => item.id === paper.noteId);
+        if (note) requireOrdinaryNote(note);
         if (unavailable(note)) throw new Error('论文主笔记已归档或删除，请先恢复后再更新');
         const newNote = !note;
         if (newNote) { note = { id: paper.noteId, title: paper.title, content: markdown, createdAt: now }; state.notes.push(note); }
@@ -446,9 +482,11 @@
         continue;
       }
       if (type === 'create_task' || type === 'create_knowledge_item' || type === 'create_note') {
+        if (type !== 'create_task') requireOrdinaryNote({kind: action.kind, content: action.content || action.body});
         const project = projectFor(action, workspace); workspace = project?.workspace || workspace; const sources = getSources(action); const title = required(action.title, '名称');
         const collection = type === 'create_task' ? state.tasks : state.notes;
         let item = collection.find(x => !x.archived && (x.projectId || null) === (project?.id || null) && x.workspace === workspace && norm(x.title) === norm(title)); const existing = !!item; let noteOperation = existing ? 'matched' : 'created';
+        if (type !== 'create_task' && item) requireOrdinaryNote(item);
         if (!item) {
           item = { id: uid(type === 'create_task' ? 'task' : 'note'), title, sourceAttachmentIds: sources, createdAt: now, updatedAt: now, sourceConversationId: context.conversationId, agentRunId: context.runId };
           route(item, project, workspace);
@@ -482,6 +520,7 @@
           if (!context.allowedNoteIds.includes(id)) throw new Error('笔记不在当前允许更新范围内，请使用当前笔记的 ID');
         }
         const item = state[key].find(x => x.id === id && !x.archived); if (!item) throw new Error(`找不到${isTask ? '任务' : '笔记'}：${id || '缺少 ID'}`);
+        if (!isTask) { requireOrdinaryNote(item); if (action.patch) requireOrdinaryNote(action.patch); }
         if ((type === 'update_note' || type === 'append_note') && (item.archivedAt || item.deleted || item.deletedAt || (item.projectId && !state.projects.some(project => project.id === item.projectId && !project.archived && !project.archivedAt && !project.deleted && !project.deletedAt)))) throw new Error(`笔记已归档、删除或不可用：${id}`);
         if (isTask && (item.archivedAt || item.deleted || item.deletedAt || (item.projectId && !state.projects.some(project => project.id === item.projectId && !project.archived && !project.archivedAt && !project.deleted && !project.deletedAt)))) throw new Error(`任务已归档、删除或不可用：${id}`);
         if(type==='delete_note'&&item.kind==='随记'&&context.protectNoteUpdates)throw new Error('原始随记请由用户在界面中删除。');
@@ -531,9 +570,15 @@
         if (!state.links.some(x => x.sourceId === sourceId && x.targetId === targetId)) state.links.push({ id: uid('link'), sourceId, targetId, relation: String(action.relation || 'related'), createdAt: now });
       }
     }
+    // Also catch indirect mutations (for example lifecycle cleanup of a source)
+    // after an assignment; result recording alone cannot see every side effect.
+    for(const result of results.filter(r=>r.actionType==='assign_record')){
+      const records=(state[result.type==='task'?'tasks':'notes']||[]).filter(item=>item.id===result.id);
+      if(records.length!==1||Assignment.version(records[0])!==result.recordVersion)throw Object.assign(Error('同一计划的其他操作改变了已迁移记录，请分两步执行'),{code:'ASSIGN_RECORD_CONFLICT'});
+    }
     touchedProjects.forEach(id => { const project = state.projects.find(item => item.id === id); if (project) project.updatedAt = now; });
     const uniqueResults = [...new Map(results.map(r => [`${r.type}:${r.id}:${r.operation}`, r])).values()];
-    return { state, results: uniqueResults, projectIds: [...touchedProjects] };
+    return { state, results: uniqueResults, projectIds: [...touchedProjects], ...(assignments.size?{requiresAssignmentReview:uniqueResults.some(r=>r.requiresAssignmentReview)}:{}) };
   }
   return { endpoint, folderPath, runLabel, parsePlan, validateCompletion, validateAnalysisDeliverables, responseIssue, partialMessage, dueInWeek, taskSources, applyPlan, attachmentSnapshots, contentStamp, migrateAttachmentSnapshots, actionLabels: labels };
 });

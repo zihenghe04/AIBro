@@ -7,6 +7,18 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
   return { exact: {
+    "当前使用关键词检索。": "Keyword search is active.",
+    "最近一次语义检索超时，已改用关键词检索。": "The last semantic search timed out. Keyword search was used instead.",
+    "语义检索暂不可用，当前使用关键词检索。请检查下方连接结果。": "Semantic search is unavailable. Keyword search is active; see the connection result below.",
+    "旧 Embedding Key 尚未迁移。请测试连接，或重新粘贴并保存 Key；已存向量不代表服务可用。": "The old embedding key has not been migrated. Test the connection or paste and save the key again. Stored vectors do not confirm service availability.",
+    "尚未保存 Embedding Key，当前使用关键词检索。": "No embedding key is saved. Keyword search is active.",
+    "已保存的 Embedding Key 与当前地址不匹配。请重新保存，当前使用关键词检索。": "The saved embedding key belongs to a different endpoint. Save the correct key; keyword search remains active.",
+    "无法读取 Embedding 凭据。请检查下方连接结果，关键词检索仍可使用。": "Embedding credentials could not be read. Check the connection result below; keyword search is still available.",
+    "最近一次 Embedding 请求成功。未建立向量的资料仍使用关键词检索。": "The last embedding request succeeded. Materials without vectors still use keyword search.",
+    "已开启混合检索，服务连接尚未验证。已存向量数量不代表当前服务可用。": "Hybrid search is enabled, but the service has not been verified. Stored vector counts do not confirm availability.",
+    "本机已索引段落": "Locally indexed passages",
+    " · 本次使用未保存的 Key，请保存后再用于检索。": " · This test used an unsaved key. Save it before using it for search.",
+
     "当前编辑区域暂时不能接收文件，请完成当前输入或保存后重试。": "This editor cannot receive files right now. Finish the current input or save, then try again.",
     "没有读取到可用文件，请重新拖入或使用文件选择按钮。": "No usable file was received. Drop the file again or use the file picker.",
     "正在保存模型、权限与用量…": "Saving models, permissions and usage prices…",
@@ -155,6 +167,14 @@
   "原件暂时无法载入，请切换标签后重试。已保存的文字内容仍可阅读。": "The original could not be loaded. Switch tabs to retry. Saved text remains available.",
   "原始文件已保存，可下载查看。": "The original is saved and available to download.",
   "已保存网页正文，可在下方阅读；原网页可能后续更新。": "The webpage text is saved below. The original webpage may change later.",
+  "已收藏链接": "Saved link",
+  "链接收藏": "Link bookmark",
+  "仅保存网址；尚未下载网页或建立文字索引。请在“添加资料”中导入网页，或上传原始文件后再分析。": "Only the URL is saved; the webpage has not been downloaded or indexed. Import the webpage through Add sources, or upload its original file before analysis.",
+  "所选资料包含仅收藏的网址；请在“添加资料”中导入网页，或上传原始文件后再分析。": "The selection includes URL-only bookmarks. Import the webpages through Add sources, or upload their original files before analysis.",
+  "需先导入网页内容": "Import webpage content first",
+  "网址已收藏，网页内容尚未下载。": "The URL is saved; the webpage content has not been downloaded.",
+  "打开原网页": "Open original webpage",
+  "原网页地址无效，请在链接库中核对。": "The original URL is invalid. Review it in the link library.",
   "这是旧版本导入的附件，当前只保留了解析文本。请关闭此窗口后重新添加原始文件，即可启用 PDF/图片预览。": "This older import contains only extracted text. Add the original file again to enable PDF or image preview.",
   "原件已保存；生成分析笔记后才会进入知识关联。": "Originals are saved. Linked knowledge becomes available after analysis notes are created.",
   "原件已保存，尚未生成关联的分析笔记。": "The original is saved; no linked analysis note has been created yet.",

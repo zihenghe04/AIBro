@@ -10,6 +10,9 @@ function fixture(options={}){
  const state=options.state||{projects:[{id:'p',name:'Travel',workspace:'日常'}],conversations:[],tasks:[{id:'t',title:'Plan',projectId:'p',status:'todo',dueAt:'2026-09-20T12:00:00Z'},{id:'gone',deletedAt:1}],notes:[{id:'n',title:'Note',projectId:'p'}],imports:[],ui:{}};
  const env={state,storageHydrated:true,sendMessage:{busy:false},setInterval(){},document:{hidden:false,addEventListener:(name,handler)=>listeners.set(name,handler),body:{dataset:{view:'daily'},classList:{add:x=>classes.add(x),contains:x=>classes.has(x),toggle:(x,force)=>{const add=force===undefined?!classes.has(x):!!force;add?classes.add(x):classes.delete(x);return add;}}},querySelector:()=>null,getElementById:()=>({click(){calls.push('reader')}})},window:{__aibroPresentationVisible:options.presentationVisible,addEventListener:(name,handler)=>listeners.set(name,handler),dispatchEvent:event=>listeners.get(event.type)?.(event),webkit:{messageHandlers:{workspace:{postMessage:x=>posted.push(x)}}}},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail}},openTask:id=>{calls.push(id);return true;},openNote:id=>calls.push(id),openImport:id=>calls.push(id),openProject:(id,options)=>{calls.push(id);return true},PlanningWorkbench:{createTask:x=>calls.push(x.workspace)}};
  env.setInterval=(callback,ms)=>timers.push({callback,ms});env.window.CitationEvidence=Evidence;
+ // The native receiver acknowledges successful projection; posting alone is
+ // no longer a delivery receipt. Existing feature fixtures model that peer.
+ env.window.webkit.messageHandlers.workspace.postMessage=value=>{posted.push(structuredClone(value));env.window.NativeSnapshotChannel.acknowledge(value._nativeSnapshot);};
  vm.runInNewContext(fs.readFileSync('native/Resources/bridge.js','utf8'),env);return{env,state,posted,calls,classes,listeners,timers,tick:()=>timers.find(timer=>timer.ms===500).callback(),run:x=>env.window.NativeShell.perform(x)};
 }
 test('native snapshot uses persisted ownership and dates; omits deleted records',()=>{const f=fixture(),s=f.posted[0];assert.equal(s.tasks.length,1);assert.equal(s.tasks[0].workspace,'日常');assert.equal(s.tasks[0].due,Date.parse('2026-09-20T12:00:00Z'));assert.equal(s.documents[0].kind,'note');assert.equal(s.taskCount,1);});
@@ -34,6 +37,97 @@ test('native document origin preserves legacy commands and does not bypass targe
 test('native explicit document origin retains the existing command error path',()=>{
  const f=fixture();f.env.openPreview=()=>{throw new Error('reader unavailable')};
  assert.throws(()=>f.run({type:'note',id:'n',origin:{view:'overview'}}),/reader unavailable/);
+});
+test('quick capture document navigation waits for the real reader and preserves its guarded origin',async()=>{
+ for(const type of ['note','import']){
+  const f=fixture();if(type==='import')f.state.imports.push({id:'n',name:'Source.pdf',projectId:'p'});
+  let release,args,active=false,settled=false;
+  f.env.window.ReadingPane={isActive:(kind,id)=>active&&kind===type&&id==='n'};
+  f.env.openPreview=(...values)=>{args=values;return new Promise(resolve=>release=resolve);};
+  const result=f.run({type,id:'n',quickEntry:true,origin:{view:'overview'}}).then(value=>{settled=true;return value;});
+  await Promise.resolve();assert.equal(settled,false,'draft leave and reader opening must finish before ACK');
+  assert.equal(args[0],type);assert.equal(args[1],'n');assert.equal(typeof args[4],'function');
+  assert.equal(args[5].isCurrent,args[4]);assert.equal(args[4](),true);
+  assert.deepEqual(JSON.parse(JSON.stringify(args[5].origin)),{view:'overview'});
+  f.state.previewRecord={type,id:'n'};active=true;
+  release(undefined);assert.equal(await result,true,'ordinary openPreview success can return undefined');
+ }
+});
+test('quick capture document navigation does not acknowledge a rejected editor leave',async()=>{
+ const f=fixture();let reader=true;f.state.previewRecord={type:'note',id:'n'};
+ f.env.window.ReadingPane={isActive:()=>reader};f.env.openPreview=async()=>false;
+ assert.equal(await f.run({type:'note',id:'n',quickEntry:true}),false,'an already selected reader cannot override a rejected leave guard');
+ assert.equal(f.state.previewRecord.id,'n');assert.equal(reader,true);
+});
+test('quick capture document navigation requires both actual reader selection and matching persisted preview',async()=>{
+ for(const mismatch of ['missing-selection','other-selection','inactive-reader','other-reader']){
+  const f=fixture();f.env.openPreview=async()=>true;
+  f.state.previewRecord=mismatch==='missing-selection'?undefined:{type:'note',id:mismatch==='other-selection'?'other':'n'};
+  f.env.window.ReadingPane={isActive:(kind,id)=>mismatch!=='inactive-reader'&&mismatch!=='other-reader'&&kind==='note'&&id==='n'};
+  assert.equal(await f.run({type:'note',id:'n',quickEntry:true}),false,mismatch+' must not be reported as opened');
+ }
+});
+test('quick capture document navigation rechecks deletion and inherited privacy after an awaited leave',async()=>{
+ for(const revoke of ['removed','project-private','private-mode','hydration','modal']){
+  const f=fixture();let release,guard;f.env.window.ReadingPane={isActive:()=>true};
+  f.env.openPreview=(type,id,_a,_b,isCurrent)=>{guard=isCurrent;return new Promise(resolve=>release=resolve);};
+  const result=f.run({type:'note',id:'n',quickEntry:true});
+  assert.equal(guard(),true);
+  if(revoke==='removed')f.state.notes=[];
+  if(revoke==='project-private')f.state.projects[0].private=true;
+  if(revoke==='private-mode')f.env.window.PrivateMode={isOn:()=>true};
+  if(revoke==='hydration')f.env.storageHydrated=false;
+  if(revoke==='modal')f.env.document.querySelector=selector=>selector==='dialog:modal'?{}:null;
+  assert.equal(guard(),false,revoke+' must invalidate the preview callback before it commits');
+  f.state.previewRecord={type:'note',id:'n'};release(undefined);
+  assert.equal(await result,false,revoke+' must also invalidate a late ACK');
+ }
+});
+test('quick capture document navigation checks fresh access context after state replacement',async()=>{
+ const f=fixture();let release,guard;f.env.window.ReadingPane={isActive:()=>true};
+ f.env.openPreview=(type,id,_a,_b,isCurrent)=>{guard=isCurrent;return new Promise(resolve=>release=resolve);};
+ const result=f.run({type:'import',id:'source',quickEntry:true});
+ assert.equal(result,false,'a missing import must never start navigation');
+ f.state.imports.push({id:'source',name:'Original.pdf',projectId:'p'});
+ const pending=f.run({type:'import',id:'source',quickEntry:true});
+ f.env.state={...f.state,projects:[{...f.state.projects[0],private:true}],previewRecord:{type:'import',id:'source'}};
+ assert.equal(guard(),false,'access must be evaluated against current state, not the original object');
+ release(true);assert.equal(await pending,false);
+});
+test('quick capture document navigation cannot win after another route claims navigation',async()=>{
+ const f=fixture();let release,guard;f.env.window.ReadingPane={isActive:()=>true};
+ f.env.openPreview=(type,id,_a,_b,isCurrent)=>{guard=isCurrent;return new Promise(resolve=>release=resolve);};
+ const pending=f.run({type:'note',id:'n',quickEntry:true});
+ f.env.window.NativeShell.cancelNavigation();assert.equal(guard(),false);
+ f.state.previewRecord={type:'note',id:'n'};release(undefined);
+ assert.equal(await pending,false,'superseded route cannot acknowledge a hidden old reader');
+});
+test('a newer quick capture document supersedes an older open still waiting on drafts',async()=>{
+ const f=fixture();f.state.imports.push({id:'source',name:'Source.pdf',projectId:'p'});
+ const pending=new Map();let actual;
+ f.env.window.ReadingPane={isActive:(type,id)=>actual?.type===type&&actual?.id===id};
+ f.env.openPreview=(type,id,_a,_b,isCurrent)=>new Promise(resolve=>pending.set(type,{resolve,isCurrent}));
+ const old=f.run({type:'note',id:'n',quickEntry:true}),newer=f.run({type:'import',id:'source',quickEntry:true});
+ assert.equal(pending.get('note').isCurrent(),false);assert.equal(pending.get('import').isCurrent(),true);
+ actual=f.state.previewRecord={type:'import',id:'source'};pending.get('import').resolve(undefined);assert.equal(await newer,true);
+ pending.get('note').resolve(undefined);assert.equal(await old,false);
+ assert.deepEqual(actual,{type:'import',id:'source'});
+});
+test('quick capture navigation rejects missing, ambiguous and private targets before opening',()=>{
+ for(const revoke of ['missing','duplicate','private','private-mode','modal']){
+  const f=fixture();let opened=0;f.env.openPreview=()=>opened++;
+  if(revoke==='missing')f.state.notes=[];
+  if(revoke==='duplicate')f.state.notes.push({...f.state.notes[0]});
+  if(revoke==='private')f.state.notes[0].private=true;
+  if(revoke==='private-mode')f.env.window.PrivateMode={isOn:()=>true};
+  if(revoke==='modal')f.env.document.querySelector=selector=>selector==='dialog:modal'?{}:null;
+  assert.equal(f.run({type:'note',id:'n',quickEntry:true}),false,revoke);assert.equal(opened,0,revoke);
+ }
+});
+test('quick capture reader errors reject without producing a successful snapshot ACK',async()=>{
+ const f=fixture();f.env.openPreview=async()=>{throw new Error('draft persist failed');};
+ await assert.rejects(f.run({type:'note',id:'n',quickEntry:true}),/draft persist failed/);
+ assert.equal(f.state.previewRecord,undefined);assert.deepEqual(f.calls,[]);
 });
 test('native task open carries its committed entry and reports task lifetime separately from other modals',()=>{
  const f=fixture(),opened=[];let taskOpen=false,modalOpen=false;
@@ -113,6 +207,50 @@ test('native chat snapshot exposes pin and grounded preview, excluding ephemeral
  f.state.conversations.push({id:'chat',title:'Plan',favorite:true,messages:[{id:'u',role:'user',text:'Organize the project milestones'},{id:'a',role:'assistant',text:'The proposed milestones are research and validation.'}]},{id:'private',ephemeral:true,messages:[]});
  f.run({type:'reader'});const rows=f.posted.at(-1).conversationLibrary;assert.equal(rows.length,1);assert.equal(rows[0].pinned,true);assert.match(rows[0].summaryGoal,/project milestones/);assert.match(rows[0].summaryOutcome,/research and validation/);assert.equal(rows[0].messageCount,2);
 });
+test('native chat preview completes when live or pending clears without a new text/timestamp',()=>{
+ for(const flag of ['live','pending']){
+  const f=fixture();f.env.window.ConversationOrganization=require('../app/conversation-organization');
+  const answer={id:'a',role:'agent',text:'The reviewed notes are ready for the next seminar.',[flag]:true};
+  const chat={id:'chat',title:'Seminar',updatedAt:42,messages:[{id:'u',role:'user',text:'Summarize the seminar preparation notes.'},answer]};
+  f.state.conversations.push(chat);f.tick();assert.equal(f.posted.at(-1).conversationLibrary[0].summaryOutcome,'');
+  answer[flag]=false;f.tick();assert.match(f.posted.at(-1).conversationLibrary[0].summaryOutcome,/reviewed notes/);
+  assert.equal(chat.updatedAt,42);
+ }
+});
+test('native preview invalidates earlier message edits and visibility changes in place',()=>{
+ const f=fixture();f.env.window.ConversationOrganization=require('../app/conversation-organization');
+ const user={id:'u',role:'user',text:'Compare the seminar notes and the course handbook.'};
+ const answer={id:'a',role:'assistant',text:'The handbook contains the assessed learning objectives.'};
+ const chat={id:'chat',title:'Notes',messages:[user,answer,{id:'internal',role:'assistant',text:'unchanged',internal:true}]};
+ f.state.conversations.push(chat);f.tick();assert.match(f.posted.at(-1).conversationLibrary[0].summaryGoal,/seminar/);
+ user.text='Explain how the assessed learning objectives changed.';f.tick();assert.match(f.posted.at(-1).conversationLibrary[0].summaryGoal,/objectives changed/);
+ answer.hidden=true;f.tick();assert.equal(f.posted.at(-1).conversationLibrary[0].summaryOutcome,'');
+ answer.hidden=false;answer.channel='analysis';f.tick();assert.equal(f.posted.at(-1).conversationLibrary[0].messageCount,1);
+ delete answer.channel;answer.deletedAt=1;f.tick();assert.equal(f.posted.at(-1).conversationLibrary[0].summaryOutcome,'');
+ delete answer.deletedAt;f.tick();assert.match(f.posted.at(-1).conversationLibrary[0].summaryOutcome,/handbook/);
+});
+test('native preview observes text content parts changed in the same array',()=>{
+ const f=fixture();f.env.window.ConversationOrganization=require('../app/conversation-organization');
+ const answer={id:'a',role:'assistant',content:[{type:'text',text:'The first report contains three observations.'}]};
+ f.state.conversations.push({id:'chat',messages:[{id:'u',role:'user',text:'What does the report contain?'},answer]});
+ f.tick();answer.content[0].text='The updated report now contains five observations.';f.tick();
+ assert.match(f.posted.at(-1).conversationLibrary[0].summaryOutcome,/five observations/);
+});
+test('native preview skips resummarizing streamed text until the reply becomes eligible',()=>{
+ const f=fixture(),core=require('../app/conversation-organization');let summaries=0;
+ f.env.window.ConversationOrganization={summarize(...args){summaries++;return core.summarize(...args)}};
+ const answer={id:'a',role:'agent',live:true,text:'Initial'};
+ const chat={id:'chat',messages:[{id:'u',role:'user',text:'Organize my notes into a readable report.'},answer]};
+ f.state.conversations.push(chat);f.tick();const posts=f.posted.length;
+ for(let i=0;i<100;i++){answer.text+=' streamed word';f.tick();}
+ assert.equal(summaries,1);assert.equal(f.posted.length,posts);
+ answer.live=false;f.tick();assert.equal(summaries,2);assert.equal(f.posted.length,posts+1);
+ f.tick();assert.equal(summaries,2);
+ chat.messages.push({id:'u2',role:'user',text:'Now compare this report with last week.'});f.tick();
+ assert.equal(f.posted.at(-1).conversationLibrary[0].summaryOutcome,'');
+ assert.match(f.posted.at(-1).conversationLibrary[0].summaryGoal,/last week/);
+ f.env.document.documentElement={lang:'en'};f.tick();assert.match(f.posted.at(-1).conversationLibrary[0].summary,/Awaiting a reply/);
+});
 test('native pin action awaits the organization persistence callback',async()=>{
  const f=fixture();let resolve;let command;f.env.commitConversationOrganization=async value=>{command=value;await new Promise(done=>resolve=done);};
  let settled=false;const pending=f.env.window.NativeConversationActions.perform({action:'pin',kind:'conversation',id:'chat',pinned:'true'}).then(()=>settled=true);
@@ -143,7 +281,8 @@ test('persistent native presentation integrates route, compact browser, actual w
  for(const expected of ['surfaceVisible','bounds.width>0','bounds.height>0','isHiddenOrHasHiddenAncestor','window.isVisible','window.isMiniaturized','NSApp.isHidden','window.occlusionState.contains(.visible)'])assert.ok(predicate.includes(expected),expected);
  assert.doesNotMatch(predicate,/isKeyWindow|isMainWindow|firstResponder|isActive/,'focus is not presentation visibility');
  for(const event of ['didChangeOcclusionStateNotification','didMiniaturizeNotification','didDeminiaturizeNotification','didHideNotification','didUnhideNotification'])assert.ok(host.includes(event),event);
- assert.match(swift,/didStartProvisionalNavigation[^\n]+beginPresentationNavigation/);
+ const navigationStart=swift.slice(swift.indexOf('didStartProvisionalNavigation'),swift.indexOf('func webView(_ webView:WKWebView,didCommit'));
+ assert.match(navigationStart,/beginPresentationNavigation\(\)/);
  for(const event of ['didCommit','didFinish'])assert.match(swift,new RegExp(event+'[^\\n]+publishPresentationVisibility\\(force:true\\)'));
  assert.match(host,/if error != nil,self\?\.publicationVersion == version\{self\?\.publishedVisibility=nil\}/);
  assert.match(host,/deinit\{NotificationCenter\.default\.removeObserver\(self\)\}/);

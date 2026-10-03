@@ -20,24 +20,25 @@ function Field({ id, label, multiline, required, maxLength, ...props }) {
   return <div className="task-create-field" ref={ref}><label htmlFor={id}>{label}</label><Component {...props} /></div>;
 }
 
-export function TaskCreateForm({ initial = {}, projects = [], busy = false, error = '', onSubmit, onCancel }) {
-  const [values, setValues] = useState(() => ({ title: '', description: '', workspace: '日常', projectId: '', status: 'todo', priority: 'medium', startAt: '', dueAt: '', ...initial }));
+export function TaskCreateForm({ initial = {}, projects = [], workflowOptions = [], busy = false, error = '', onSubmit, onCancel }) {
+  const [values, setValues] = useState(() => ({ title: '', description: '', workspace: '日常', projectId: '', status: 'todo', priority: 'medium', workflowCategory: '', startAt: '', dueAt: '', ...initial }));
   const [details, setDetails] = useState(false);
   const composing = useRef(false);
   const set = (key, value) => { if (!busy) setValues(previous => ({ ...previous, [key]: value })); };
   const project = projects.find(item => item.id === values.projectId);
   const options = (rows) => rows.map(([value, zh, en]) => ({ value, label: t(zh, en) }));
-  return <form id="planningCreateForm" className="task-create-form" data-dirty={JSON.stringify(values) !== JSON.stringify({ title: '', description: '', workspace: '日常', projectId: '', status: 'todo', priority: 'medium', startAt: '', dueAt: '', ...initial }) ? 'true' : 'false'} data-user-content aria-busy={busy || undefined}
+  return <form id="planningCreateForm" className="task-create-form" data-dirty={JSON.stringify(values) !== JSON.stringify({ title: '', description: '', workspace: '日常', projectId: '', status: 'todo', priority: 'medium', workflowCategory: '', startAt: '', dueAt: '', ...initial }) ? 'true' : 'false'} data-user-content aria-busy={busy || undefined}
     onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
     onKeyDown={event => { if (event.key === 'Enter' && (composing.current || event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault(); }}
-    onSubmit={event => { event.preventDefault(); if (!busy && !composing.current) onSubmit?.({ ...values }); }}>
+    onSubmit={event => { event.preventDefault(); if (!busy && !composing.current) onSubmit?.({ ...values, workflowCategory: values.workflowCategory || null }); }}>
     <header className="task-create-heading"><div id="planningCreateDialogTitle"><Heading level={2}>{t('添加任务', 'Add task')}</Heading></div><Button variant="ghost" size="sm" disabled={busy} aria-label={t('关闭', 'Close')} onClick={onCancel}>×</Button></header>
     <div className="task-create-content">
     <p className="task-create-location">{project?.name || t(values.workspace, ({ 日常: 'Daily', 课程: 'Courses', 科研: 'Research' })[values.workspace] || values.workspace)}</p>
     <Field id="planningTaskTitle" label={t('任务名称', 'Task name')} value={values.title} onChange={value => set('title', value)} required maxLength={500} disabled={busy} placeholder={t('下一步要完成什么？', 'What needs to happen next?')} />
     <Field id="planningTaskDescription" label={t('详情（可选）', 'Details (optional)')} value={values.description} onChange={value => set('description', value)} multiline rows={3} maxLength={20000} disabled={busy} placeholder={t('背景、目标或验收标准', 'Context, goal or acceptance criteria')} />
     <div className="task-create-dates"><Field id="planningTaskDue" label={t('截止日期（可选）', 'Due date (optional)')} type="date" value={values.dueAt || ''} onChange={value => set('dueAt', value)} disabled={busy} />
-      <Button variant="ghost" size="sm" disabled={busy} aria-expanded={details} aria-controls="taskCreateDetails" onClick={() => setDetails(!details)}>{details ? t('收起属性', 'Fewer properties') : t('更多属性', 'More properties')}</Button></div>
+      <div className="task-create-field" title={t('分类独立于空间、项目和优先级；与灵动岛待办共用。', 'Shared with island tasks; separate from space, project and priority.')}><label htmlFor="planningTaskWorkflow">{t('任务分类', 'Task category')}</label><KitSelect id="planningTaskWorkflow" label={t('任务分类', 'Task category')} disabled={busy} value={values.workflowCategory || ''} options={[{ value: '', label: t('未分类', 'Uncategorized') }, ...workflowOptions]} onChange={value => set('workflowCategory', value)} /></div></div>
+      <Button variant="ghost" size="sm" disabled={busy} aria-expanded={details} aria-controls="taskCreateDetails" onClick={() => setDetails(!details)}>{details ? t('收起属性', 'Fewer properties') : t('更多属性', 'More properties')}</Button>
     {details && <div id="taskCreateDetails" className="task-create-details">
       <div><label htmlFor="planningTaskWorkspace">{t('所属空间', 'Space')}</label><KitSelect id="planningTaskWorkspace" label={t('所属空间', 'Space')} disabled={busy} value={values.workspace} options={options([['日常', '日常', 'Daily'], ['课程', '课程', 'Courses'], ['科研', '科研', 'Research']])}
         onChange={workspace => setValues(previous => ({ ...previous, workspace, projectId: projects.find(item => item.id === previous.projectId)?.workspace === workspace ? previous.projectId : '' }))} /></div>

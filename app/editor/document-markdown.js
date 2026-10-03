@@ -2,6 +2,7 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import { decodeString } from 'micromark-util-decode-string';
 import katex from 'katex';
 import { splitFrontmatter } from './visual-policy.mjs';
 
@@ -128,17 +129,45 @@ export function renderWithMetadata(text, options = {}) {
   function renderText(node, context) {
     const value = node.value || '', raw = document.body.slice(node.position?.start?.offset || 0, node.position?.end?.offset || 0);
     if (context.inLink) return escape(value);
-    const pattern = /\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]/g;
-    let html = '', cursor = 0, rawCursor = 0;
+    const pattern = /\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\[(note|task|project):([A-Za-z0-9_-]{1,256})\]/g;
+    // Decode disjoint authored segments once, not the whole preceding paragraph
+    // for every reference. This also keeps long reference lists linear in size.
+    const authoredTokens = new Map();
+    let rawCursor = 0, decodedCursor = 0;
+    for (const token of raw.matchAll(pattern)) {
+      const end = token.index + token[0].length;
+      decodedCursor += decodeString(raw.slice(rawCursor, end)).replace(/\r\n?/g, '\n').length;
+      let slashes = 0; for (let i = token.index - 1; i >= 0 && raw[i] === '\\'; i--) slashes++;
+      if (!(slashes % 2)) authoredTokens.set(decodedCursor - token[0].length, token[0]);
+      rawCursor = end;
+    }
+    let html = '', cursor = 0;
     for (const match of value.matchAll(pattern)) {
       html += escape(value.slice(cursor, match.index));
-      const at = raw.indexOf(match[0], rawCursor);
-      let slashes = 0; for (let i = at - 1; i >= 0 && raw[i] === '\\'; i--) slashes++;
-      if (at >= 0) rawCursor = at + match[0].length;
+      // CommonMark decodes escapes/entities in text nodes. Match the authored
+      // position as well as the decoded text so an escaped example cannot borrow
+      // a later, genuinely authored reference's permission to become a link.
+      const authored = authoredTokens.get(match.index) === match[0];
+      if (match[3]) {
+        if (authored && typeof options.resolveReference === 'function') {
+          const kind = match[3], id = match[4], resolved = resolve(options.resolveReference, `${kind}:${id}`);
+          const english = globalThis.WorkstationI18n?.getLanguage?.() === 'en';
+          const noun = ({ note: english ? 'Note' : '笔记', task: english ? 'Task' : '任务', project: english ? 'Project' : '项目' })[kind];
+          if (resolved?.kind === kind && resolved.id === id && typeof resolved.title === 'string') {
+            const title = resolved.title.trim() || noun;
+            html += `<button type="button" class="wiki-inline-link document-record-link" data-open-${kind}="${escape(id)}" aria-label="${escape(english ? `Open ${noun.toLowerCase()}: ${title}` : `打开${noun}：${title}`)}">${escape(title)}</button>`;
+          } else {
+            warn('unavailable-reference');
+            html += `<span class="document-unavailable-link">${escape(english ? `${noun} unavailable` : `${noun}不可用`)}</span>`;
+          }
+        } else html += escape(match[0]);
+        cursor = match.index + match[0].length;
+        continue;
+      }
       const target = match[1].trim();
       // Escaped Wiki examples remain literal. Only plain text AST nodes enter
       // here, so inline code, fenced code and raw HTML never become Wiki links.
-      const resolved = at >= 0 && !(slashes % 2) && target ? resolve(options.resolveLink, target) : null;
+      const resolved = authored && target ? resolve(options.resolveLink, target) : null;
       if (resolved && ['note', 'import', 'conversation'].includes(resolved.kind) && typeof resolved.id === 'string' && resolved.id && !/[\u0000-\u001f\u007f]/.test(resolved.id)) {
         html += `<button type="button" class="wiki-inline-link" data-open-${resolved.kind}="${escape(resolved.id)}">${escape(match[2] || match[1])}</button>`;
       } else html += escape(match[0]);

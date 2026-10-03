@@ -9,7 +9,7 @@ const {checkOutput,optionsFrom,validateRuntimePackage,requiredSourceInputs,sourc
 const {fingerprint}=require('../app/app-assets');
 function requiredNativeSourceInputs(root){
   const files=new Set([...requiredSourceInputs(root),
-    'native/Package.swift','native/Sources/AIBro/AIBro.swift',
+    'native/Package.swift','native/Entitlements.plist','native/Sources/AIBro/AIBro.swift',
     'native/Resources/bridge.js','native/Resources/desktop.js','native/Resources/workspace.css',
     'scripts/build-native-app.sh','scripts/run-native-preview.sh','scripts/release-native.js',
     'scripts/copy-native-assets.js',
@@ -73,7 +73,7 @@ async function buildNativeRelease({output,cache=path.join(os.tmpdir(),'ai-bro-re
     if(command('/usr/bin/lipo',['-archs',binary]).trim()!=='arm64')throw Error('Native release must be arm64.');
     const plist=JSON.parse(command('/usr/bin/plutil',['-convert','json','-o','-',path.join(app,'Contents/Info.plist')]));
     if(plist.CFBundleShortVersionString!==pkg.version||plist.LSMinimumSystemVersion!=='14.0'||plist.CFBundleExecutable!=='AIBroNative')throw Error('Native bundle metadata mismatch.');
-    command('/usr/bin/codesign',['--force','--deep','--sign','-',app]);command('/usr/bin/codesign',['--verify','--deep','--strict',app]);
+    command('/usr/bin/codesign',['--force','--sign','-','--preserve-metadata=entitlements,identifier,requirements,flags,runtime',app]);command('/usr/bin/codesign',['--verify','--deep','--strict',app]);
     if(runtime.treeSha256!==treeHash(path.join(resources,'python')))throw Error('Bundled runtime changed after signing.');
     const verification=await verifyPackagedApp(app);
     const dependencies=path.join(product,'dependency-sources');fs.mkdirSync(dependencies);

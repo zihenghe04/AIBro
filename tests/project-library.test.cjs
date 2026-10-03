@@ -38,3 +38,15 @@ test('project switch never carries same-name path expansion or selected director
 test('retired breadcrumbs unmount; disposed callbacks cannot select or update',()=>{
  const f=controller(),a=f.api.mount(f.host,f.options),stale=f.mounts.get(f.host).props;a.update({breadcrumbHost:null});assert.ok(f.unmounted.includes(f.breadcrumb));a.unmount();stale.onSelect('课程');stale.onToggle('课程',true);a.revealSelection();assert.equal(f.selections.length,0);assert.equal(f.toggles.length,0);assert.equal(f.mounts.size,0);
 });
+
+test('shared empty directories retain zero counts, selected crumbs and scope separation without fake records',()=>{
+ const folders=[{id:'empty',folderPath:'Course/Empty'}],m=Library.buildModel([], 'Course/Empty', {},folders);
+ assert.equal(m.count,0);assert.equal(m.roots[0].count,0);assert.equal(node(m,'Course/Empty').count,0);assert.equal(m.selected,'Course/Empty');
+ const ui={};Library.rememberLocation(ui,'p','content',{selected:'Course/Empty',expansion:{Course:true}});
+ assert.equal(Library.scopeModel([],ui,'p',folders).selected,'Course/Empty');
+ const recordView=Library.selectScope(ui,'p','records',[],folders);assert.equal(recordView.selected,null);
+ assert.equal(Library.selectScope(ui,'p','content',[],folders).selected,'Course/Empty');
+ const f=controller(),api=f.api.mount(f.host,{...f.options,records:[],folders,selected:'Course/Empty'});
+ assert.equal(f.mounts.get(f.host).props.model.selected,'Course/Empty');api.update({projectId:'another'});
+ assert.equal(f.mounts.get(f.host).props.model.roots.length,0);
+});

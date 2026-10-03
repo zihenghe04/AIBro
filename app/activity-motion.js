@@ -2,13 +2,13 @@
   'use strict';
   const doc = root.document;
   if (!doc || root.ActivityMotion) return;
-  const clockSelector = '[data-progress-start]';
+  const clockSelector = '[data-progress-start],[data-reception-clock]';
   const motionSelector = '[data-halaska-orb],.aicss-thinking-label[data-aicss-thinking-state="running"],.progress-activity,.progress-spinner,.progress-active-mark,.activity-pulse,.progress-phase-label,.progress-signal,.live-message .message-identity';
   const selector = `${clockSelector},${motionSelector}`;
-  const records = new Map(), clocks = new Set(), transitions = new Map();
+  const records = new Map(), clocks = new Set(), transitions = new Map(), clockSubscriptions = new Map();
   const reduced = root.matchMedia?.('(prefers-reduced-motion: reduce)');
   let timer = null, frame = null, started = false, stopped = false, ticks = 0, writes = 0;
-  const hostVisible = () => !doc.hidden && root.__aibroPresentationVisible !== false;
+  const hostVisible = () => !doc.hidden && root.__aibroPresentationVisible !== false && root.__aibroSurfaceVisible !== false;
   const reduceMotion = () => reduced?.matches || doc.body?.classList.contains('reduce-motion');
 
   // Geometry alone is insufficient for closed <details>: WebKit can retain
@@ -41,6 +41,10 @@
   }
   const canAnimate = node => !!node && !reduceMotion() && painted(node);
   function updateClock(node) {
+    if (node.hasAttribute('data-reception-clock')) {
+      clockSubscriptions.get(node)?.(Date.now());
+      return;
+    }
     const start = Number(node.getAttribute('data-progress-start'));
     if (!Number.isFinite(start) || start <= 0) return;
     const text = root.AgentProgress?.duration(start);
@@ -63,7 +67,7 @@
     clocks.clear();
     for (const [node, record] of records) {
       if (!node.isConnected || !node.matches(selector)) {
-        observer?.unobserve(node); records.delete(node); node.removeAttribute('data-activity-paused'); continue;
+        observer?.unobserve(node); records.delete(node); clockSubscriptions.delete(node); node.removeAttribute('data-activity-paused'); continue;
       }
       const visible = record.intersecting !== false && painted(node);
       if (node.matches(motionSelector)) {
@@ -72,7 +76,7 @@
         } else if (node.hasAttribute('data-activity-paused')) node.removeAttribute('data-activity-paused');
       } else if (node.hasAttribute('data-activity-paused')) node.removeAttribute('data-activity-paused');
       const start = Number(node.getAttribute('data-progress-start'));
-      if (visible && Number.isFinite(start) && start > 0) { clocks.add(node); updateClock(node); }
+      if (visible && (node.hasAttribute('data-reception-clock') ? clockSubscriptions.has(node) : Number.isFinite(start) && start > 0)) { clocks.add(node); updateClock(node); }
     }
     // An owned entrance may itself begin at opacity zero; that is not a hidden
     // surface. Ancestor visibility, clipping and reduced motion still apply.
@@ -129,6 +133,16 @@
     animation.addEventListener('cancel', release, { once: true });
     return animation;
   }
+  // Owned React status headings share the elapsed-time clock. The callback
+  // updates that heading only; this module never writes its text or body DOM.
+  function subscribeClock(node, callback) {
+    if (stopped || !node || typeof callback !== 'function') return () => {};
+    clockSubscriptions.set(node, callback); collect(node); refresh();
+    return () => {
+      if (clockSubscriptions.get(node) !== callback) return;
+      clockSubscriptions.delete(node); refresh();
+    };
+  }
   function visibilityChanged() {
     if (!hostVisible() && frame !== null) { root.cancelAnimationFrame(frame); frame = null; }
     refresh();
@@ -137,9 +151,10 @@
     if (started || stopped || !doc.body) return;
     started = true; collect(doc.body);
     mutations.observe(doc.body, { subtree: true, childList: true, attributes: true,
-      attributeFilter: ['class', 'style', 'hidden', 'open', 'data-progress-start', 'data-aicss-thinking-state', 'data-activity-paused'] });
+      attributeFilter: ['class', 'style', 'hidden', 'open', 'data-progress-start', 'data-reception-clock', 'data-aicss-thinking-state', 'data-activity-paused'] });
     doc.addEventListener('visibilitychange', visibilityChanged);
     root.addEventListener('aibro:presentation-visibility', visibilityChanged);
+    root.addEventListener('aibro:surface-visibility', visibilityChanged);
     reduced?.addEventListener('change', refresh);
     doc.addEventListener('scroll', viewportChanged, { capture: true, passive: true });
     root.addEventListener('resize', viewportChanged);
@@ -153,13 +168,14 @@
     doc.removeEventListener('DOMContentLoaded', init);
     doc.removeEventListener('visibilitychange', visibilityChanged);
     root.removeEventListener('aibro:presentation-visibility', visibilityChanged);
+    root.removeEventListener('aibro:surface-visibility', visibilityChanged);
     reduced?.removeEventListener('change', refresh);
     doc.removeEventListener('scroll', viewportChanged, true); root.removeEventListener('resize', viewportChanged);
     for (const node of records.keys()) node.removeAttribute('data-activity-paused');
     for (const animation of transitions.keys()) animation.cancel();
-    records.clear(); clocks.clear(); transitions.clear();
+    records.clear(); clocks.clear(); transitions.clear(); clockSubscriptions.clear();
   }
-  root.ActivityMotion = { canAnimate, animate, destroy, inspect: () => ({
+  root.ActivityMotion = { canAnimate, animate, subscribeClock, destroy, inspect: () => ({
     tracked: records.size, visibleClocks: clocks.size, timerActive: timer !== null,
     transitions: transitions.size, hostVisible: hostVisible(), ticks, writes
   }) };

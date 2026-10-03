@@ -117,15 +117,25 @@
       history: { messages: list(conversation.messages).filter(value => !value.deletedAt).length, summaryItems: list(conversation.contextSummary?.items).length, summaryAt: conversation.contextSummary?.createdAt || conversation.contextSummary?.updatedAt || null }, recent: recentRequest(state, conversation) };
   }
   function createController(hooks) {
-    let ownerKey = '', generation = 0, error = '', busy = '', view = null;
+    let ownerKey = '', generation = 0, versionGeneration = 0, error = '', busy = '', view = null, suspended = false, destroyed = false;
     const versions = new Map(), pending = new Map();
+    const visible = () => !destroyed && hooks.isVisible?.() !== false;
     const options = () => ({ model: hooks.getModel?.(), skills: hooks.getSkills?.(), permission: hooks.getPermission?.(), privateMode: hooks.isPrivate?.() ?? !!root.PrivateMode?.isOn?.(), versionChecks: new Map([...versions].map(([key, value]) => [key, value.result])) });
-    function publish() { hooks.onChange?.({ ...view, busy, error }); }
+    function suspend() {
+      if (suspended || destroyed) return;
+      suspended = true; versionGeneration++; pending.clear(); versions.clear(); view = null;
+      // A hidden panel must not retain source bodies or continue version work.
+      // Keep an in-flight durable mutation separate so reopening cannot submit it twice.
+      hooks.onHidden?.();
+    }
+    function publish() { if (!visible()) { suspend(); return; } hooks.onChange?.({ ...view, busy, error }); }
     function refresh() {
+      if (!visible()) { suspend(); return null; }
+      suspended = false;
       const state = hooks.getState?.() || {}, conversation = hooks.getConversation?.();
       for (const ref of F()?.references(conversation) || []) { const previous = versions.get(refKey(ref)); if (previous && (previous.version !== ref.version || previous.input !== versionInput(state, ref))) versions.delete(refKey(ref)); }
       let next = snapshot(state, conversation, options());
-      if (ownerKey !== next.ownerKey) { ownerKey = next.ownerKey; generation++; versions.clear(); pending.clear(); error = ''; busy = ''; next = snapshot(state, conversation, options()); }
+      if (ownerKey !== next.ownerKey) { ownerKey = next.ownerKey; generation++; versionGeneration++; versions.clear(); pending.clear(); error = ''; busy = ''; next = snapshot(state, conversation, options()); }
       if (next.materials.some(row => row.private) || next.recent?.sources?.some(row => row.private)) error = '';
       view = next; publish();
       if (next.private || next.empty) return next;
@@ -136,20 +146,25 @@
         const signature = { input, version: ref.version };
         const equal = entry => entry?.input === input && entry?.version === ref.version;
         if (equal(versions.get(key)) || equal(pending.get(key))) continue;
-        versions.delete(key); pending.set(key, signature); const ticket = generation;
-        Promise.resolve().then(() => F().libraryRef(state, ref.type, ref.id)).then(current => {
-          if (ticket !== generation || pending.get(key) !== signature) return;
+        versions.delete(key); pending.set(key, signature); const ticket = versionGeneration;
+        Promise.resolve().then(() => {
+          if (ticket !== versionGeneration || pending.get(key) !== signature) return;
+          if (!visible()) { suspend(); return; }
+          return F().libraryRef(state, ref.type, ref.id);
+        }).then(current => {
+          if (ticket !== versionGeneration || pending.get(key) !== signature) return;
+          if (!visible()) { suspend(); return; }
           // Content or permissions may change while SHA-256 is in flight.
           const currentState = hooks.getState?.() || {};
           if (versionInput(currentState, ref) !== input) { pending.delete(key); refresh(); return; }
           versions.set(key, { ...signature, result: { kind: !ref.version ? 'unversioned' : current.version === ref.version ? 'current' : 'changed', version: current.version } }); pending.delete(key); refresh();
-        }, () => { if (ticket === generation && pending.get(key) === signature) { versions.set(key, { ...signature, result: { kind: 'missing' } }); pending.delete(key); refresh(); } });
+        }, () => { if (ticket === versionGeneration && pending.get(key) === signature) { if (!visible()) { suspend(); return; } versions.set(key, { ...signature, result: { kind: 'missing' } }); pending.delete(key); refresh(); } });
       }
       for (const key of versions.keys()) if (!liveKeys.has(key)) versions.delete(key);
       return next;
     }
     async function mutate(command) {
-      if (busy || !view || view.private || view.empty || command.conversationId !== view.conversationId || hooks.getConversation?.()?.id !== view.conversationId || options().privateMode) return false;
+      if (!visible() || busy || !view || view.private || view.empty || command.conversationId !== view.conversationId || hooks.getConversation?.()?.id !== view.conversationId || options().privateMode) return false;
       const row = view.materials.find(value => command.action === 'remove-attachment' ? value.type === 'import' && value.id === command.id : value.fromReference && refKey(value.ref) === refKey(command.ref));
       if (!row || !['remove-reference', 'refresh-reference', 'remove-attachment'].includes(command.action) || command.action === 'refresh-reference' && !row.available) return false;
       const ticket = generation; busy = row.key; error = ''; publish();
@@ -158,32 +173,51 @@
     }
     function preview(row) {
       const state = hooks.getState?.() || {}, conversation = hooks.getConversation?.();
-      if (conversation?.id !== view?.conversationId || options().privateMode || !access(state, row.ref).available) { refresh(); return false; }
+      if (!visible() || conversation?.id !== view?.conversationId || options().privateMode || !access(state, row.ref).available) { refresh(); return false; }
       return hooks.onPreview?.(row.ref);
     }
     function evidence(source, target) {
       const state = hooks.getState?.() || {}, conversation = hooks.getConversation?.();
-      if (conversation?.id !== view?.conversationId || options().privateMode || access(state, source).kind === 'private' || view?.recent?.id !== source.runId) { refresh(); return false; }
+      if (!visible() || conversation?.id !== view?.conversationId || options().privateMode || access(state, source).kind === 'private' || view?.recent?.id !== source.runId) { refresh(); return false; }
       return hooks.onEvidence?.(source, source.runId, target, view.recent.sources.filter(value => !value.private));
     }
-    return { refresh, mutate, preview, evidence, getView: () => ({ ...view, busy, error }), isBusy: () => !!busy, destroy: () => { generation++; pending.clear(); versions.clear(); view = null; } };
+    return { refresh, mutate, preview, evidence, getView: () => ({ ...view, busy, error }), isBusy: () => !!busy, destroy: () => { destroyed = true; generation++; versionGeneration++; pending.clear(); versions.clear(); view = null; } };
   }
-  let controller, island, entryIsland, uiHooks;
+  let controller, island, entryIsland, uiHooks, refreshEntry;
   function init(hooks = {}) {
     const host = root.document?.getElementById('contextWorkbench'); if (!host) return false;
-    controller?.destroy(); island?.unmount(); entryIsland?.unmount(); uiHooks = hooks;
+    controller?.destroy(); island?.unmount(); entryIsland?.unmount(); island = null; entryIsland = null; uiHooks = hooks;
     let entry = root.document.getElementById('composerContextWorkbench');
     if (!entry) { entry = root.document.createElement('span'); entry.id = 'composerContextWorkbench'; root.document.querySelector('.composer-footer')?.append(entry); }
-    controller = createController({ ...hooks, onChange: data => {
+    let entryKey;
+    const visible = () => {
+      if (hooks.isVisible) return !!hooks.isVisible();
+      // Standalone Kit surfaces have no inspector shell. The app's shell owns
+      // the visibility contract; checking it does not measure layout or read sources.
+      if (!root.document.getElementById('conversationInspector')) return true;
+      const ui = hooks.getState?.()?.ui || {}, route = root.document.body?.dataset?.view;
+      return !!ui.inspectorOpen && (ui.inspector || 'context') === 'context' && (!route || route === 'agent');
+    };
+    refreshEntry = () => {
       if (!root.HalaskaUI?.componentNames?.includes('ContextWorkbenchSurface')) return;
-      const entryProps = { variant: 'ghost', size: 'sm', children: t('上下文', 'Context'), 'aria-label': t('查看对话上下文', 'Inspect conversation context'), 'aria-controls': 'conversationInspector', 'aria-expanded': !!(hooks.getState?.()?.ui?.inspectorOpen && hooks.getState?.()?.ui?.inspector === 'context'), onClick: open };
+      const ui = hooks.getState?.()?.ui || {};
+      const entryProps = { variant: 'ghost', size: 'sm', children: t('上下文', 'Context'), 'aria-label': t('查看对话上下文', 'Inspect conversation context'), 'aria-controls': 'conversationInspector', 'aria-expanded': !!(ui.inspectorOpen && (ui.inspector || 'context') === 'context'), onClick: open };
+      const key = JSON.stringify([entryProps.children, entryProps['aria-label'], entryProps['aria-expanded']]);
+      if (entryIsland && entryKey === key) return;
       if (entryIsland) entryIsland.update(entryProps); else entryIsland = root.HalaskaUI.mount(entry, 'Button', entryProps);
+      entryKey = key;
+    };
+    controller = createController({ ...hooks, isVisible: visible, onHidden: () => {
+      refreshEntry(); island?.unmount(); island = null;
+    }, onChange: data => {
+      refreshEntry();
+      if (!root.HalaskaUI?.componentNames?.includes('ContextWorkbenchSurface')) return;
       const props = { data, onMutate: command => controller.mutate(command), onPreview: row => controller.preview(row), onEvidence: (source, target) => controller.evidence(source, target), onModel: hooks.onModel, onScope: hooks.onScope, onSkills: hooks.onSkills, onAddReference: hooks.onAddReference, onAddAttachment: hooks.onAddAttachment, onCompact: hooks.onCompact };
       if (island) island.update(props); else island = root.HalaskaUI.mount(host, 'ContextWorkbenchSurface', props);
     } });
-    controller.refresh(); return true;
+    refresh(); return true;
   }
-  function refresh() { return controller?.refresh(); }
+  function refresh() { refreshEntry?.(); return controller?.refresh(); }
   function open() { uiHooks?.onOpen?.(); return refresh(); }
   return { init, refresh, open, snapshot, recentRequest, selectedMaterials, inspectVersions, createController, access };
 });

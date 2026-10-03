@@ -8,6 +8,40 @@ syncVisibility();document.addEventListener('visibilitychange',syncVisibility);
 window.addEventListener('aibro:presentation-visibility',syncVisibility);
 let previousNativeView=null;let entranceTimer=null;
 let commandSearchNavigationVersion=0;
+// A posted snapshot is not a receipt. Keep one latest projection until this
+// document/sequence is acknowledged; never replay old workspace mutations.
+const snapshotNonce=window.crypto?.randomUUID?.()||'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const n=Math.random()*16|0;return(c==='x'?n:(n&3)|8).toString(16);});
+const snapshotClock=()=>window.performance?.now?.()??Date.now();
+let snapshotSequence=0,snapshotAcknowledged=null,snapshotPending=null,snapshotDisposed=false;
+const snapshotDelays=[500,1000,2000,4000];
+function publishSnapshot(data,json){
+ if(snapshotDisposed)return;
+ if(!snapshotPending&&json===snapshotAcknowledged)return;
+ if(snapshotPending?.json!==json)snapshotPending={data:JSON.parse(json),json,sequence:++snapshotSequence,attempts:0,next:0,reported:false};
+ const pending=snapshotPending,now=snapshotClock();
+ if(now<pending.next)return;
+ if(pending.attempts>=snapshotDelays.length){
+  if(!pending.reported){pending.reported=true;try{window.webkit.messageHandlers.workspace.postMessage({_nativeSnapshot:{version:1,nonce:snapshotNonce,sequence:pending.sequence,type:'ack-timeout'}});}catch{}}
+  return;
+ }
+ pending.next=now+snapshotDelays[pending.attempts++];
+ try{window.webkit.messageHandlers.workspace.postMessage({...pending.data,_nativeSnapshot:{version:1,nonce:snapshotNonce,sequence:pending.sequence,type:'snapshot'}});}catch{}
+}
+window.NativeSnapshotChannel={
+ isCurrent:nonce=>!snapshotDisposed&&nonce===snapshotNonce,
+ acknowledge(receipt){
+  if(snapshotDisposed||receipt?.version!==1||receipt.nonce!==snapshotNonce||receipt.sequence!==snapshotPending?.sequence)return false;
+  snapshotAcknowledged=snapshotPending.json;snapshotPending=null;return true;
+ },
+ retry(){
+  if(snapshotDisposed||typeof storageHydrated==='undefined'||!storageHydrated)return false;
+  if(snapshotPending){snapshotPending.attempts=0;snapshotPending.next=0;snapshotPending.reported=false;}
+  else snapshotAcknowledged=null;
+  snapshot();return true;
+ }
+};
+window.addEventListener('pagehide',()=>{snapshotDisposed=true;snapshotPending=null;});
+window.addEventListener('pageshow',event=>{if(event.persisted){snapshotDisposed=false;snapshotAcknowledged=null;snapshot();}});
 document.addEventListener('aibro-command-search-success',()=>{commandSearchNavigationVersion++;snapshot();});
 document.addEventListener('aibro-activity-center-change',()=>snapshot());
 document.addEventListener('aibro-comparison-change',()=>snapshot());
@@ -47,11 +81,28 @@ function nativePrivacy(state){
  };
 }
 const conversationPreviewCache=new WeakMap();
+// Summaries only consume public messages and settled assistant text. Compare
+// those inputs, including in-place state changes, without serializing a whole
+// transcript or recomputing its Markdown excerpt for each streamed token.
+function conversationPreviewInputs(item){
+ const inputs=[];
+ for(const message of Array.isArray(item.messages)?item.messages:[]){
+  if(!message||message.deletedAt||message.deleted||message.hidden||message.internal||!['user','agent','assistant'].includes(message.role)||['analysis','reasoning','tool'].includes(message.channel))continue;
+  let text='';
+  if(message.role==='user'||(!message.live&&!message.pending)){
+   if(typeof message.text==='string')text=message.text;
+   else if(typeof message.content==='string')text=message.content;
+   else if(Array.isArray(message.content))text=message.content.filter(part=>part?.type==='text').map(part=>part.text||'').join('\n');
+  }
+  inputs.push([message.id,message.role,!!message.live,!!message.pending,text]);
+ }
+ return inputs;
+}
 function conversationPreview(item){
- const messages=item.messages||[],last=messages.at(-1),language=document.documentElement?.lang?.startsWith('en')?'en':'zh',previous=conversationPreviewCache.get(item);
- if(previous&&previous.messages===messages&&previous.count===messages.length&&previous.text===last?.text&&previous.updated===item.updatedAt&&previous.title===item.title&&previous.language===language)return previous.value;
- const value=window.ConversationOrganization?.summarize(item,{maxLength:900,language})||{};
- conversationPreviewCache.set(item,{messages,count:messages.length,text:last?.text,updated:item.updatedAt,title:item.title,language,value});return value;
+ const inputs=conversationPreviewInputs(item),language=document.documentElement?.lang?.startsWith('en')?'en':'zh',summarize=window.ConversationOrganization?.summarize,previous=conversationPreviewCache.get(item);
+ if(previous&&previous.title===item.title&&previous.language===language&&previous.summarize===summarize&&previous.inputs.length===inputs.length&&inputs.every((row,i)=>row.every((value,j)=>value===previous.inputs[i][j])))return previous.value;
+ const value=summarize?.(item,{maxLength:900,language})||{};
+ conversationPreviewCache.set(item,{inputs,title:item.title,language,summarize,value});return value;
 }
 function snapshot(){refreshNativeChoices();tidyReaderHeading();const view=document.body.dataset.view;document.body.classList.toggle('aibro-native-space-navigation',!!window.__aibroSpaceNavigationView&&(view===window.__aibroSpaceNavigationView||(view==='wiki'&&window.__aibroSpaceNavigationView==='research')));if(view!==previousNativeView){previousNativeView=view;if(document.body.classList.remove){document.body.classList.remove('native-enter');void document.body.offsetWidth;document.body.classList.add('native-enter');clearTimeout(entranceTimer);entranceTimer=setTimeout(()=>document.body.classList.remove('native-enter'),500);}}if(typeof storageHydrated==='undefined'||!storageHydrated)return;const active=x=>!x.deletedAt&&!x.deleted&&!x.archivedAt&&!x.archived&&!x.private&&!x.ephemeral&&!x.incognito&&!(["archived","deleted"].includes(x.status));
  const date=x=>{if(x==null||x==='')return null;const n=typeof x==='number'?x:Date.parse(x);return Number.isFinite(n)?n:null;};
@@ -79,7 +130,8 @@ function snapshot(){refreshNativeChoices();tidyReaderHeading();const view=docume
  const library=state.conversations.filter(x=>!x.deletedAt&&!x.deleted&&!x.ephemeral&&!x.private&&!x.incognito).map(x=>{const summary=conversationPreview(x);return {id:x.id,title:x.title||'新对话',folderId:x.folderId||'',projectId:x.projectId||'',updatedAt:Number(x.updatedAt)||0,archived:!active(x),pinned:!!(x.favorite||x.pinned||x.pinnedAt),summary:String(summary.text||'').slice(0,180),summaryGoal:summary.goal||'',summaryOutcome:summary.outcome||'',messageCount:summary.messageCount||0};});
  const folders=(state.folders?.conversations||[]).filter(x=>!x.deletedAt&&!x.deleted).map(x=>({id:x.id,title:x.name||'文件夹',archived:!active(x)}));
  const data={privateMode:!!window.PrivateMode?.isOn?.(),spaceSection:['daily','courses','research'].includes(view)?(typeof resolveSpaceSection==='function'?resolveSpaceSection(view,state.ui.spaceTabs?.[view]):state.ui.spaceTabs?.[view]||'projects'):null,comparisonOpen:!!window.SourceComparison?.isOpen?.(),activityCenterOpen:!!window.ActivityCenter?.isOpen?.(),activityUnread:window.PrivateMode?.isOn?.()?0:(window.ActivityCenter?.unreadCount?.(state)||0),commandSearchOpen:!!document.querySelector('#searchDialog[open]')||!!window.CommandSearch?.isExecuting?.(),commandSearchNavigationVersion,tourOpen:!!document.querySelector('#onboardingLayer:not([hidden]), #workspaceTour:not([hidden])'),conversationLibrary:library,conversationFolders:folders,tasks:records(visibleTasks,'task'),documents:[...records(visibleNotes,'note'),...records(visibleImports,'import')],modalOpen:!!document.querySelector('dialog:modal'),taskOpen:!!document.querySelector('#taskDialog[open]'),taskEntry:document.querySelector('#taskDialog[open]')&&typeof taskDocumentOrigin==='function'?taskDocumentOrigin()?.entry||null:null,readingOpen:document.body.classList.contains('reading-open'),readerAvailable:!!document.querySelector('#readingToggle:not([hidden])'),projects:state.projects.filter(visibleProject).map(x=>({id:x.id,title:x.name||'Project',workspace:spaceName(x.workspace)})),conversations:state.conversations.filter(active).map(x=>({id:x.id,title:x.title||'Conversation',workspace:x.workspace||''})),taskCount:visibleTasks.filter(x=>x.status!=='done').length,noteCount:visibleNotes.length,sourceCount:visibleImports.length,projectId:state.currentProjectId||'',projectSection:view==='project'?(state.ui.projectTab||'conversations'):null,view:document.body.dataset.view||'agent',conversationId:state.currentConversationId||'',busy:!!sendMessage.busy};
- const json=JSON.stringify(data);if(json!==snapshot.last){snapshot.last=json;window.webkit.messageHandlers.workspace.postMessage(data);}}
+ data.quickWorkbench=window.NativeQuickWorkbench?.snapshot?.()||null;
+ publishSnapshot(data,JSON.stringify(data));}
 
 // Progressive enhancement: every single-value select keeps its original form and change handlers.
 const choiceRegistry=new WeakMap();let activeChoice=null;let choiceSerial=0;
@@ -197,12 +249,42 @@ function nativeRouteAck(accepted,version,startedAt){
  snapshot();
  return {accepted:current&&accepted===true,supersededByPage:current&&accepted!==true&&nativeRendererIntent()!==startedAt,destination};
 }
-window.NativeShell={getNavigationVersion(){return nativeNavigationVersion;},isWorkspaceRequestCurrent(requestId){return !!lastWorkspaceRequest&&lastWorkspaceRequest.requestId===requestId&&lastWorkspaceRequest.version===nativeNavigationVersion&&lastWorkspaceRequest.rendererIntent===nativeRendererIntent();},cancelNavigation(){nativeNavigationVersion++;},perform(command){if(typeof storageHydrated==='undefined'||!storageHydrated)return false;const {type,id}=command;
+function nativeQuickNavigationAllowed(){return typeof storageHydrated!=='undefined'&&storageHydrated&&!window.PrivateMode?.isOn?.()&&!document.querySelector('dialog:modal');}
+const quickNavigationDiagnostics=new WeakMap();
+function rejectQuickNavigation(command,reason){const diagnostic=quickNavigationDiagnostics.get(command);if(diagnostic)diagnostic.reason=reason;return false;}
+function nativeQuickRunConversation(id){
+ if(!nativeQuickNavigationAllowed()||typeof id!=='string'||!id)return '';
+ const list=value=>Array.isArray(value)?value:[];
+ const active=value=>value&&!value.deletedAt&&!value.deleted&&!value.archivedAt&&!value.archived&&!['archived','deleted'].includes(value.status);
+ const runs=list(state.agentRuns).filter(run=>run?.id===id);if(runs.length!==1||!active(runs[0]))return '';
+ const run=runs[0],conversations=list(state.conversations).filter(item=>item?.id===run.conversationId);
+ if(conversations.length!==1||!active(conversations[0]))return '';
+ for(const entry of list(state.trash)){
+  if([...list(entry?.data?.runs),...list(entry?.data?.agentRuns)].some(item=>item?.id===id)||list(entry?.data?.conversations).some(item=>item?.id===run.conversationId))return '';
+ }
+ for(const projectId of [run.projectId,conversations[0].projectId].filter(Boolean)){
+  const projects=list(state.projects).filter(item=>item?.id===projectId);if(projects.length!==1||!active(projects[0]))return '';
+ }
+ const isPrivate=nativePrivacy(state);
+ return isPrivate('agentRuns',id)||isPrivate('conversations',run.conversationId)?'':run.conversationId;
+}
+window.NativeShell={quickRunConversation:nativeQuickRunConversation,getNavigationVersion(){return nativeNavigationVersion;},isWorkspaceRequestCurrent(requestId){return !!lastWorkspaceRequest&&lastWorkspaceRequest.requestId===requestId&&lastWorkspaceRequest.version===nativeNavigationVersion&&lastWorkspaceRequest.rendererIntent===nativeRendererIntent();},cancelNavigation(){nativeNavigationVersion++;},perform(command){if(typeof storageHydrated==='undefined'||!storageHydrated)return rejectQuickNavigation(command,'workspace_hydrating');const {type,id}=command;
+ if(command.quickEntry===true){
+  if(!['task','conversation','note','import'].includes(type))return rejectQuickNavigation(command,'unsupported_command');
+  if(!nativeQuickNavigationAllowed())return rejectQuickNavigation(command,window.PrivateMode?.isOn?.()?'private_mode':'web_modal');
+  if(type==='conversation'&&nativeQuickRunConversation(command.runId)!==id)return false;
+  if(['task','note','import'].includes(type)){
+   const context=window.CitationEvidence?.createAccessContext?.(state),reference={type,id};
+   if(!context)return rejectQuickNavigation(command,'access_unavailable');
+   if(context.isAmbiguous(reference))return rejectQuickNavigation(command,'record_ambiguous');
+   if(!context.access(reference).available)return rejectQuickNavigation(command,'record_unavailable');
+  }
+ }
  const route=['view','workspace-view','project','conversation','new','new-space-conversation','new-project-conversation','new-research-conversation'].includes(type);
- const version=route?++nativeNavigationVersion:nativeNavigationVersion;
+ const version=route||(command.quickEntry===true&&['note','import'].includes(type))?++nativeNavigationVersion:nativeNavigationVersion;
  const active=x=>!x.deletedAt&&!x.deleted&&!x.archivedAt&&!x.archived&&!x.private&&!x.ephemeral&&!x.incognito&&!(["archived","deleted"].includes(x.status));
  const privacyCollection={task:'tasks','complete-task':'tasks','reopen-task':'tasks',note:'notes',import:'imports',project:'projects','create-project-task':'projects','new-project-conversation':'projects'}[type];
- if(typeof privacyCollection==='string'&&nativePrivacy(state)(privacyCollection,id))return false;
+ if(typeof privacyCollection==='string'&&nativePrivacy(state)(privacyCollection,id))return rejectQuickNavigation(command,'record_private');
  switch(type){case'view':if(id==='history'){WorkstationRunHistory.open();break;}if(!['captures','wiki','agent','dashboard','overview','daily','courses','research','history','trash','settings'].includes(id))return false;showView(id,id);break;
  case'workspace-view':{
   if(!['overview','conversations','agenda','daily','courses','research','captures','wiki','dashboard','trash','agent','settings'].includes(id))return false;
@@ -237,15 +319,27 @@ window.NativeShell={getNavigationVersion(){return nativeNavigationVersion;},isWo
  }
  case'conversation':{
   if(!state.conversations.some(x=>x.id===id&&active(x)))return false;
-  const isCurrent=()=>version===nativeNavigationVersion;
+  const isCurrent=()=>version===nativeNavigationVersion&&(command.quickEntry!==true||nativeQuickRunConversation(command.runId)===id);
+  if(command.quickEntry===true&&typeof navigateWorkspaceConversation!=='function')return false;
   const opened=typeof navigateWorkspaceConversation==='function'?navigateWorkspaceConversation(id,{isCurrent}):openConversation(id);
   const startedAt=nativeRendererIntent();
-  return Promise.resolve(opened).then(result=>nativeRouteAck(result!==false,version,startedAt),error=>{const ack=nativeRouteAck(false,version,startedAt);if(ack.supersededByPage)return ack;throw error;});
+  return Promise.resolve(opened).then(result=>nativeRouteAck(command.quickEntry===true?result===true&&isCurrent()&&state.currentConversationId===id&&document.body.dataset.view==='agent':result!==false,version,startedAt),error=>{const ack=nativeRouteAck(false,version,startedAt);if(ack.supersededByPage)return ack;throw error;});
  }
  case'complete-task':case'reopen-task':{const task=state.tasks.find(x=>x.id===id&&active(x));if(!task)return false;const done=type==='complete-task';if((task.status==='done')!==done)toggleTaskStatus(id);break;}
- case'task':if(!state.tasks.some(x=>x.id===id&&active(x)))return false;if(openTask(id,{origin:command.origin})!==true)return false;break;
- case'note':if(!state.notes.some(x=>x.id===id&&active(x)))return false;if(command.origin)openPreview('note',id,undefined,undefined,undefined,{origin:command.origin});else openNote(id);break;
- case'import':if(!state.imports.some(x=>x.id===id&&active(x)))return false;if(command.origin)openPreview('import',id,undefined,undefined,undefined,{origin:command.origin});else openImport(id);break;
+ case'task':if(!state.tasks.some(x=>x.id===id&&active(x)))return rejectQuickNavigation(command,'task_unavailable');if(openTask(id,{origin:command.origin})!==true)return rejectQuickNavigation(command,'task_editor_rejected');break;
+ case'note':case'import':{
+  if(!state[type==='note'?'notes':'imports'].some(x=>x.id===id&&active(x)))return false;
+  if(command.quickEntry===true){
+   const isCurrent=()=>{const access=window.CitationEvidence?.createAccessContext?.(state),reference={type,id};return version===nativeNavigationVersion&&nativeQuickNavigationAllowed()&&!!access?.access(reference).available&&!access.isAmbiguous(reference);};
+   return Promise.resolve(openPreview(type,id,undefined,undefined,isCurrent,{origin:command.origin,isCurrent})).then(result=>{
+    // openPreview's ordinary success paths may return undefined. Confirm the
+    // actual selected reader after its asynchronous draft-leave decision.
+    const opened=result!==false&&isCurrent()&&state.previewRecord?.type===type&&state.previewRecord?.id===id&&window.ReadingPane?.isActive?.(type,id)===true;
+    snapshot();return opened;
+   });
+  }
+  if(command.origin)openPreview(type,id,undefined,undefined,undefined,{origin:command.origin});else if(type==='note')openNote(id);else openImport(id);break;
+ }
  case'create-task':if(!['日常','课程','科研'].includes(id))return false;PlanningWorkbench.createTask({workspace:id});break;
  case'create-project-task':{const project=state.projects.find(x=>x.id===id&&active(x));if(!project)return false;PlanningWorkbench.createTask({workspace:project.workspace,projectId:project.id});break;}
  case'reader':document.getElementById('readingToggle')?.click();break;
@@ -261,6 +355,14 @@ window.NativeShell={getNavigationVersion(){return nativeNavigationVersion;},isWo
  case'organize-conversations':if(!window.ConversationOrganizer)return false;window.ConversationOrganizer.open();break;
  case'theme':if(!['light','dark'].includes(id))return false;state.ui.theme=id;applyUiPreferences();save();break;
  default:return false;}snapshot();return true;}};
+// Diagnostics return only fixed reason categories, never exception messages,
+// record identities or content. The ordinary command still owns all guards.
+window.NativeShell.performWithDiagnostics=async command=>{
+ const diagnostic={reason:'renderer_rejected'};quickNavigationDiagnostics.set(command,diagnostic);
+ try {const value=await window.NativeShell.perform(command);return {accepted:value===true,reason:value===true?'opened':diagnostic.reason,ackKind:typeof value==='boolean'?'boolean':value==null?'empty':typeof value==='object'?'object':'other'};}
+ catch(error){return {accepted:false,reason:'renderer_exception',exceptionCategory:['TypeError','ReferenceError','SyntaxError','RangeError','DOMException','AbortError'].includes(error?.name)?error.name:'Error'};}
+ finally{quickNavigationDiagnostics.delete(command);}
+};
 window.addEventListener('aibro-native-space-navigation',snapshot);
 setInterval(snapshot,500);snapshot();
 })();

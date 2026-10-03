@@ -47,6 +47,30 @@ test('HTML, wiki syntax, footnotes and reference definitions explicitly fall bac
   }
 });
 
+test('Milkdown empty-paragraph markers are supported without weakening arbitrary HTML fallback', () => {
+  for (const source of [
+    'Before\n\n<br />\n\n<br />\n\nAfter',
+    '> Before\n>\n> <br />\n>\n> After',
+    '- Before\n\n  <br />\n\n  After',
+    '| A | B |\n| - | - |\n| <br /> | value |',
+  ]) assert.equal(policy.diagnoseMarkdown(parser.parse(source)).supported, true, source);
+  for (const source of [
+    'Before <br /> after', 'Before\n<br />\nafter', '<br class="kept">', '<br data-id="source">',
+    '<br style="height:40px">', '<br onclick="run()">', '<br /><br />', '<br />\n<script>run()</script>',
+    '<a href="#note:kept" data-source-id="kept">linked</a>', '<!-- metadata: kept -->', '<BR class=x />',
+  ]) {
+    const result = policy.diagnoseMarkdown(parser.parse(source));
+    assert.equal(result.supported, false, source); assert.match(result.reason, /HTML/);
+  }
+});
+
+test('safe empty-paragraph markers do not mask unsupported syntax later in the document', () => {
+  for (const suffix of ['<custom data-value="keep">x</custom>', '[[wiki]]', '[^1]\n\n[^1]: keep', '```js title="keep"\nx()\n```']) {
+    assert.equal(policy.diagnoseMarkdown(parser.parse(`Before\n\n<br />\n\n${suffix}`)).supported, false);
+  }
+  assert.equal(policy.diagnoseMarkdown(parser.parse('Before\n\n<br />\n\n来源 [note:demo-note]；[资料](#note:demo-note)')).supported, true);
+});
+
 test('unknown syntax inside a code block is editable code, not a false fallback', () => {
   const source = '```md\n<div>hi</div>\n[[wiki]]\n::: aside\n[^1]: note\n```';
   assert.equal(policy.diagnoseMarkdown(parser.parse(source)).supported, true);

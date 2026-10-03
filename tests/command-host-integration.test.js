@@ -27,6 +27,10 @@ function harness() {
     sendMessage() {},
   };
   vm.createContext(context);
+  const globalOpen = source.indexOf('async function openGlobalSearchResult(');
+  const localOpen = source.indexOf('\nasync function openSearchResult(', globalOpen);
+  assert.ok(globalOpen >= 0 && localOpen > globalOpen);
+  vm.runInContext(source.slice(globalOpen, localOpen), context);
   vm.runInContext(source.slice(begin, end), context);
   vm.runInContext('commandSearchController()', context);
   return { context, opened, release, command: hooks.commands.find(command => command.id === 'current-project') };

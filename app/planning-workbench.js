@@ -5,6 +5,7 @@
   else root.PlanningWorkbench = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (root, evidence, dependencies) {
   'use strict';
+  const taskWorkflow = () => typeof module === 'object' && module.exports ? require('./task-workflow.js') : root.TaskWorkflow;
   const SPACES = ['日常', '课程', '科研'];
   const STATUSES = { todo: '待开始', in_progress: '进行中', done: '已完成', blocked: '受阻' };
   const PRIORITIES = { low: '低', medium: '中', high: '高' };
@@ -124,12 +125,17 @@
     const status = input.status || 'todo', priority = input.priority || 'medium';
     if (!Object.hasOwn(STATUSES, status)) throw new Error('任务状态无效。');
     if (!Object.hasOwn(PRIORITIES, priority)) throw new Error('任务优先级无效。');
+    const category = {};
+    if (Object.hasOwn(input, 'workflowCategory')) {
+      if (!taskWorkflow()?.validCategory(input.workflowCategory)) throw new Error('任务分类无效。');
+      category.workflowCategory = input.workflowCategory;
+    }
     const startAt = input.startAt || null, dueAt = input.dueAt || null; validateDates(startAt, dueAt);
     const target = destination(state, input);
     const id = context.uid ? context.uid('task') : `task_${globalThis.crypto.randomUUID()}`;
     if (typeof id !== 'string' || !id || list(state.tasks).some(task => task.id === id)) throw new Error('任务编号冲突，请重试。');
     const now = context.now ?? Date.now();
-    return { id, title, description, ...target, status, priority, startAt, dueAt, checklist: [], sourceAttachmentIds: [], createdAt: now, updatedAt: now, completedAt: status === 'done' ? now : null };
+    return { id, title, description, ...target, status, priority, ...category, startAt, dueAt, checklist: [], sourceAttachmentIds: [], createdAt: now, updatedAt: now, completedAt: status === 'done' ? now : null };
   }
   function planMove(state, ids, target, context = {}) {
     if (!Array.isArray(ids) || !ids.length || ids.length > 2000 || ids.some(id => typeof id !== 'string' || !id)) throw new Error('请选择 1 至 2000 个任务。');
@@ -204,7 +210,16 @@
     if (kind === 'create') createDialog = dialog; else moveDialog = dialog;
     return dialog;
   }
-  function showDialog(dialog) { if (!dialog.open) dialog.showModal(); }
+  function prepareDialog(dialog) {
+    const document = dialog?.ownerDocument || doc();
+    const nativeShell = !!root.webkit?.messageHandlers?.workspace || document?.body?.classList?.contains('aibro-native');
+    // The native glass layer hides preceding workspace siblings. WebKit can
+    // then omit a trailing top-layer dialog from AX, even while painting it.
+    // Reorder only a closed, body-owned dialog; keep its fields and listeners.
+    if (nativeShell && dialog && !dialog.open && dialog.parentElement === document?.body && document.body.firstElementChild !== dialog) document.body.prepend(dialog);
+    return dialog;
+  }
+  function showDialog(dialog) { if (!dialog.open) { prepareDialog(dialog); dialog.showModal(); } }
   function defaultDestination(scope) {
     if (scope?.projectId) return destination(stateNow(), scope);
     return destination(stateNow(), { workspace: scope?.workspace || '日常' });
@@ -262,6 +277,7 @@
       const mount = session.hooks.mount || ((host, name, props) => root.HalaskaUI.mount(host, name, props));
       session.island = mount($('#planningCreateSurface'), 'TaskCreateForm', {
         initial: { workspace: target.workspace, projectId: target.projectId || '', status: 'todo', priority: 'medium', title: '', description: '', dueAt: '', startAt: '' },
+        workflowOptions: taskWorkflow().keys.map(value => ({ value, label: taskWorkflow().names(session.owner)[value] })),
         projects: publicProjects(session.owner).map(project => ({ id: project.id, name: project.name || '未命名项目', workspace: workspace(project.workspace) })),
         busy: false, error: '', onSubmit: submit, onCancel: () => closeCreate(session)
       });
@@ -329,6 +345,12 @@
   function readTaskEditor(task) {
     if (!list(stateNow().tasks).some(item => item.id === task?.id && scopeInfo(stateNow()).matches(item))) throw new Error('任务已归档、删除或不可用，请关闭后重试。');
     const patch = destination(stateNow(), { workspace: $('#taskWorkspaceInput')?.value || workspace(task.workspace), projectId: $('#taskProjectInput')?.value || null });
+    const categoryField = $('#taskWorkflowInput');
+    if (categoryField) {
+      const value = categoryField.value === '' ? null : categoryField.value;
+      if (!taskWorkflow()?.validCategory(value)) throw new Error('任务分类无效。');
+      if (value !== taskWorkflow().category(task)) patch.workflowCategory = value;
+    }
     patch.startAt = inputDate($('#taskStartInput')?.value ?? dateField(task.startAt), '开始日期', task.startAt);
     const dueDate = inputDate($('#taskDueInput')?.value || '', '截止日期'), time = $('#taskTimeInput')?.value || '';
     if (time && !dueDate) throw new Error('设置截止时间前，请先选择截止日期。');
@@ -387,5 +409,5 @@
     releaseCreate(createSession); createDialog?.remove?.(); moveDialog?.remove?.();
     hooks = options; createDialog = null; moveDialog = null; createSession = null; moveSession = null; return this;
   }, isBusy: () => creating || moving,
-    derive, planCreate, planMove, parseDate, dateField, validateDates, timelineScale, active, createTask, moveTasks, render, enhanceTaskEditor, readTaskEditor };
+    derive, planCreate, planMove, parseDate, dateField, validateDates, timelineScale, active, prepareDialog, createTask, moveTasks, render, enhanceTaskEditor, readTaskEditor };
 });

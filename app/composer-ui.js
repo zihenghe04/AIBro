@@ -9,6 +9,8 @@
   composerModel:{label:t('选择模型','Choose model'),icon:'model',hasPopup:'dialog',variant:'secondary'},
   composerPermission:{label:t('跟随空间设置','Workspace permissions'),icon:'shield',hasPopup:'dialog'},
   composerLocal:{label:t('本机项目','Local projects'),icon:'folder',hasPopup:'dialog'},
+  composerVoice:{label:t('语音输入','Voice input'),icon:'mic',iconOnly:true},
+  composerVoiceSettings:{label:t('语音 API 与 Key…','Speech API and Key…'),icon:'mic'},
   composerMore:{label:t('更多工具','More tools'),icon:'more',iconOnly:true},
   agentSend:{label:sending?t('停止执行','Stop run'):t('发送','Send'),icon:sending?'stop':'send',iconOnly:true,variant:sending?'secondary':'accent'}
  });
@@ -35,6 +37,7 @@
  }
  root.ComposerUI={init,createAction,rootFor:node=>node?.closest?.('[data-composer-control]')||node,
   setContext:props=>update('composerContext',props),setModel:props=>update('composerModel',props),setPermission:props=>update('composerPermission',props),
+  setVoice:props=>update('composerVoice',props),
   setSending:value=>{sending=!!value;return update('agentSend',{});},get mounted(){return booted;}};
  init();
 })(globalThis);

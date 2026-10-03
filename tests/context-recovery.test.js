@@ -34,13 +34,18 @@ test('history reduction keeps recent exact corrections, loaded policy, receipts,
 });
 
 test('real HTTP overflow reduces history once with the same selected protocol and a visible recovery activity',async t=>{
+ const recoveryIds=new Set();
  for(const protocol of ['responses','chat']){
   const f=await fixture(t,(res,n)=>n===1?json(res,OVERFLOW,400):json(res,protocol==='chat'?{choices:[{message:{content:'recovered'}}]}:{output_text:'recovered'}));
   const {agent}=contextFixture(),activities=[],input=agent.instructions()+'\nCURRENT_GOAL';let recovered;
   assert.equal(await f.transport.requestPlan({...options,protocol,input,onActivity:value=>activities.push(value),recoverInput:({input})=>(recovered=agent.compactHistory(input))?.input}),'recovered');
   assert.equal(f.calls.length,2);assert.equal(f.calls[0].url,f.calls[1].url);assert.ok(recovered.coverage.recovered);
   assert.match(JSON.stringify(f.calls[1].body),/最新纠正/);assert.match(JSON.stringify(f.calls[1].body),/CURRENT_GOAL/);assert.ok(JSON.stringify(f.calls[1].body).length<JSON.stringify(f.calls[0].body).length);
-  assert.equal(activities.filter(value=>value.id==='commentary:context-recovery').length,1);
+  const recovery=activities.filter(value=>value.id?.endsWith(':context-recovery'));
+  assert.equal(recovery.length,1);assert.match(recovery[0].id,/^commentary:.+:context-recovery$/);
+  assert.equal(recovery[0].source,'transport');assert.equal(recovery[0].kind,'commentary');assert.equal(recovery[0].status,'completed');
+  assert.equal(recovery[0].name,'上下文恢复');assert.match(recovery[0].text,/缩减较早对话并重试一次/);
+  assert.equal(recoveryIds.has(recovery[0].id),false,'each request keeps a distinct recovery activity identity');recoveryIds.add(recovery[0].id);
  }
 });
 

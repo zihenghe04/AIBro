@@ -13,11 +13,12 @@ const t = (zh, en) => /^en(?:-|$)/i.test(globalThis.WorkstationI18n?.getLanguage
 
 // The host owns execution, persistence and the phase transition. Rendering or
 // pressing a button cannot acknowledge a save or advance this card by itself.
-export function RunCheckpointCard({ phase, actionCount = 0, at, busy = false, error = '', onContinue, onSave, onHistory }) {
+export function RunCheckpointCard({ phase, actionCount = 0, hasSavedResult = false, at, busy = false, error = '', onContinue, onSave, onHistory }) {
   if (!['prepared', 'applied', 'committed'].includes(phase)) return null;
   const committed = phase === 'committed';
   const prepared = phase === 'prepared';
-  const title = committed ? t('结果已保存', 'Results saved') : prepared
+  const committedLabel = hasSavedResult === true ? t('结果已保存', 'Results saved') : t('已完成', 'Completed');
+  const title = committed ? committedLabel : prepared
     ? t('整理计划已保留', 'Organization plan retained')
     : t('操作已应用，等待保存确认', 'Changes applied, awaiting save confirmation');
   const description = prepared
@@ -31,7 +32,7 @@ export function RunCheckpointCard({ phase, actionCount = 0, at, busy = false, er
   const errorText = typeof error === 'string' ? error : '';
   if (committed) return <section className="run-checkpoint-card run-checkpoint-saved" data-checkpoint-phase={phase}
     aria-label={t('执行恢复与保存状态', 'Execution recovery and save status')}>
-    <StatusBadge status="online" pulse={false}>{t('结果已保存', 'Results saved')}</StatusBadge>
+    <StatusBadge status="online" pulse={false}>{committedLabel}</StatusBadge>
     {count > 0 && <span className="run-checkpoint-saved-count" title={timestamp?.toLocaleString()}>
       {t(`${count} 项本机操作`, `${count} local ${count === 1 ? 'operation' : 'operations'}`)}
     </span>}

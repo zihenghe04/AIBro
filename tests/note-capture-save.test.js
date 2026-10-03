@@ -239,6 +239,11 @@ for (const [name, navigate] of Object.entries(laterNavigation)) {
     assert.deepEqual(copy({ ui: h.state.ui, conversationId: h.state.currentConversationId, projectId: h.state.currentProjectId, preview: h.state.previewRecord }), latest);
     noSuccess(h.calls);
     assert.ok(h.calls.toasts.some(value => /文档已保存.*稍后/.test(value)), 'notify that the saved note can be opened later');
+    if (name === 'conversation') {
+      await h.capture('answer');
+      assert.deepEqual(h.calls.opened, [], 'an old message ID cannot open from a different conversation');
+      h.state.currentConversationId = note.sourceConversationId;
+    }
     await h.capture('answer');
     assert.equal(h.calls.durable.length, 1);
     assert.equal(h.state.notes.length, 1);

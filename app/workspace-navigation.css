@@ -3,6 +3,10 @@
 .workspace-breadcrumbs{display:flex;align-items:center;gap:7px;min-width:0;font-size:11px;line-height:1.6;margin-bottom:7px;overflow:hidden;white-space:nowrap}
 .workspace-crumb{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent;box-shadow:none;padding:2px 0;border-radius:3px;color:var(--muted);font-size:inherit}
 .workspace-crumb:first-child{flex:none}.workspace-crumb[aria-current=page]{color:var(--text)}
+.workspace-paths{flex:none;margin-left:auto;display:inline-flex}
+.workspace-paths>button{min-height:28px;padding:4px 8px;font-size:11px;box-shadow:none}
+.workspace-breadcrumbs .workspace-paths+.workspace-all-chats{margin-left:0}
+body.workspace-navigation-ready #conversationPathChip{display:none}
 button.workspace-crumb:hover{color:var(--text);background:transparent;text-decoration:underline;text-underline-offset:3px}
 .workspace-crumb-separator{flex:none;color:var(--faint);opacity:.6}.workspace-project-tabs{display:flex;align-items:center;gap:4px;min-width:0;margin:0!important;padding:0;border:0;overflow:auto;scrollbar-width:none}
 .workspace-project-tabs::-webkit-scrollbar{display:none}.workspace-project-tabs>.section-tab{flex:none;min-height:34px;padding:7px 11px;font-size:12px;white-space:nowrap}

@@ -133,11 +133,23 @@
   run.evidenceSources=values;return source;
  }
  function referenceFor(run,refKey){return list(run.fileReferences).find(ref=>ref.refKey===refKey||JSON.stringify(ref.type==='local'?['local',ref.candidateId,ref.path]:[ref.type,ref.id])===refKey)||{};}
- function captureRetained(run,retained,state){
-  const context=captureContext(run);
+ function captureRetained(run,retained,state,{validateOnly=false}={}){
+  const context=validateOnly?null:captureContext(run),accessContext=createAccessContext(state);
+  const Knowledge=typeof module==='object'&&module.exports?require('./knowledge-access'):root.KnowledgeAccess;
+  const readFailures=Knowledge?.readValidationFailures(list(retained).map(entry=>entry.result),state);
+  const denied=entry=>({request:entry.request,result:{error:'资料归属、原文或可读范围已变化，请重新检索',code:'KNOWLEDGE_SOURCE_CHANGED'},...(entry.imagesIncluded!==undefined?{imagesIncluded:false}:{})});
+  const allowed=source=>{
+   if(!['note','import','paper','task','local'].includes(source.type))return true;
+   const current=accessContext.access(source);
+   return current.available&&(source.type==='local'||source.projectId===undefined||(source.projectId||null)===(current.record?.projectId||null));
+  };
   return list(retained).map(entry=>{
-   const request=entry.request||{},result=entry.result||{};if(result.error||result.contextPreview!==undefined)return entry;
-   const ref=referenceFor(run,result.refKey||request.refKey),base={type:result.type||request.recordType,id:result.id||request.id||ref.id,title:result.title||ref.title,page:result.page,offset:result.offset,version:result.version,variant:result.variant,refKey:result.refKey||request.refKey,projectId:ref.projectId,candidateId:ref.candidateId,path:ref.path,origin:request.type};
+   const request=entry.request||{},result=entry.result||{};if(result.error)return entry;
+   if(readFailures?.has(result))return denied(entry);
+   const ref=referenceFor(run,result.refKey||request.refKey),base={type:result.type||request.recordType,id:result.id||request.id||ref.id,title:result.title||ref.title,page:result.page,offset:result.offset,version:result.version,variant:result.variant,refKey:result.refKey||request.refKey,projectId:Object.hasOwn(result,'projectId')?result.projectId:ref.projectId,candidateId:ref.candidateId,path:ref.path,origin:request.type};
+   if(['read','read_file','read_page'].includes(request.type)&&!allowed(base))return denied(entry);
+   if(result.contextPreview!==undefined)return entry;
+   if(validateOnly&&!['search','neighbors'].includes(request.type))return entry;
    if(['read','read_file','read_page'].includes(request.type)&&typeof result.text==='string'){
     const end = Number.isSafeInteger(result.offset) ? result.offset + (base.type === 'local' || result.cursorUnit === 'unicode_codepoints' ? Array.from(result.text).length : result.text.length) : undefined;
     const source=capture(run,{...base,end,excerpt:result.text},state,context);return source?{...entry,result:{...result,evidenceRef:source.sourceId}}:entry;
@@ -146,11 +158,17 @@
     const source=capture(run,{...base,type:'import',media:'page_image'},state,context);return source?{...entry,result:{...result,evidenceRef:source.sourceId}}:entry;
    }
    if(['search','neighbors'].includes(request.type)&&Array.isArray(result.entries)){
-    const entries=result.entries.map(row=>{const source=capture(run,{type:row.type,id:row.recordId||row.id,title:row.title,page:row.page,offset:row.chunkOffset??row.offset,end:row.chunkEnd??row.end,version:row.version,excerpt:typeof row.excerpt==='string'?row.excerpt:row.text,projectId:row.projectId,origin:request.type},state,context);return source?{...row,evidenceRef:source.sourceId}:row;});
+    const entries=result.entries.filter(row=>allowed({...row,id:row.recordId||row.id})).map(row=>{if(validateOnly)return row;const source=capture(run,{type:row.type,id:row.recordId||row.id,title:row.title,page:row.page,offset:row.chunkOffset??row.offset,end:row.chunkEnd??row.end,version:row.version,excerpt:typeof row.excerpt==='string'?row.excerpt:row.text,projectId:row.projectId,origin:request.type},state,context);return source?{...row,evidenceRef:source.sourceId}:row;});
     return {...entry,result:{...result,entries}};
    }
    return entry;
   });
+ }
+ // Check every cached result, including those omitted by the model budget,
+ // without claiming they were supplied or adding them to the citation archive.
+ function validateRetained(run,retained,state){
+  const checked=captureRetained(run,retained,state,{validateOnly:true});
+  return list(retained).every((entry,i)=>entry.result?.error||checked[i]?.result?.code!=='KNOWLEDGE_SOURCE_CHANGED'&&(!Array.isArray(entry.result?.entries)||!Array.isArray(checked[i]?.result?.entries)||entry.result.entries.length===checked[i].result.entries.length));
  }
  function captureInitial(run,{fileContext,preparedAttachments,recalled,delivery}={},state){
   const found=[],context=captureContext(run);
@@ -182,6 +200,33 @@
   return found.length?'\n本轮已提供的引用编号（各来源 parts 对应已提供片段；仅标识资料，不代表已验证结论）：'+JSON.stringify([...groups.values()]):'';
  }
  const matchingRun=(message,run)=>run?.id&&[message?.runId,message?.pendingRunId,message?.retryRunId].includes(run.id)?run:null;
+ // A copied answer keeps attribution without inheriting execution state. This
+ // explicit receipt is created only at the branch boundary, never inferred by
+ // searching all conversations for a possibly duplicated message identifier.
+ function branchOrigin(message){
+  const origin=message?.citationOrigin;
+  return !message?.runId&&!message?.pendingRunId&&!message?.retryRunId&&!message?.live&&
+   ['agent','assistant'].includes(message?.role)&&origin?.version===1&&origin.messageId===message.id&&
+   str(origin.runId)&&str(origin.conversationId)?origin:null;
+ }
+ function runForCitations(message,run,state={}){
+  const direct=matchingRun(message,run);if(direct)return direct;
+  const origin=branchOrigin(message);if(!origin)return null;
+  const runs=matches(state.agentRuns,origin.runId),owners=matches(state.conversations,origin.conversationId);
+  return runs.length===1&&owners.length===1&&active(runs[0])&&active(owners[0])&&
+   runs[0].conversationId===origin.conversationId?runs[0]:null;
+ }
+ function originForBranch(message,conversation,state={}){
+  if(!message?.id||message.live||!['agent','assistant'].includes(message.role)||
+   matches(state.conversations,conversation?.id).length!==1||matches(state.conversations,conversation?.id)[0]!==conversation||
+   !list(conversation?.messages).includes(message))return null;
+  const id=message.runId||message.pendingRunId||message.retryRunId;
+  const candidates=matches(state.agentRuns,id);
+  const direct=candidates.length===1&&candidates[0].conversationId===conversation.id?candidates[0]:null;
+  const run=runForCitations(message,direct,state);
+  if(!active(run)||!list(run.evidenceSources).some(source=>source?.provided===true&&source.sourceId))return null;
+  return {version:1,conversationId:run.conversationId,messageId:message.id,runId:run.id};
+ }
  // Selecting identities is deliberately independent of the workspace. A closed
  // disclosure needs its count, not source bodies, privacy graphs or fingerprints.
  function sourceEntries(message,run){
@@ -193,8 +238,10 @@
   return [...sources,...refs];
  }
  function sourcesFor(message,run,state){
-  run=matchingRun(message,run);
-  return sourceEntries(message,run).map(s=>redact({...s,runId:run?.id||null,...(privateItem(run)?{private:true}:{}),title:s.title||recordFor(state,s.type,s.id)?.title||recordFor(state,s.type,s.id)?.name||'Untitled'},state));
+  run=runForCitations(message,run,state);
+  const origin=branchOrigin(message);
+  return sourceEntries(message,run).map(s=>redact({...s,runId:run?.id||origin?.runId||null,
+   ...(origin?{sourceConversationId:origin.conversationId}:{}),...(privateItem(run)?{private:true}:{}),title:s.title||recordFor(state,s.type,s.id)?.title||recordFor(state,s.type,s.id)?.name||'Untitled'},state));
  }
  function status(source,state,cache){
   const visibility=access(state,source);
@@ -339,10 +386,10 @@
   }
   return {sources,retrieval,attachments,limited:!!run?.evidenceLimitReached,excerptLimited:!!run?.evidenceExcerptLimitReached,hasContent:!!(sources.length||retrieval||attachments)};
  }
- function evidenceOutline(message,run){
+ function evidenceOutline(message,run,state){
   run=matchingRun(message,run);
   const coverage=run?.retrievalCoverage,delivery=run?.attachmentDelivery,textCoverage=run?.attachmentCoverage;
-  const sourceCount=sourceEntries(message,run).length;
+  const sourceCount=sourceEntries(message,runForCitations(message,run,state)).length;
   const retrieval=['hybrid-rrf','local-bm25'].includes(coverage?.strategy)||
    !!(coverage&&coverage.strategy!=='not-requested'&&['eligibleRecords','returnedChunks','returnedRecords'].some(key=>nonnegative(coverage[key])!==null))||
    list(message?.retrievedSources).some(value=>value&&typeof value==='object');
@@ -396,7 +443,7 @@
   record.context=null;record.getContext=null;record.model=null;record.props=null;
  }
  function section(message,run,state,{previous,getContext,search=false}={}){
-  const outline=evidenceOutline(message,run);if(!outline.hasContent)return null;
+  const outline=evidenceOutline(message,run,state);if(!outline.hasContent)return null;
   const doc=root.document,details=doc.createElement('details');details.className='message-steps citation-sources';details.dataset.citationPanel=message?.id||'';details.dataset.citationDeferred='';details.dataset.liveKey='citation-evidence';details.open=message?.evidenceOpen===true;
   const summary=doc.createElement('summary');summary.textContent=outlineLabel(outline);details.append(summary);
   summary.addEventListener('keydown',event=>{if(event.target!==summary||event.key!=='Enter'||event.repeat||event.isComposing||event.metaKey||event.ctrlKey||event.altKey)return;event.preventDefault();summary.click();});
@@ -462,5 +509,5 @@
   const first=parts.find(p=>p.start<=at&&p.start+p.node.data.length>at),last=parts.find(p=>p.start<at+quote.length&&p.start+p.node.data.length>=at+quote.length);if(!first||!last)return false;
   const range=doc.createRange();range.setStart(first.node,at-first.start);range.setEnd(last.node,at+quote.length-last.start);if(root.CSS?.highlights&&root.Highlight)root.CSS.highlights.set('citation-location',new root.Highlight(range));first.node.parentElement.scrollIntoView({block:'center',behavior:'instant'});return true;
  }
- return {LIMITS,instructions,safeURL,access,createAccessContext,redact,capture,captureInitial,captureRetained,sourcesFor,status,location,markers,documentText,documentSource,exportText,recordFor,body,decorate,evidenceModel,evidenceOutline,section,patchSection,discard,materializeForSearch,bind,resolveTarget,reveal};
+ return {LIMITS,instructions,safeURL,access,createAccessContext,redact,capture,captureInitial,captureRetained,validateRetained,runForCitations,originForBranch,sourcesFor,status,location,markers,documentText,documentSource,exportText,recordFor,body,decorate,evidenceModel,evidenceOutline,section,patchSection,discard,materializeForSearch,bind,resolveTarget,reveal};
 });

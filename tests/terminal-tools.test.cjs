@@ -79,3 +79,17 @@ test('scope changes cancel and reconcile the real handle before returning interr
  await assert.rejects(h.T.execute({argv:['pwd']},state,run,{save(){},refresh(){}}),{code:'CANCELLED'});
  assert.equal(starts,1);assert.equal(cancels,1);assert.equal(run.commands[0].status,'cancelled');assert.equal(run.commands[0].output,'before scope changed');
 });
+
+test('live command output retains the host tool-call relation through completion',async()=>{
+ const snapshots=[];
+ const h=isolatedTerminal(async(path)=>{
+  if(path.endsWith('/propose'))return {id:'cmd-related',candidateId:'c',projectId:'p',argv:['pwd'],trusted:true,status:'pending'};
+  if(path.endsWith('/start'))return {status:'running',output:'working'};
+  return {status:'succeeded',output:'done',exitCode:0};
+ });
+ const run=commandRun();
+ await h.T.execute({argv:['pwd'],toolCallId:'model-injected'},commandState(),run,{toolCallId:'host-call-7',save(){snapshots.push(JSON.parse(JSON.stringify(run.commands[0])));},refresh(){}});
+ assert.ok(snapshots.some(c=>c.status==='running'&&c.output==='working'));
+ assert.ok(snapshots.every(c=>c.toolCallId==='host-call-7'));
+ assert.equal(run.commands[0].toolCallId,'host-call-7');
+});

@@ -55,7 +55,7 @@ function ContextEditor({ item, contextView, catalog, query, local, busy, pdfRead
 }
 function Editor({ item, draft, busy, onDraft, onSave, onCancel, confirmReload, onReload, onConfirmReload, onCancelReload, ...context }) {
  const ref=useRef(null), composing=useRef(false);
- useLayoutEffect(()=>{const input=ref.current.querySelector('textarea');input.setAttribute('aria-label',t('编辑排队消息','Edit queued message'));input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);},[item.id]);
+ useLayoutEffect(()=>{const input=ref.current.querySelector('textarea');input.id=`queue-text-${item.id}`;input.setAttribute('aria-label',t('编辑排队消息','Edit queued message'));input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);},[item.id]);
  useLayoutEffect(()=>{ref.current.querySelector('textarea').setAttribute('aria-label',t('编辑排队消息','Edit queued message'));});
  return <div className="queue-edit" ref={ref} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}} onKeyDown={event=>{if(composing.current||event.isComposing||event.nativeEvent?.isComposing||event.keyCode===229)return;if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();event.stopPropagation();if(!busy&&draft.trim())onSave();}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(!busy)(confirmReload?onCancelReload:onCancel)();}}}>
   <TextArea value={draft} onChange={onDraft} disabled={busy} rows={3}/>

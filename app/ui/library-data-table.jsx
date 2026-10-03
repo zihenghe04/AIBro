@@ -24,7 +24,7 @@ function TableSelection({ checked, indeterminate, disabled, onChange, row, all }
 function TableAction({ attribute, attributeValue = '', className, children, ...props }) {
   const ref = useRef(null);
   useLayoutEffect(() => { ref.current?.querySelector('button')?.setAttribute(attribute, attributeValue); }, [attribute, attributeValue]);
-  return <span ref={ref} className={className}><Button variant="ghost" size="sm" {...props}>{children}</Button></span>;
+  return <span ref={ref} className={className}><Button type="button" variant="ghost" size="sm" {...props}>{children}</Button></span>;
 }
 function FileIcon({ kind }) {
   return <svg className={`library-data-icon ${kind}`} viewBox="0 0 24 24" aria-hidden="true">
@@ -48,8 +48,9 @@ export function LibraryDataTable({ rows = [], selectedKeys = [], sort = { key: '
     const tone = ['done', 'analysis-pending', 'warning', 'error'].includes(row.statusTone) ? row.statusTone : '';
     const values = {
       name: <TableAction className="library-data-open" attribute="data-cui-open" disabled={busy || typeof onOpen !== 'function'}
+        aria-label={t(`打开${typeLabel(row.kind)}：${row.title}`, `Open ${typeLabel(row.kind).toLowerCase()}: ${row.title}`)} title={row.title}
         onClick={event => { if (!busy) onOpen?.(row.key, event.currentTarget); }}>
-        <FileIcon kind={row.kind} /><span className="library-data-name"><strong>{row.title}</strong><small>{row.folder || typeLabel(row.kind)}</small></span>
+        <FileIcon kind={row.kind} /><span className="library-data-name" aria-hidden="true"><strong>{row.title}</strong><small>{row.folder || typeLabel(row.kind)}</small></span>
       </TableAction>,
       project: row.projectId ? <TableAction className="library-data-project" attribute="data-cui-project" attributeValue={row.projectId}
         disabled={busy || typeof onProject !== 'function'} onClick={() => { if (!busy) onProject?.(row.key); }}>{row.projectName}</TableAction> : <span className="library-data-unassigned">{row.projectName || t('未归属项目', 'No project')}</span>,

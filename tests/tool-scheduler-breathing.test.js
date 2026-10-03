@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-// 最小 DOM stub：card() 只需要 createElement/append/dataset/className/open。
-const mkNode=tag=>{const node={tagName:String(tag).toUpperCase(),className:'',children:[],dataset:{},textContent:'',open:false,append(...kids){node.children.push(...kids);},querySelectorAll(){return[];}};return node;};
+// Minimal lifecycle-only DOM. Keyboard behavior uses conversation-tool-text's DOM.
+const mkNode=tag=>{const node={tagName:String(tag).toUpperCase(),className:'',children:[],dataset:{},textContent:'',open:false,addEventListener(){},append(...kids){node.children.push(...kids);},querySelectorAll(){return[];}};return node;};
 globalThis.document={createElement:tag=>mkNode(tag)};
 const S=require('../app/tool-scheduler');
 const shell=()=>({toolCalls:[

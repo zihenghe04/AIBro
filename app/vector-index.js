@@ -64,8 +64,26 @@
       });}
     };
   }
-  function create({getState,store,embed,onProgress=()=>{}}) {
+  function create({getState,store,embed,onProgress=()=>{},queryTimeoutMs=8000}) {
     const queryCache=new Map();let updating=false;
+    // A query is on the conversation's critical path. Index batches keep their
+    // own lifetime, but an optional semantic lookup must not hold local search
+    // indefinitely. Race as well as abort: native credential bridges and some
+    // providers may not settle their promise when the signal is cancelled.
+    async function embedQuery(cfg,query,signal) {
+      check(signal);
+      const controller=new AbortController();let timer,onAbort;
+      const stopped=new Promise((_,reject)=>{
+        onAbort=()=>{controller.abort();reject(cancelled());};
+        signal?.addEventListener('abort',onAbort,{once:true});
+        timer=setTimeout(()=>{
+          controller.abort();
+          reject(Object.assign(Error('语义检索等待超时，本轮使用本地关键词检索；可稍后重试。'),{code:'EMBEDDING_QUERY_TIMEOUT'}));
+        },queryTimeoutMs);
+      });
+      try {return await Promise.race([Promise.resolve().then(()=>{check(controller.signal);return embed(cfg,[query],controller.signal);}),stopped]);}
+      finally {clearTimeout(timer);signal?.removeEventListener('abort',onAbort);}
+    }
     async function status(cfg) {
       const id=await profile(cfg),[items,stored]=await Promise.all([snapshot(getState()),store.load(id)]),byId=new Map(stored.map(x=>[x.id,x]));
       const live=new Set(items.map(e=>e.id)),ready=items.filter(e=>byId.get(e.id)?.hash===e.hash).length;
@@ -92,28 +110,44 @@
     }
     async function search(cfg,query,scope={},offset=0,{signal}={}) {
       check(signal);if(!Number.isSafeInteger(offset)||offset<0)throw Error('Invalid knowledge cursor');
-      const lexical=R.searchIndex(getState(),{...scope,query,offset:0,allowedTaskIds:[],all:true});
       const id=await profile(cfg),items=await snapshot(getState(),{...scope,query}),stored=new Map((await store.load(id)).map(v=>[v.id,v]));
       const eligible=items.filter(e=>stored.get(e.id)?.hash===e.hash);
       let semantic=[],semanticStatus=eligible.length?'ready':'not-indexed';
       if(eligible.length&&query.trim()){
         const key=id+':'+query;let vector=queryCache.get(key);
-        if(!vector){const values=await embed(cfg,[query],signal);check(signal);validate(values,1,cfg.dimensions);vector=values[0];queryCache.set(key,vector);if(queryCache.size>100)queryCache.delete(queryCache.keys().next().value);}
+        if(!vector){const values=await embedQuery(cfg,query,signal);check(signal);validate(values,1,cfg.dimensions);vector=values[0];queryCache.set(key,vector);if(queryCache.size>100)queryCache.delete(queryCache.keys().next().value);}
         if(eligible.some(e=>stored.get(e.id).vector.length!==vector.length))throw Error('查询向量与索引维度不匹配，请检查模型或重建索引');
         semantic=eligible.map(e=>({...e,similarity:cosine(vector,stored.get(e.id).vector)})).filter(e=>e.similarity>0).sort((a,b)=>b.similarity-a.similarity||a.id.localeCompare(b.id));
       }
+      // Tags are lexical metadata, deliberately absent from embedding input/hash.
+      // Rank their current saved values after the provider wait so removing a
+      // tag cannot leave a stale lexical-only hit in a healthy hybrid response.
+      const current=getState(),lexical=R.searchIndex(current,{...scope,query,offset:0,allowedTaskIds:[],all:true});
       const fused=new Map();
       for(const ranking of [lexical.entries,semantic])ranking.forEach((e,i)=>{
         if(!fused.has(e.id))fused.set(e.id,{...e,score:0});fused.get(e.id).score+=1/(60+i+1);
       });
       // Recheck after the provider await: deleted/moved/edited evidence cannot leak back in.
-      const now=new Map((await snapshot(getState(),{...scope,query})).map(e=>[e.id,e.hash]));
-      const original=new Map(items.map(e=>[e.id,e.hash]));check(signal);
-      const ranked=[...fused.values()].filter(e=>now.has(e.id)&&now.get(e.id)===original.get(e.id)).sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id));
+      // Final authorization and metadata refresh are synchronous: a replaced
+      // workspace object has a new derived-index generation even when its text
+      // is unchanged. Return that current version for subsequent body reads.
+      const now=new Map(R.indexEntries(current,{...scope,query,allowedTaskIds:[]}).map(e=>[e.id,e]));
+      const original=new Map(items.map(e=>[e.id,e.input]));check(signal);
+      const ranked=[...fused.values()].filter(e=>now.has(e.id)&&content(now.get(e.id))===original.get(e.id)&&content(e)===original.get(e.id)).map(e=>({...now.get(e.id),score:e.score,...(e.matchBasis?{matchBasis:e.matchBasis}:{})})).sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id));
       const Window=typeof module==='object'&&module.exports?require('./context-window'):globalThis.ContextWindow;
-      const page=Window&&scope.maxTokens!==undefined?Window.page(Window.diversify(ranked.map(({input,hash,similarity,...e})=>e)),{offset,maxTokens:scope.maxTokens}):null;
-      const entries=(page?page.entries:ranked.slice(offset,offset+20)).map(({input,hash,similarity,...e})=>e);
-      return {entries,coverage:{...lexical.coverage,strategy:'hybrid-rrf',semanticStatus,vectorReady:eligible.length,vectorTotal:items.length,totalChunks:ranked.length,returnedChunks:entries.length,returnedRecords:new Set(entries.map(e=>`${e.type}:${e.recordId}`)).size,offset,nextOffset:offset+entries.length<ranked.length?offset+entries.length:null,...(page?{estimatedTokens:page.estimatedTokens,tokenBudget:page.tokenBudget}: {})}};
+      // Source breadth is a presentation step after RRF. Qualify promotions by
+      // original BM25/cosine relevance, not RRF's deliberately compressed rank
+      // scores. Revoked/changed entries cannot influence either threshold.
+      const validIDs=new Set(ranked.map(e=>e.id));
+      const eligiblePromotions=Window?new Set([
+        ...Window.promotionCandidates(lexical.entries.filter(e=>validIDs.has(e.id))),
+        ...Window.promotionCandidates(semantic.filter(e=>validIDs.has(e.id)),'similarity'),
+      ]):null;
+      const clean=ranked.map(({input,hash,similarity,...e})=>e);
+      const ordered=Window?Window.diversify(clean,eligiblePromotions):clean;
+      const page=Window&&scope.maxTokens!==undefined?Window.page(ordered,{offset,maxTokens:scope.maxTokens}):null;
+      const entries=page?page.entries:ordered.slice(offset,offset+20);
+      return {entries,coverage:{...lexical.coverage,scope:R.readScopeSummary(current,scope),strategy:'hybrid-rrf',semanticStatus,vectorReady:eligible.length,vectorTotal:items.length,totalChunks:ranked.length,returnedChunks:entries.length,returnedRecords:new Set(entries.map(e=>`${e.type}:${e.recordId}`)).size,offset,nextOffset:offset+entries.length<ranked.length?offset+entries.length:null,...(page?{estimatedTokens:page.estimatedTokens,tokenBudget:page.tokenBudget}: {})}};
     }
     return {status,update,search};
   }

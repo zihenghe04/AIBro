@@ -6,7 +6,9 @@ const root=path.resolve(__dirname,'..');
 const swift=fs.readFileSync(path.join(root,'native/Sources/AIBro/AIBro.swift'),'utf8');
 const gate=swift.slice(swift.indexOf('struct NativeDraftQuitGate {'),swift.indexOf('// SwiftUI keeps its window delegate.'));
 const native=swift.slice(swift.indexOf('// SwiftUI keeps its window delegate.'),swift.indexOf('@main struct AIBroApp:App'));
-const script=native.match(/callAsyncJavaScript\("""\n([^]*?)\n\s*"""/)[1];
+const quitRequest=native.slice(native.indexOf('func requestQuit()'),native.indexOf('func applicationShouldTerminate(_'));
+const script=quitRequest.match(/callAsyncJavaScript\("""\n([^]*?)\n\s*"""/)[1];
+assert.match(script,/window\.flushLocalDrafts/);
 const run=window=>vm.runInNewContext(`(async()=>{${script}})()`,{window});
 
 test('native quit waits for actual local draft acknowledgement without publishing notes',async()=>{
@@ -39,7 +41,7 @@ test('native lifecycle keeps backend running until approval and routes last-wind
  assert.match(native,/previous\?\.windowShouldClose\?\(sender\) \?\? true/);
  assert.match(native,/guard others\.isEmpty else\{return false\}/);
  assert.match(native,/draftQuitWindow=window;requestQuit\(\);return true/);
- assert.match(swift,/MainView\(model:model\)\.background\(NativeDraftQuitWindow\(delegate:delegate\)\)/);
+ assert.match(swift,/MainView\(model:model,quickEntry:delegate\.quickEntry\)\.background\(NativeDraftQuitWindow\(delegate:delegate\)\)/);
  assert.match(swift,/AIBRO_NATIVE_QA_HOLD[^\n]+NSApp\.terminate\(nil\)/);
 });
 
@@ -116,7 +118,58 @@ test('production AppKit quit and window forwarding methods typecheck against nat
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'aibro-native-draft-quit-api-'));
  try{
   const source=path.join(temp,'Quit.swift');
-  fs.writeFileSync(source,`import Foundation\nimport AppKit\nimport WebKit\nimport SwiftUI\nfunc nativeUI(_ zh:String,_ en:String)->String{zh}\n@MainActor final class AgendaStore{var hasUnsavedEditorDrafts=false}\n@MainActor final class Workspace:NSObject{let web=WKWebView();let agenda=AgendaStore();func stop(){}}\n${gate}\n${native}\n@MainActor struct QuitCommands:Commands{let delegate:Delegate;var body:some Commands{${swift.match(/CommandGroup\(replacing:\.appTermination\)\{Button[^]*?\};(?=CommandGroup\(replacing:\.appSettings\))/)[0].slice(0,-1)}}}`);
+  const windowTypes=native.slice(0,native.indexOf('@MainActor final class Delegate:'));
+  const quitState=native.slice(native.indexOf('private var draftQuit='),native.indexOf('private func configureQuickEntry()'));
+  const quitMethods=native.slice(native.indexOf('func observeWorkspaceWindow('),native.indexOf('func applicationWillTerminate('));
+  const lastWindowPolicy=native.match(/func applicationShouldTerminateAfterLastWindowClosed[^\n]+/)[0];
+  assert.match(quitState,/private var workspaceWindows:/);
+  assert.match(quitMethods,/func requestQuit\(\)[\s\S]+private func completeDraftQuit/);
+  // Typecheck the exact production quit/window implementations, not unrelated
+  // coordinator setup. Only their module-facing dependencies are test doubles.
+  fs.writeFileSync(source,`import Foundation
+import AppKit
+import WebKit
+import SwiftUI
+import Combine
+func nativeUI(_ zh:String,_ en:String)->String{zh}
+@MainActor final class AgendaStore{var hasUnsavedEditorDrafts=false}
+@MainActor final class Workspace:NSObject {
+ let web=WKWebView();let agenda=AgendaStore()
+}
+@MainActor final class QuitDraftDependency {
+ var hasUnsavedEditorDraft=false,saving=false
+ var hasUnsavedTaskEditorDraft=false,hasUnsavedTaskCreationFields=false,creating=false
+ var busyTaskIDs=Set<String>()
+ func flushForQuit()->Bool{true}
+ func flushPendingDraft()->Bool{true}
+ func invalidate(){}
+}
+@MainActor final class QuitMediaDependency {let recordings=QuitDraftDependency()}
+@MainActor final class NativeQuickEntryCoordinator {
+ enum Section {case home,tasks,agenda,links,recordings,vault}
+ var keepRunning=false,taskDraft=""
+ let links=QuitDraftDependency(),workbench=QuitDraftDependency()
+ func flushCaptureDraft()->Bool{true}
+ func dismiss(returnFocus:Bool){}
+ func showCapture(){}
+ func setHomeModule(_ id:String,visible:Bool){}
+ func showPanel(section:Section){}
+}
+${gate}
+${windowTypes}
+@MainActor final class Delegate:NSObject,NSApplicationDelegate {
+ var model:Workspace?
+ let quickEntry=NativeQuickEntryCoordinator()
+ let quickUtilities=QuitDraftDependency(),quickAgenda=QuitDraftDependency(),quickVault=QuitDraftDependency()
+ let quickMedia=QuitMediaDependency()
+ var voiceCommand:QuitDraftDependency?,speechDictation:QuitDraftDependency?
+ ${quitState}
+ func restoreWorkspaceWindow(){}
+ ${quitMethods}
+ ${lastWindowPolicy}
+}
+
+@MainActor struct QuitCommands:Commands{let delegate:Delegate;var body:some Commands{${swift.match(/CommandGroup\(replacing:\.appTermination\)\{Button[^]*?\};(?=CommandGroup\(replacing:\.appSettings\))/)[0].slice(0,-1)}}}`);
   const result=spawnSync('xcrun',['swiftc','-swift-version','5','-typecheck',source],{encoding:'utf8',timeout:90000});
   assert.equal(result.status,0,result.stdout+result.stderr);
  }finally{fs.rmSync(temp,{recursive:true,force:true});}

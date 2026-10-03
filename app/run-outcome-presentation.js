@@ -1,4 +1,4 @@
-/* Read-only presentation of interrupted runs. Stored answers remain untouched. */
+/* Read-only presentation of run outcomes. Stored answers remain untouched. */
 (function (root, factory) {
   const api = factory(root);
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -118,9 +118,26 @@
     return preservePartial({}, run, { rawOutput: string(message.text), inspect });
   }
 
+  function settledApprovalText(message = {}, run = {}, { language = 'zh' } = {}) {
+    const text = string(message.text), receipt = run.approvalReceipt, routing = run.routingReview;
+    if (!['agent', 'assistant'].includes(message.role) || message.live || !message.planPreview || !message.id || message.runId !== run.id
+      || run.status !== 'completed' || run.error || run.cancelled || run.approvalSaveError
+      || !receipt?.id || receipt.messageId !== message.id || receipt.metadataSettled !== true || receipt.savePending
+      || !Number.isFinite(receipt.appliedAt) || !Number.isFinite(receipt.settledAt) || receipt.settledAt < receipt.appliedAt
+      || run.executionReceipt && (run.executionReceipt.version !== 1 || run.executionReceipt.phase !== 'committed')
+      || routing?.required !== true || !string(routing.message)) return text;
+    // Only replace the exact system-generated proposal + settled receipt
+    // envelope. Similar user/model prose or an unsaved approval is unchanged.
+    const prefix = routing.message + '\n\n', suffix = '\n\n已批准并执行，具体结果见下方。';
+    if (!text.startsWith(prefix) || !text.endsWith(suffix)) return text;
+    const summary = text.slice(prefix.length, -suffix.length);
+    if (!summary.trim()) return text;
+    return (language === 'en' ? 'Course confirmed. The following operations were approved and executed.' : '课程归属已确认，以下操作已批准并执行。') + '\n\n' + summary;
+  }
+
   function present(message = {}, run = {}, { language = 'zh', responseIssue } = {}) {
     const t = (zh, en) => language === 'en' ? en : zh;
-    const sourceText = string(message.text);
+    const sourceText = settledApprovalText(message, run, { language });
     const status = run.status || message.runStatus || (message.retryRunId ? 'failed' : '');
     const showNotice = message.role !== 'user' && !message.live && terminal.has(status)
       && !!(message.retryRunId || run.error || responseIssue);
@@ -205,5 +222,5 @@
     return result;
   }
 
-  return { present, preservePartial };
+  return { present, preservePartial, settledApprovalText };
 });

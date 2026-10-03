@@ -18,6 +18,7 @@ SERVER_TESTS = (
     'tests/pdf-preview-cache.test.py',
     'tests/pdf-text.test.py',
     'tests/pdf-read-text.test.py',
+    'tests/pdf-index-extraction.test.py',
     'tests/pdf-search.test.py',
     'tests/codex-auth.test.py',
     'tests/codex-stream-budget.test.py',

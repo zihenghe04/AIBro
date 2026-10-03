@@ -11,7 +11,7 @@
 .task-detail-surface input,.task-detail-surface textarea{font-size:13px!important;border:1px solid var(--line-strong)!important;border-radius:7px!important;background:var(--panel)!important}
 .task-detail-surface input:focus,.task-detail-surface textarea:focus{border-color:var(--accent)!important;box-shadow:0 0 0 2px var(--accent-soft)}
 .task-detail-surface input[type=date],.task-detail-surface input[type=time]{min-width:0;padding:8px 10px!important}
-.task-detail-primary-properties{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:14px}
+.task-detail-primary-properties{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}.task-detail-primary-properties>div{min-width:0}
 .task-detail-surface h3{font-size:12px;font-weight:600;margin:0 0 10px}
 .task-detail-empty{font-size:12px;color:var(--faint);margin:0;line-height:1.6}
 .task-detail-check{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0;padding:4px 0}
@@ -31,4 +31,4 @@
 .task-detail-actions{position:sticky;bottom:0;z-index:1;background:var(--panel);border-top:1px solid var(--line);padding:16px 24px;margin:0 -24px -24px;display:flex;justify-content:space-between;align-items:center;gap:14px}.task-detail-actions>div{display:flex;gap:8px}
 .task-detail-error{color:var(--danger);font-size:12px;line-height:1.6;margin:0}
 .task-detail-discard{border-top:1px solid var(--line);padding-top:16px}.task-detail-discard p{margin:0 0 12px;color:var(--muted);font-size:12px}.task-detail-discard>div{display:flex;gap:8px;flex-wrap:wrap}
-@media(max-width:560px){.task-detail-surface{padding:18px;gap:18px}.task-detail-primary-properties{grid-template-columns:1fr 1fr}.task-detail-primary-properties>.task-detail-field:last-child{grid-column:1/-1}.task-detail-properties,.task-detail-deliverable{grid-template-columns:1fr}.task-detail-actions{flex-wrap:wrap;margin:0 -18px -18px;padding:14px 18px}.task-detail-actions>div{margin-left:auto}}
+@media(max-width:560px){.task-detail-surface{padding:18px;gap:18px}.task-detail-primary-properties{grid-template-columns:1fr 1fr}.task-detail-primary-properties>div{min-width:0}.task-detail-properties,.task-detail-deliverable{grid-template-columns:1fr}.task-detail-actions{flex-wrap:wrap;margin:0 -18px -18px;padding:14px 18px}.task-detail-actions>div{margin-left:auto}}

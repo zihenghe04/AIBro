@@ -30,7 +30,8 @@ import { ActivityCenterSurface, ActivityCenterBadge } from './activity-center-su
 import { ComparisonPicker, SourceComparisonSurface } from './comparison-surfaces.jsx';
 import { ContextWorkbenchSurface } from './context-surfaces.jsx';
 import { PDFReaderToolbar } from './pdf-reader-surfaces.jsx';
-import { ComposerEditor, ComposerAction, PdfReadModeControl } from './composer-surfaces.jsx';
+import { ComposerEditor, ComposerAction, ComposerDictationStatus, PdfReadModeControl } from './composer-surfaces.jsx';
+import { MessageActionBar } from './message-actions.jsx';
 import { ModelPickerSurface } from './model-picker-surfaces.jsx';
 import { BenchoAddMenu } from './bencho-add-menu.jsx';
 import { ResearchWikiHeader, ResearchWikiCards, ResearchWikiComposer } from './research-wiki-surfaces.jsx';
@@ -70,8 +71,9 @@ const components = new Map(Object.entries({
   ProjectLibraryNavigation, ProjectLibraryBreadcrumb, LibraryDataTable, ProjectMemoryActions, ProjectOverview, TaskCreateForm, TaskDetailSurface, ProjectBoard: ProjectBoardPanel, ProjectScheduleSurface,
   LibraryToolbar, LibrarySelection, LibraryEmpty, ProjectSourceActions, ProjectMetrics, CloudSyncOverview, CloudSSHConnection, CloudSSHStorage, CloudAccountConnection, CloudConflictReview, ConversationOrganizerView, CommandSearchResults, QueueSurface,
   FeedbackActions, FeedbackEditor,
+  MessageActionBar,
   CitationPeek, CitationSourceList,
-  CanvasEditSurface, ContextWorkbenchSurface, PDFReaderToolbar, ComposerEditor, ComposerAction, PdfReadModeControl, ModelPickerSurface, BenchoAddMenu, ResearchWikiHeader, ResearchWikiCards, ResearchWikiComposer,
+  CanvasEditSurface, ContextWorkbenchSurface, PDFReaderToolbar, ComposerEditor, ComposerAction, ComposerDictationStatus, PdfReadModeControl, ModelPickerSurface, BenchoAddMenu, ResearchWikiHeader, ResearchWikiCards, ResearchWikiComposer,
   PlanReviewSurface, ActivityCenterSurface, ActivityCenterBadge, ComparisonPicker, SourceComparisonSurface, ModelSettingsSurface, SettingsNavigation, ImportSurface,
   ReviewSummary, ReviewHeading, ReviewModeControl, ReviewDiffTools, ReviewActions, ReviewEmptyState, ReviewChangeCard,
   RunHistoryToolbar, RunHistoryList, RunHistoryDetail, ConversationReadingMode, RunCheckpointCard, NoteDraftRecovery, ArtifactProvenanceSurface, DocumentToolbar, DocumentFiles, ProjectOutputs: ProjectOutputsPanel,

@@ -3,19 +3,45 @@ const assert = require('node:assert/strict');
 global.AgentProgress = require('../app/agent-progress');
 const Conversation = require('../app/halaska-conversation');
 global.RunCheckpoint = require('../app/run-checkpoint');
+const savedReceipt = () => ({ version: 1, phase: 'committed', actionCount: 1, results: [{ type: 'note', id: 'saved-note', operation: 'created' }] });
 
-test('saved summary requires a valid committed receipt and a settled successful run', () => {
+test('saved summary requires an applied result in a valid committed receipt and a settled successful run', () => {
   for (const status of ['completed', 'completed-local', 'done']) {
-    const props = Conversation.summaryProps({role:'agent'}, { status, executionReceipt: { version: 1, phase: 'committed' } });
+    const props = Conversation.summaryProps({role:'agent'}, { status, executionReceipt: savedReceipt() });
     assert.equal(props.label, '结果已保存');
   }
-  for (const receipt of [undefined, {version:1,phase:'applied'}, {version:1,phase:'prepared'}, {version:2,phase:'committed'}]) {
+  for (const receipt of [undefined, {...savedReceipt(),phase:'applied'}, {...savedReceipt(),phase:'prepared'}, {...savedReceipt(),version:2}]) {
     assert.notEqual(Conversation.summaryProps({role:'agent'}, { status:'completed', executionReceipt:receipt }).label, '结果已保存');
   }
   for (const status of ['running', 'failed', 'cancelled', 'awaiting-save', 'awaiting-approval']) {
-    assert.notEqual(Conversation.summaryProps({role:'agent'}, { status, executionReceipt:{version:1,phase:'committed'} }).label, '结果已保存');
+    assert.notEqual(Conversation.summaryProps({role:'agent'}, { status, executionReceipt:savedReceipt() }).label, '结果已保存');
   }
-  assert.notEqual(Conversation.summaryProps({role:'agent',live:true}, { status:'completed', executionReceipt:{version:1,phase:'committed'} }).label, '结果已保存');
+  assert.notEqual(Conversation.summaryProps({role:'agent',live:true}, { status:'completed', executionReceipt:savedReceipt() }).label, '结果已保存');
+});
+
+test('saved direct answers and clarification replies remain completed without claiming an artifact', () => {
+  for (const answer of ['这是一段普通回答。', '找不到笔记 noteId，请提供要整理的笔记。']) {
+    const run = { status: 'completed', executionReceipt: { version: 1, phase: 'committed', actionCount: 0, results: [], answer },
+      memoryNoteIds: ['automatic-project-diary'], toolCalls: [{ name: 'search_workspace', status: 'completed' }] };
+    const message = { role: 'agent', text: answer, results: [{ type: 'note', id: 'message-chip', operation: 'created' }], clarify: { questions: [{ id: 'note' }] } };
+    const before = JSON.stringify({ run, message });
+    assert.equal(Conversation.summaryProps(message, run).label, '已完成');
+    assert.equal(JSON.stringify({ run, message }), before, 'presentation never rewrites the run or clarification');
+  }
+});
+
+test('matched records, pending drafts and proposals do not imply saved results', () => {
+  for (const result of [{ type: 'note', id: 'existing', operation: 'matched' }, { type: 'note', id: 'draft', operation: 'drafted' },
+    { type: 'schedule-proposal', id: 'proposal', operation: 'created' }]) {
+    const run = { status: 'completed', executionReceipt: { ...savedReceipt(), results: [result] },
+      localFileEdits: [{ id: 'edit', status: 'pending' }], scheduleProposal: { status: 'pending' } };
+    assert.equal(Conversation.summaryProps({ role: 'agent' }, run).label, '已完成');
+  }
+  global.WorkstationI18n = { getLanguage: () => 'en' };
+  try {
+    assert.equal(Conversation.summaryProps({}, { status: 'completed', executionReceipt: { version: 1, phase: 'committed' } }).label, 'Completed');
+    assert.equal(Conversation.summaryProps({}, { status: 'completed', executionReceipt: savedReceipt() }).label, 'Results saved');
+  } finally { delete global.WorkstationI18n; }
 });
 
 test('lifecycle summary uses actual phase, latest public content and measured timestamps', () => {
@@ -49,4 +75,20 @@ test('language selection uses current app locale and no event means waiting rath
   const props = Conversation.summaryProps({ live: true, activities: [] });
   assert.equal(props.label, 'Waiting'); assert.equal(props.count, '0 activities'); assert.equal(props.detail, '');
   delete global.WorkstationI18n;
+});
+
+test('continuous summaries count real flow entries once and prefer the current response over a stale reasoning phase', () => {
+  global.ConversationFlow = require('../app/conversation-flow');
+  global.ConversationProcess = require('../app/conversation-process');
+  try {
+    const message = { live: true, text: 'Answer surface', phase: 'reasoning', steps: [{ text: 'Old fixed stage' }] };
+    const flow = ConversationFlow.create(message);
+    flow.activity({ id: 'reason-1', attemptId: 'a1', kind: 'summary', text: 'Actual reasoning', status: 'completed' });
+    const call = { id: 'call-1', type: 'read', status: 'completed', request: {} };
+    flow.tool(call); flow.response('a2', 'Latest real response');
+    const props = Conversation.summaryProps(message, { status: 'running', phase: 'reasoning', toolCalls: [call] });
+    assert.equal(props.phase, 'writing'); assert.equal(props.count, '3 项过程'); assert.equal(props.detail, 'Latest real response');
+    const reasoning = Conversation.activityProps({ kind: 'reasoning', text: 'Full text\nLatest line', status: 'running' }, message);
+    assert.equal(reasoning.title, '模型思考'); assert.equal(reasoning.detail, 'Latest line');
+  } finally { delete global.ConversationFlow; delete global.ConversationProcess; }
 });

@@ -484,6 +484,6 @@
   }
   return { mount, setMode, save, getDraft, beforeLeave, close: beforeLeave, unmount, suspend, capturePosition: capture, restorePosition, revealFragment, prepareExport,
     flushDrafts: () => current ? flushSession(current) : Promise.resolve(true),
-    current: () => current ? { id: current.ref.id, ref: { ...current.ref }, dirty: dirty(current), loading: current.loading || current.engineLoading, saving: !!(current.saving || current.saveGate), imageBusy: imageBusy(current), mode: current.mode } : null,
+    current: () => current ? { id: current.ref.id, ref: { ...current.ref }, version: current.version, dirty: dirty(current), loading: current.loading || current.engineLoading, saving: !!(current.saving || current.saveGate), imageBusy: imageBusy(current), mode: current.mode } : null,
     currentContent };
 });

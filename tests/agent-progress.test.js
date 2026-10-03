@@ -190,3 +190,19 @@ test('untimed groups do not invent a duration and retain escaped long details an
   assert.equal((body.match(/&lt;unsafe&gt;完整日志/g)||[]).length,1500);
   assert.match(body,/末尾真实内容/);
 });
+
+test('status-only stages do not manufacture hidden content; real detail and reasoning remain expandable', () => {
+  const message = { live:false, runStatus:'completed', steps:[
+    {id:'prep',text:'准备上下文',at:100,status:'done'},
+    {id:'explicit',text:'读取结果',detail:'工具实际返回：2 项资料',at:200,status:'done'}
+  ], activities:[{id:'reason-1',kind:'summary',text:'基于接口返回的真实内容',status:'completed',at:150}] };
+  const original = JSON.stringify(message), html = Progress.markup(message);
+  assert.doesNotMatch(html, /data-progress-key="prep"/);
+  assert.match(html, /progress-stage-label">准备上下文/);
+  assert.doesNotMatch(html, /该阶段没有单独的过程记录|阶段开始/);
+  assert.match(html, /data-progress-key="explicit"/);
+  assert.match(html, /工具实际返回：2 项资料/);
+  assert.match(html, /data-progress-key="reason-1"/);
+  assert.match(html, /基于接口返回的真实内容/);
+  assert.equal(JSON.stringify(message), original);
+});

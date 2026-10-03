@@ -1,0 +1,20 @@
+/* Quiet, reserved message chrome. No hover-only actions or shifting footer. */
+.message-meta .message-action-bar-host { display:inline-flex; min-width:0; }
+.message-action-bar { display:inline-flex; align-items:center; gap:2px; min-height:30px; color:var(--muted); }
+.message-action-slot { display:flex; min-width:0; }
+.message-action-bar .is-compact button { min-inline-size:30px!important; }
+.message-action-bar .is-compact button.feedback-confirmed::after { content:'✓'; }
+.message-action-bar .message-action-slot button { color:var(--muted)!important; border-radius:7px!important; font-size:12px!important; font-weight:450!important; transition:background-color 120ms ease,color 120ms ease!important; }
+.message-action-bar .message-action-slot button:is(:hover,:focus-visible) { color:var(--text)!important; background:var(--panel-hover)!important; }
+.message-action-bar :is(button,summary):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.message-action-bar .message-actions-overflow > summary { display:flex; align-items:center; justify-content:center; width:30px; height:30px; min-width:30px; padding:0!important; border-radius:7px; color:var(--muted); letter-spacing:0; }
+.message-action-bar .message-actions-overflow > summary:is(:hover,:focus-visible),.message-action-bar .message-actions-overflow[open] > summary { color:var(--text); background:var(--panel-hover); }
+.message-action-bar .message-action-options { min-width:178px; max-width:min(260px,calc(100vw - 40px)); gap:1px; padding:5px; border-radius:11px; }
+.message-action-bar .message-action-options .message-action-slot button { white-space:normal; text-align:left; overflow-wrap:anywhere; color:var(--text)!important; }
+.message-wrap.user-message .message-meta .meta-actions { justify-content:flex-end; }
+@media (prefers-reduced-motion:reduce) { .message-action-bar * { animation:none!important; transition:none!important; } }
+html[data-reduced-motion=true] .message-action-bar *,body[data-reduced-motion=true] .message-action-bar *,body.reduce-motion .message-action-bar * { animation:none!important; transition:none!important; }
+.message-selection-action { display:inline-flex; }
+.message-selection-action button { border:0!important; border-radius:7px!important; color:var(--text)!important; background:transparent!important; box-shadow:none!important; animation:none!important; transition:none!important; }
+.message-selection-action button:is(:hover,:focus-visible) { background:var(--panel-hover)!important; }
+.message-selection-action button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }

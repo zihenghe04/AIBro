@@ -355,11 +355,11 @@
   "inputs": [
     {
       "name": "app/editor/document-markdown.js",
-      "sha256": "8be7ee23c1f0dd2ae2eae044cc4db9f91356556cc11fdb821b5b8404f9832f85"
+      "sha256": "89f1e3f9fc6f4a0cc76d4c91e617ba7c46e9d2c580c6a8f100a36f9734742b3e"
     },
     {
       "name": "app/editor/visual-policy.mjs",
-      "sha256": "9b504b04d6e21efddb203ecda0f52dbbd03964cbd8296aebc19ea2d2e7668d55"
+      "sha256": "f4dd6d84e759a3ba7d2b0ae1a5708feb951392748882a2cd9f7897f6d1da1a60"
     },
     {
       "name": "node_modules/bail/index.js",
@@ -1129,8 +1129,8 @@
   "assets": [
     {
       "name": "document-markdown-bundle.js",
-      "bytes": 462165,
-      "sha256": "d7b1b4cb401027983fdfc031aaa03abe3e2ab5fbed74fa0c587b537639fe27af"
+      "bytes": 463062,
+      "sha256": "43b25326501666ebd1a24d0efd57f4d62d011d558eb6a5beeb1aca01aa7e925c"
     },
     {
       "name": "document-markdown.css",

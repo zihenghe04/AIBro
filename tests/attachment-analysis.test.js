@@ -14,6 +14,33 @@ function fixture() {
 const note = (patch = {}) => ({ id: 'note', title: '建模与实践', content, sourceAttachmentIds: ['source'], agentRunId: 'live', ...patch });
 const result = (patch = {}) => ({ type: 'note', id: 'note', operation: 'created', ...patch });
 
+test('URL-only bookmarks remain saved links even when related outputs or stale analysis metadata exist', () => {
+  const { state, source, run } = fixture();
+  Object.assign(source, { name: 'Campus observation', parser: 'bookmark', url: 'https://example.org/campus', fileStored: false, content: '', pages: [], analysis: { status: 'analyzed', runId: run.id, analyzedAt: 10, noteIds: ['note'] } });
+  state.notes = [note()]; state.tasks = [{ id: 'task', sourceAttachmentIds: ['source'] }];
+  const before = structuredClone(state), derived = Analysis.derive(state, source);
+  assert.equal(Analysis.isBookmarkOnly(source), true); assert.equal(derived.status, 'bookmark'); assert.equal(derived.label, '已收藏链接');
+  assert.match(derived.detail, /尚未下载网页/); assert.deepEqual(derived.noteIds, []); assert.deepEqual(derived.taskIds, ['task']);
+  const outcome = Analysis.markCompleted(state, [result()], run, 20);
+  assert.equal(outcome.state, state); assert.deepEqual(outcome.markedIds, []); assert.deepEqual(state, before);
+});
+
+test('real webpage content, parsed pages and saved originals retain analysis eligibility after ingestion', () => {
+  for (const payload of [{ content: 'Downloaded webpage body with source evidence.' }, { pages: [{ page: 1, text: 'Extracted source text.' }] }, { fileStored: true }, { dataUrl: 'data:text/html;base64,PGgxPlNvdXJjZTwvaDE+' }]) {
+    const { state, source, run } = fixture();
+    Object.assign(source, { parser: 'bookmark', url: 'https://example.org/campus', fileStored: false, content: '', pages: [], ...payload });
+    assert.equal(Analysis.isBookmarkOnly(source), false, JSON.stringify(payload));
+    assert.equal(Analysis.derive(state, source).status, 'pending');
+    state.notes = [note()]; const outcome = Analysis.markCompleted(state, [result()], run, 20);
+    assert.deepEqual(outcome.markedIds, ['source']); assert.equal(Analysis.derive(outcome.state, outcome.state.imports[0]).status, 'analyzed');
+  }
+});
+
+test('empty legacy URL records do not become parsed sources through whitespace or empty page shells', () => {
+  for (const source of [{ url: 'https://example.org', content: '  \n', pages: [null, { text: ' ' }] }, { parser: 'bookmark', content: '', pages: [] }]) assert.equal(Analysis.isBookmarkOnly(source), true);
+  for (const source of [null, {}, { name: 'scan.pdf', content: '', fileStored: false }, { url: ' ', content: '' }]) assert.equal(Analysis.isBookmarkOnly(source), false);
+});
+
 test('parser success, original storage metadata, rename, tags, and project membership remain pending', () => {
   const { state, source } = fixture(); Object.assign(source, { blobHash: 'a'.repeat(64), name: '已整理的新名称.pdf', tags: ['已解析'], parser: 'indexed', parsed: true, analyzed: true });
   assert.deepEqual(Analysis.derive(state, source), { status: 'pending', label: '待 AI 分析', detail: '尚无可用的分析笔记或论文记录；文字索引、改名和归档不代表已分析。', noteIds: [], paperIds: [], taskIds: [] });

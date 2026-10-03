@@ -15,6 +15,18 @@
   const fault = (code, message) => Object.assign(new Error(message), { code });
   const phases = new Set(['prepared', 'applied', 'committed']);
   const supported = receipt => receipt?.version === 1 && phases.has(receipt.phase);
+  // These are applied result operations emitted by WorkstationCore. A saved
+  // answer, a matched record or a retained proposal is not a saved output.
+  const savedOperations = new Map([
+    ['note', new Set(['created', 'updated'])], ['task', new Set(['created', 'updated'])],
+    ['paper', new Set(['created', 'updated'])], ['project', new Set(['created', 'linked'])],
+    ['import', new Set(['assigned', 'renamed', 'updated'])],
+  ]);
+  const hasSavedResult = receipt => receipt.phase === 'committed'
+    && Number.isSafeInteger(receipt.actionCount) && receipt.actionCount > 0
+    && Array.isArray(receipt.results) && receipt.results.some(result =>
+      typeof result?.id === 'string' && !!result.id.trim() && !result.undoneAt
+      && savedOperations.get(result.type)?.has(result.operation));
   function messageFor(state, run, receipt) {
     return state.conversations?.find(item => item.id === run.conversationId)?.messages?.find(item => item.id === receipt.messageId);
   }
@@ -49,7 +61,7 @@
   function view(run) {
     const receipt = run?.executionReceipt;
     return supported(receipt) ? {
-      phase: receipt.phase, receiptId: receipt.id, actionCount: receipt.actionCount,
+      phase: receipt.phase, receiptId: receipt.id, actionCount: receipt.actionCount, hasSavedResult: hasSavedResult(receipt),
       error: receipt.error || '', canContinue: receipt.phase === 'prepared', canSave: receipt.phase === 'applied', busy: false,
     } : null;
   }

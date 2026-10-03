@@ -7,25 +7,30 @@ const Core=require('../app/workstation-core');
 const AttachmentAnalysis = require('../app/attachment-analysis');
 const AttachmentContext=require('../app/attachment-context');
 const AttachmentDelivery=require('../app/attachment-delivery');
+const ApprovalIntent=require('../app/approval-intent');
+const TaskWorkflow=require('../app/task-workflow');
+const KnowledgeAccess=require('../app/knowledge-access');
 const source=fs.readFileSync(require.resolve('../app/app.js'),'utf8');
 const cut=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
+const projectScopeSource=source.match(/^const projectIsActive = .+;$/m)?.[0];
+assert.ok(projectScopeSource,'Load the actual host project-lifecycle boundary');
 const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no});return {promise,resolve,reject}};
 const plan=(priority='medium',workspace='日常')=>JSON.stringify({workspace,message:'整理完成',actions:[{type:'create_knowledge_item',title:'材料摘要',content:'原始信息',projectId:'project',workspace,sourceAttachmentIds:[]},{type:'create_task',title:'整理材料',priority,projectId:'project',workspace,sourceAttachmentIds:[]}]});
 function harness(request) {
-  const nodes=new Map(),requests=[];let next=0,commits=0;
+  const nodes=new Map(),requests=[],toasts=[];let next=0,commits=0;
   const el=key=>{if(!nodes.has(key))nodes.set(key,{value:'',textContent:'',disabled:false,scrollHeight:0,scrollTop:0,clientHeight:0,classList:{remove(){},add(){}},setAttribute(){},querySelector(){return null},appendChild(){},firstElementChild:{}});return nodes.get(key);};
   const state={projects:[{id:'project',name:'材料准备',workspace:'日常'}],tasks:[],notes:[],papers:[],imports:[],links:[],trash:[],agentRuns:[],conversations:[{id:'conversation',title:'Existing conversation',workspace:'日常',projectId:'project',messages:[],attachments:[]}],currentConversationId:'conversation',settings:{permissions:{'日常':'auto','科研':'approval'}}};
   const models={configuration:()=>({provider:'api',model:'frozen-model',effort:'high'}),resolve:async value=>value};
-  const c=vm.createContext({structuredClone,state,Core,AttachmentContext,AttachmentDelivery,AttachmentAnalysis,$:el,window:{ConversationModels:models,AttachmentAnalysis},ConversationModels:models,localStorage:{getItem:()=>''},document:{createElement:()=>el('holder')},AbortController,URL,setTimeout,clearTimeout,
+  const c=vm.createContext({structuredClone,state,Core,AttachmentContext,AttachmentDelivery,AttachmentAnalysis,KnowledgeAccess,$:el,window:{ConversationModels:models,AttachmentAnalysis,ApprovalIntent,TaskWorkflow,KnowledgeAccess},ConversationModels:models,localStorage:{getItem:()=>''},document:{createElement:()=>el('holder')},AbortController,URL,setTimeout,clearTimeout,
     uid:prefix=>`${prefix}-${++next}`,workspaceName:value=>value==='科研'||value==='课程'?value:'日常',classifyWorkspace:()=> '日常',currentConversation:()=>state.conversations[0],currentAttachments:()=>[],defaultModelConfiguration:()=>({provider:'api',model:'frozen-model',effort:'high'}),
-    normalizeStateShape(){},save(){},renderAll(){},renderConversation(){},renderMessage(){},visiblePaper:()=>true,actionSummary:()=> '待批准的动作',addRunStep:(run,text,status)=>run.steps.push({text,status}),
+    normalizeStateShape(){},save(){},renderAll(){},renderConversation(){},renderMessage(){},toast:message=>toasts.push(String(message)),visiblePaper:()=>true,actionSummary:()=> '待批准的动作',addRunStep:(run,text,status)=>run.steps.push({text,status}),
     AgentTransport:{requestPlan:async options=>{requests.push(options);return request(options,requests.length)}},activeRunController:null,liveRenderTimer:null,
   });
   el('#agentInput').value='整理材料并创建任务';el('#apiBase').value='https://example.invalid/v1';el('#apiKey').value='fixture-key';
-  vm.runInContext(cut('function activeResultRecord(', '\nfunction conversationProjectIds(') + cut('function dedupeResultEntries(', '\nfunction groupedEntities(') + cut('function commitAttachmentAnalysis(', '\nfunction executeActions(')+cut('function executeActions(', '\nfunction fallbackWorkflow(')+cut('function actionsNeedApproval(', '\nfunction actionSummary(')+cut('function assertRunActive(', '\nlet activeRunController')+cut('function apiOrigin(', '\nfunction renderSettings(')+cut('async function requestAgentPlan(', '\nasync function sendMessage(')+cut('async function sendMessage(', '\n\nfunction formatBytes('),c);
+  vm.runInContext(projectScopeSource+'\n'+cut('function activeResultRecord(', '\nfunction conversationProjectIds(') + cut('function dedupeResultEntries(', '\nfunction groupedEntities(') + cut('function commitAttachmentAnalysis(', '\nfunction executeActions(')+cut('function executeActions(', '\nfunction fallbackWorkflow(')+cut('function actionsNeedApproval(', '\nfunction actionSummary(')+cut('function assertRunActive(', '\nlet activeRunController')+cut('function apiOrigin(', '\nfunction renderSettings(')+cut('async function requestAgentPlan(', '\nasync function sendMessage(')+cut('async function sendMessage(', '\n\nfunction formatBytes('),c);
   installRunCheckpointHost(c);
   const actual=c.executeActions;c.executeActions=(...args)=>{commits++;return actual(...args)};
-  return {c,state,requests,send:()=>c.sendMessage(),stop:()=>c.stopCurrentRun(),get commits(){return commits}};
+  return {c,state,requests,toasts,send:()=>c.sendMessage(),stop:()=>c.stopCurrentRun(),get commits(){return commits}};
 }
 
 test('one invalid priority is repaired then committed exactly once with frozen model and effort',{timeout:4000},async()=>{

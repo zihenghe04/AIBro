@@ -5,6 +5,9 @@
   root.PlanReview = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, root => {
   'use strict';
+  const Assignment=typeof module==='object'&&module.exports?require('./record-assignment'):root.RecordAssignment;
+  const taskWorkflow = () => typeof module === 'object' && module.exports ? require('./task-workflow.js') : root.TaskWorkflow;
+  const workflowLabel = (state, value) => taskWorkflow().names(state)[value] || (value == null || value === '' ? t('未分类', 'Uncategorized') : String(value));
   const copy = value => value == null ? value : JSON.parse(JSON.stringify(value));
   const t = (zh, en) => /^en(?:-|$)/i.test(root.document?.documentElement.lang || '') ? en : zh;
   const fault = (code, zh, en) => Object.assign(new Error(t(zh, en)), { code });
@@ -14,6 +17,7 @@
   function frozen(value) { if (value && typeof value === 'object') { Object.values(value).forEach(frozen); Object.freeze(value); } return value; }
   const names = {
     create_project: ['创建项目', 'Create project'], set_workspace: ['切换后续步骤空间', 'Set space for following steps'],
+    assign_record: ['修改记录归属', 'Move existing record'],
     create_task: ['创建任务', 'Create task'], update_task: ['更新任务', 'Update task'], delete_task: ['任务移入回收站', 'Move task to trash'],
     create_note: ['保存笔记', 'Save note'], create_knowledge_item: ['保存知识', 'Save knowledge'], update_note: ['更新笔记', 'Update note'], append_note: ['追加笔记', 'Append to note'], delete_note: ['笔记移入回收站', 'Move note to trash'],
     rename_attachment: ['重命名资料', 'Rename material'], assign_attachment: ['整理资料归属', 'Assign material'], add_tag: ['添加标签', 'Add tag'], delete_attachment: ['资料移入回收站', 'Move material to trash'],
@@ -23,12 +27,13 @@
   const project = field('projectId', '归属项目', 'Project', 'project');
   const workspace = field('workspace', '空间', 'Space', 'select', ['日常', '课程', '科研']);
   const title = field('title', '标题', 'Title'), content = field('content', 'Markdown 正文', 'Markdown content', 'textarea');
-  const taskFields = [title, field('description', '任务说明', 'Description', 'textarea'), field('status', '状态', 'Status', 'select', ['todo', 'in_progress', 'done', 'blocked']), field('priority', '优先级', 'Priority', 'select', ['low', 'medium', 'high']), field('startAt', '开始时间', 'Start time', 'date'), field('dueAt', '截止时间', 'Due time', 'date'), field('dependsOn', '前置任务', 'Dependencies', 'tasks')];
+  const taskFields = [title, field('description', '任务说明', 'Description', 'textarea'), field('status', '状态', 'Status', 'select', ['todo', 'in_progress', 'done', 'blocked']), field('priority', '优先级', 'Priority', 'select', ['low', 'medium', 'high']), field('workflowCategory', '任务分类', 'Task category', 'select', ['P0', 'P1', 'P2', 'P3']), field('startAt', '开始时间', 'Start time', 'date'), field('dueAt', '截止时间', 'Due time', 'date'), field('dependsOn', '前置任务', 'Dependencies', 'tasks')];
   const noteFields = [title, content, field('kind', '笔记类型', 'Note kind')];
   const reviewTaskFields = [...taskFields, field('reminderMinutes', '提前提醒（分钟）', 'Reminder (minutes)'), field('checklist', '检查清单', 'Checklist')];
   const reviewTaskKeys = reviewTaskFields.map(spec => spec.key);
   const schemas = {
     create_project: [field('name', '项目名称', 'Project name'), field('description', '项目说明', 'Description', 'textarea'), workspace], set_workspace: [workspace],
+    assign_record: [field('targetProjectId', '新归属项目', 'Destination project', 'project')],
     create_task: [...taskFields, project, workspace], update_task: [...taskFields.map(item => ({ ...item, key: 'patch.' + item.key })), project],
     create_note: [...noteFields, field('folderPath', '资料夹', 'Folder'), project, workspace], create_knowledge_item: [...noteFields, field('folderPath', '资料夹', 'Folder'), project, workspace],
     update_note: [...noteFields.map(item => ({ ...item, key: 'patch.' + item.key })), project], append_note: [content],
@@ -45,7 +50,7 @@
     const taskIds = new Set(rows.filter(row => row.action.type === 'update_task').map(row => row.action.taskId));
     const importIds = new Set(rows.filter(row => ['rename_attachment','assign_attachment'].includes(row.action.type)).map(row => row.action.attachmentId || row.action.sourceAttachmentId || row.action.targetId));
     const pick = (item, keys) => Object.fromEntries(keys.filter(key => Object.hasOwn(item, key)).map(key => [key, copy(item[key])]));
-    return { tasks: (state.tasks || []).filter(item => taskIds.has(item.id)).map(item => pick(item, ['id','workspace','projectId','project',...reviewTaskKeys])), imports: (state.imports || []).filter(item => importIds.has(item.id)).map(item => pick(item, ['id','name','workspace','projectId','project','folderPath'])), projects: (state.projects || []).map(item => pick(item, ['id','name','workspace','archived','archivedAt','deleted','deletedAt'])) };
+    return { tasks: (state.tasks || []).filter(item => taskIds.has(item.id)).map(item => ({ ...pick(item, ['id','workspace','projectId','project',...reviewTaskKeys]), workflowCategory: taskWorkflow().category(item) })), imports: (state.imports || []).filter(item => importIds.has(item.id)).map(item => pick(item, ['id','name','workspace','projectId','project','folderPath'])), projects: (state.projects || []).map(item => pick(item, ['id','name','workspace','archived','archivedAt','deleted','deletedAt'])) };
   }
   function normalizeTaskValue(key, value) {
     if (key === 'title') return String(value || '').trim();
@@ -115,7 +120,7 @@
   function preview(host, state, actions, context) {
     let serial = 0;
     const taken = new Set(collections.flatMap(key => (state[key] || []).map(item => item.id)));
-    return host.applyPlan(state, copy(actions), { ...copy(context), now: 1, uid: prefix => { let id; do { id = '__plan_preview_' + prefix + '_' + ++serial; } while (taken.has(id)); taken.add(id); return id; } });
+    return host.applyPlan(state, copy(actions), { ...copy(context), recordAssignmentPreview:true, now: 1, uid: prefix => { let id; do { id = '__plan_preview_' + prefix + '_' + ++serial; } while (taken.has(id)); taken.add(id); return id; } });
   }
   // Capture only read / written objects, all project identities used for name routing,
   // and deduplication candidates. Unrelated note edits do not invalidate a task plan.
@@ -198,6 +203,7 @@
       if (path === 'name' && row.action.type === 'create_project') delete row.action.title;
       if (path === 'content') delete row.action.body;
       if (path === 'patch.status') delete row.action.status;
+      if (['workflowCategory', 'patch.workflowCategory'].includes(path) && value === '') value = null;
       set(row.action, path, value);
     }); }
     function toggle(id, key, included) { return mutate(id, d => { const row = d.rows.find(row => row.key === key); if (!row) throw Error('Step unavailable'); row.included = !!included; }); }
@@ -266,17 +272,23 @@
     const all = collections.flatMap(key => state[key] || []), find = id => all.find(item => item.id === id);
     let currentWorkspace = context.workspace || '日常'; const proposedProjects = [];
     for (const previous of allActions) { if (previous === action) break; if (previous.type === 'set_workspace') currentWorkspace = previous.workspace || currentWorkspace; if (previous.type === 'create_project') proposedProjects.push({ ...previous, workspace: previous.workspace || currentWorkspace }); }
-    const target = find(action.taskId || action.noteId || action.attachmentId || action.sourceAttachmentId || action.targetId);
-    const projectRef = Object.hasOwn(action, 'projectId') ? action.projectId : action.project || action.projectName || target?.projectId || context.projectId;
+    const assigning = action.type === 'assign_record';
+    const target = assigning ? (state[action.recordType==='task'?'tasks':'notes']||[]).find(item=>item.id===action.recordId) : find(action.taskId || action.noteId || action.attachmentId || action.sourceAttachmentId || action.targetId);
+    const projectRef = assigning ? action.targetProjectId : Object.hasOwn(action, 'projectId') ? action.projectId : action.project || action.projectName || target?.projectId || context.projectId;
     const p = action.type === 'create_project' ? { ...action, workspace: action.workspace || currentWorkspace } : state.projects?.find(p => p.id === projectRef || p.name === projectRef) || proposedProjects.find(a => [a.id, a.ref, a.name].includes(projectRef));
     const deletion = action.type.startsWith('delete_');
     const sourceIds = action.sourceAttachmentIds || [];
     const changes = [];
+    if(assigning){
+      const old=state.projects?.find(project=>project.id===target?.projectId),standalone=t('独立内容','Standalone');
+      changes.push({label:t('归属项目','Project'),before:old?.name||target?.project||standalone,after:p?.name||(projectRef?String(projectRef):standalone)});
+      changes.push({label:t('空间','Space'),before:old?.workspace||target?.workspace,after:p?.workspace||old?.workspace||target?.workspace});
+    }
     const fieldName = key => { const spec = [...taskFields, ...noteFields, workspace, field('newName','资料名称','Material name'), field('tag','标签','Tag'), field('folderPath','资料夹','Folder'), field('relation','关系','Relation')].find(field => field.key === key); return spec ? t(spec.zh,spec.en) : key; };
     const compact = value => Array.isArray(value) ? value.join(', ') : value == null || value === '' ? t('未设置','Not set') : String(value);
     const short = value => { const text = compact(value); return text.length > 160 ? text.slice(0,157) + '…' : text; };
-    if (action.type.startsWith('update_')) for (const [key,value] of Object.entries(action.patch || {})) changes.push({ label: fieldName(key), before: short(target?.[key]), after: short(value) });
-    else for (const key of ['newName','tag','relation','priority','status','startAt','dueAt','folderPath']) if (Object.hasOwn(action,key)) changes.push({ label: fieldName(key), after: short(action[key]) });
+    if (action.type.startsWith('update_')) for (const [key,value] of Object.entries(action.patch || {})) changes.push({ label: fieldName(key), before: key === 'workflowCategory' ? workflowLabel(state, taskWorkflow().category(target)) : short(target?.[key]), after: key === 'workflowCategory' ? workflowLabel(state, value) : short(value) });
+    else for (const key of ['newName','tag','relation','priority','workflowCategory','status','startAt','dueAt','folderPath']) if (Object.hasOwn(action,key)) changes.push({ label: fieldName(key), after: key === 'workflowCategory' ? workflowLabel(state, action[key]) : short(action[key]) });
     if (action.type === 'set_workspace') changes.push({ label: fieldName('workspace'), before: currentWorkspace, after: action.workspace });
     if (action.type === 'link_local_project') { const folder = (context.localCandidates || []).find(item => item.id === action.candidateId); changes.push({ label: t('本机目录','Local folder'), after: folder?.path || action.candidateId }); }
     if (Object.hasOwn(action,'status') && action.type === 'update_task') changes.push({label:fieldName('status'),before:short(target?.status),after:short(action.status)});
@@ -284,7 +296,7 @@
     const endpoint = id => find(id)?.title || find(id)?.name || allActions.find(a => a.id === id)?.title || allActions.find(a => a.id === id)?.name || id;
     return { label: names[action.type] ? t(...names[action.type]) : action.type, title: ['create_link','link_items'].includes(action.type) ? endpoint(action.sourceId) + ' → ' + endpoint(action.targetId) : action.name || action.title || action.patch?.title || target?.title || target?.name || action.newName || t('工作区操作', 'Workspace action'), project: p?.name || p?.title || (projectRef ? String(projectRef) : t('独立内容', 'Standalone')), workspace: action.workspace || p?.workspace || target?.workspace || currentWorkspace, targetId: target?.id || '', sources: sourceIds.map(id => find(id)?.name || find(id)?.title || id), danger: deletion,
       changes, excerpt: excerpt.length > 240 ? excerpt.slice(0,237) + '…' : excerpt,
-      consequence: deletion ? t('移入回收站，并移除关联。可从回收站恢复。', 'Moves the object to trash and removes its links. Restore it from Trash.') : ['update_note','append_note','upsert_wiki','upsert_paper'].includes(action.type) ? t('保留人工正文；需要时生成待合并草稿。', 'Preserves human edits and creates a proposal when required.') : action.type === 'link_local_project' ? t('保存目录关联；此步骤不会执行终端命令。', 'Saves the folder link. This step does not run terminal commands.') : ['create_link','link_items'].includes(action.type) ? t('保存两个对象之间的关联。', 'Saves a link between the two objects.') : t('将按下方字段更新本机工作区，结果遵循现有同步设置。', 'Updates the local workspace using the fields below and follows existing sync settings.') };
+      consequence: assigning ? t('仅修改此记录归属；原 ID、正文、来源、草稿与修订历史保持不变。解除项目归属时保留原空间。','Changes only ownership. Keeps the original ID, content, sources, draft and revisions; detaching keeps the original space.') : deletion ? t('移入回收站，并移除关联。可从回收站恢复。', 'Moves the object to trash and removes its links. Restore it from Trash.') : ['update_note','append_note','upsert_wiki','upsert_paper'].includes(action.type) ? t('保留人工正文；需要时生成待合并草稿。', 'Preserves human edits and creates a proposal when required.') : action.type === 'link_local_project' ? t('保存目录关联；此步骤不会执行终端命令。', 'Saves the folder link. This step does not run terminal commands.') : ['create_link','link_items'].includes(action.type) ? t('保存两个对象之间的关联。', 'Saves a link between the two objects.') : t('将按下方字段更新本机工作区，结果遵循现有同步设置。', 'Updates the local workspace using the fields below and follows existing sync settings.') };
   }
   function fieldsFor(action, state, context, allActions) {
     const current = [...(state.tasks || []), ...(state.notes || [])].find(item => item.id === (action.taskId || action.noteId));
@@ -294,7 +306,14 @@
       let value = get(action, spec.key), inherited = value === undefined;
       if (value === undefined) value = spec.key.startsWith('patch.') ? current?.[spec.key.slice(6)] : spec.key === 'name' ? action.title : spec.key === 'content' ? action.body : undefined;
       let options = spec.options?.map(value => ({ value, label: value }));
-      if (spec.type === 'project') {
+      if (['workflowCategory', 'patch.workflowCategory'].includes(spec.key)) {
+        if (inherited && spec.key.startsWith('patch.')) value = taskWorkflow().category(current);
+        options = [{ value: '', label: t('未分类', 'Uncategorized') }, ...taskWorkflow().keys.map(value => ({ value, label: workflowLabel(state, value) }))];
+      }
+      if (spec.type === 'project' && action.type === 'assign_record') {
+        options=[{value:'__standalone',label:t('独立内容 · 保留原空间','Standalone · keep original space')},...(Assignment?.accessibleProjects(state)||[]).map(p=>({value:p.id,label:p.name+' · '+p.workspace}))];
+        if(value===null)value='__standalone';
+      } else if (spec.type === 'project') {
         const updating = ['update_task','update_note'].includes(action.type), requested = action.project || action.projectName || (updating ? '' : context.projectId);
         if (value === undefined) value = requested || '';
         options = [{ value: '', label: updating ? t('保留现有归属', 'Keep current project') : t('沿用当前范围', 'Inherit current scope') }, ...(!updating ? [{ value: '__standalone', label: t('独立内容', 'Standalone') }] : []), ...(state.projects || []).filter(item => !unavailable(item)).map(p => ({ value: p.id, label: p.name + ' · ' + p.workspace })), ...earlier.filter(a => a.type === 'create_project').map(a => ({ value: a.id || a.ref || a.name || a.title, label: (a.name || a.title) + t(' · 前面步骤创建', ' · created earlier') }))];

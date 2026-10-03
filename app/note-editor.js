@@ -277,7 +277,7 @@
     const doc = environment.document, drafts = new Map();
     let session = null, container = null, surface = null, ui = null, mode = 'read', epoch = 0;
     let saving = false, loading = false, savePromise = null, leaveResolve = null, leavePromise = null, previewTimer = null;
-    let renderMarkdown = null, canvas = null;
+    let renderMarkdown = null, canvas = null, cancelSaveFocus = null;
     const node = (tag, className, value) => { const el = doc.createElement(tag); if (className) el.className = className; if (value !== undefined) el.textContent = value; return el; };
     const button = (label, action, className = '') => { const el = node('button', `note-document-button ${className}`, label); el.type = 'button'; el.addEventListener('click', action); return el; };
     let modeRequest = 0, positionRequest = 0;
@@ -301,6 +301,44 @@
         imageBusy: ui.imageBusy || 0, outlineOpen: !!ui.outline.open, status: ui.status?.textContent || '' });
     }
     function focusEditor() { (activeEditor() || ui?.source)?.focus?.(); }
+    // WebKit drops DOM focus when saving switches contenteditable to read-only.
+    // The adapter retains its model selection; never remount it or restore undo
+    // history merely to put keyboard editing back where a save began.
+    function retainSaveFocus() {
+      const owner = ui, generation = epoch, requestedMode = mode, editor = activeEditor();
+      const focused = doc.activeElement, host = mode === 'rich' ? ui?.richHost : mode === 'edit' ? ui?.sourceHost : null;
+      const textarea = focused === ui?.source ? focused : null;
+      if (!textarea && !(editor && host?.contains(focused) && (focused?.isContentEditable || focused?.getAttribute?.('contenteditable') === 'true'))) return () => {};
+      const before = editor?.selectionSource?.(), value = editor?.getValue?.() ?? textarea?.value;
+      const range = before?.exact ? before : textarea ? { start: textarea.selectionStart, end: textarea.selectionEnd, direction: textarea.selectionDirection } : null;
+      let cancelled = false;
+      const cancel = () => { cancelled = true; };
+      const moved = event => { if (event.target !== focused && event.target !== doc.body && event.target !== doc.documentElement) cancel(); };
+      const events = [['pointerdown', cancel], ['keydown', cancel], ['wheel', cancel], ['focusin', moved]];
+      for (const [type, listener] of events) doc.addEventListener?.(type, listener, true);
+      environment.addEventListener?.('blur', cancel);
+      cancelSaveFocus = cancel;
+      return () => {
+        for (const [type, listener] of events) doc.removeEventListener?.(type, listener, true);
+        environment.removeEventListener?.('blur', cancel);
+        if (cancelSaveFocus === cancel) cancelSaveFocus = null;
+        if (cancelled || owner !== ui || generation !== epoch || requestedMode !== mode || activeEditor() !== editor || !surface?.isConnected || leaveResolve || saving || loading || composing()) return;
+        if ((editor?.getValue?.() ?? textarea?.value) !== value) return;
+        const active = doc.activeElement;
+        // A save-induced blur lands on the document. Other explicit focus wins,
+        // including a different editor control, even if it did not emit focusin.
+        if (active && active !== focused && active !== doc.body && active !== doc.documentElement) return;
+        if (range) {
+          const current = editor?.selectionSource?.() || { start: textarea?.selectionStart, end: textarea?.selectionEnd, direction: textarea?.selectionDirection };
+          if (current.start !== range.start || current.end !== range.end || current.direction !== range.direction) {
+            (editor || textarea).setSelectionRange?.(range.start, range.end, range.direction);
+          }
+        }
+        if (doc.activeElement !== focused) {
+          if (editor) editor.focus(); else textarea.focus({ preventScroll: true });
+        }
+      };
+    }
     async function insertImages() {
       if (!session || !ui || saving || loading || !inputReady()) return false;
       const owner = ui, generation = epoch, editor = activeEditor();
@@ -388,6 +426,7 @@
     // Tabs retain raw drafts through the existing durable recovery store, not
     // by keeping every ProseMirror/CodeMirror view alive in a hidden DOM.
     async function suspend({ release = false, isCurrent } = {}) {
+      cancelSaveFocus?.();
       if (!session) return true;
       const owner = ui, generation = epoch;
       if (loading && owner.recoveryReady) await owner.recoveryReady;
@@ -752,6 +791,7 @@
       return savePromise;
     }
     function requestLeave() {
+      cancelSaveFocus?.();
       if (!session) return true;
       if (!inputReady()) return false;
       if (ui?.modern && activeEditor()?.flushPending && !saving) {
@@ -779,7 +819,7 @@
       ui.stay.focus?.({ preventScroll: true }); ui.leave.scrollIntoView?.({ block: 'nearest' });
       return leavePromise;
     }
-    async function saveDocument() {
+    async function saveDocument({ preserveFocus = true } = {}) {
       if (saving) return savePromise;
       if (!session || loading || !inputReady()) return false;
       if (ui?.modern && activeEditor()?.flushPending) {
@@ -787,6 +827,8 @@
         if (saving) return savePromise;
         if (!session || loading) return false;
       }
+      const finishFocus = preserveFocus && !leaveResolve ? retainSaveFocus() : () => {};
+      try {
       remember(); let change;
       try { change = prepare(hooks.getState(), session); }
       catch (error) { report(error.message); ui.reload.hidden = false; return false; }
@@ -856,9 +898,11 @@
         }
         return cleared;
       })();
-      return savePromise;
+      return await savePromise;
+      } finally { finishFocus(); }
     }
     function unmount({ force = false } = {}) {
+      cancelSaveFocus?.();
       if (!inputReady() || !force && (saving || activeEditor()?.isImageBusy?.() || isDirty())) return false;
       remember(); recovery?.unmount(); resolveLeave(false); epoch++;
       for (const timer of ui?.metadataSettling?.values() || []) (environment.clearTimeout || clearTimeout)(timer);
@@ -890,14 +934,14 @@
         ui.rich = button('编辑', () => setMode('rich')); ui.rich.dataset.noteAction = 'rich'; ui.rich.hidden = !ui.modern && !environment.MarkdownEditor;
         ui.edit = button('源码', () => { const result = setMode('edit'); if (!ui.modern) ui.source.focus(); return result; }); ui.edit.dataset.noteAction = 'edit';
         ui.preview = button('阅读', () => setMode(ui.modern ? 'read' : isDirty() || mode !== 'read' ? 'preview' : 'read')); ui.preview.dataset.noteAction = 'preview';
-        ui.save = button('保存', () => { void saveDocument(); }, 'note-document-primary'); ui.save.dataset.noteAction = 'save'; ui.save.title = '保存（⌘S / Ctrl+S）';
+        ui.save = button('保存', () => { void saveDocument({ preserveFocus: false }); }, 'note-document-primary'); ui.save.dataset.noteAction = 'save'; ui.save.title = '保存（⌘S / Ctrl+S）';
         ui.cancel = button('取消', async () => { if (await requestLeave()) { if (session) { setMode('read'); report('已返回阅读。'); } } }); ui.cancel.dataset.noteAction = 'cancel';
       }
       ui.count = node('span', 'note-document-count');
       ui.leave = node('div', 'note-document-leave'); ui.leave.hidden = true; ui.leave.setAttribute('role', 'alert');
       ui.leaveTitle = node('strong');
       const leaveActions = node('div', 'note-document-leave-actions');
-      ui.leaveSave = button('保存并继续', () => { void saveDocument(); }, 'note-document-primary'); ui.leaveSave.dataset.noteAction = 'save-leave';
+      ui.leaveSave = button('保存并继续', () => { void saveDocument({ preserveFocus: false }); }, 'note-document-primary'); ui.leaveSave.dataset.noteAction = 'save-leave';
       ui.discard = button('放弃修改', discard); ui.discard.dataset.noteAction = 'discard';
       ui.stay = button('继续编辑', () => { resolveLeave(false); focusEditor(); }); ui.stay.dataset.noteAction = 'stay';
       leaveActions.append(ui.leaveSave, ui.discard, ui.stay); ui.leave.append(ui.leaveTitle, node('p', '', '保存后写入知识库；放弃只撤销这次未保存的编辑。'), leaveActions);
@@ -956,7 +1000,7 @@
       surface.append(toolbar, ui.recoveryHost, ui.leave, ui.outline, ui.modeHint, ui.editorNotice, body, ui.ai, ui.history, ui.status, ui.reload); target.replaceChildren(surface);
       if (useKitToolbar) ui.toolbarIsland = environment.HalaskaUI.mount(ui.toolbarHost, 'DocumentToolbar', {
         mode, loading, saving, dirty: dirty(session), canVisual: true, outlineOpen: false,
-        onMode: setMode, onSave: saveDocument,
+        onMode: setMode, onSave: () => saveDocument({ preserveFocus: false }),
         onInsertImage: environment.DocumentImages ? insertImages : undefined,
         onClose: async () => { const owner = ui; if (await requestLeave() && owner === ui && session) { applyMode('read'); report('已返回阅读。'); } },
         onFind: async () => { const owner = ui; if (await showSource() && owner === ui) { ui.sourceEditor?.find?.(); } },

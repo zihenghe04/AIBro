@@ -48,7 +48,8 @@ async function run(){
   for(const id of ['seg-1','tool-1','seg-2'])assert.ok(listed.some(item=>item.id===id&&item.expandable),`段 ${id} 应作为可展开条目出现`);
   assert.ok(listed.filter(item=>item.id==='seg-1'&&item.bodyChars>0).length===1,'思考摘要详情正文应可回看');
   assert.ok(listed.filter(item=>item.id==='tool-1'&&item.bodyChars>0).length===1,'工具段结果应可回看');
-  assert.equal(listed.filter(item=>!item.expandable).length,0,'终态过程条内不应存在不可展开的死行（用户无法回看的条目）');
+  assert.ok(listed.filter(item=>!item.expandable).length>0,'没有正文的阶段仅显示状态，不提供空的展开入口');
+  assert.ok(listed.filter(item=>item.expandable).every(item=>item.bodyChars>0),'只有有真实内容的过程才可展开');
  });
  await step('终态下可逐段展开回看详情',async()=>{
   assert.equal(await openOf('seg-1'),false,'未固定过的段终态收束');

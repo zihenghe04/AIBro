@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import UserNotifications
+import CryptoKit
 
 struct AgendaPreferences: Codable, Equatable {
     var notifications = false
@@ -13,11 +14,13 @@ struct AgendaPreferences: Codable, Equatable {
         guard (0...23).contains(briefingHour),(0...59).contains(briefingMinute),taskReminderMinutes == nil || (0...10080).contains(taskReminderMinutes!) else {throw AgendaError.message("提醒时间无效。")}
     }
 }
-struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var preferences=AgendaPreferences();var sync:[String:AgendaSyncReceipt]?=nil}
+struct AgendaCommitReceipt: Codable, Equatable { let eventID:String;let fingerprint:String }
+struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var preferences=AgendaPreferences();var sync:[String:AgendaSyncReceipt]?=nil;var operations:[String:AgendaCommitReceipt]?=nil}
 @MainActor final class AgendaStore: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     @Published private(set) var events:[AgendaEvent]=[]
     @Published var preferences=AgendaPreferences()
     private(set) var syncReceipts:[String:AgendaSyncReceipt]=[:]
+    private(set) var operationReceipts:[String:AgendaCommitReceipt]=[:]
     @Published var error:String?
     @Published var notificationStatus="提醒未启用"
     @Published var queued=0
@@ -37,27 +40,29 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
     private var loaded=false
     private var editorDrafts:[UUID:Bool]=[:]
     var hasUnsavedEditorDrafts:Bool {editorDrafts.values.contains(true)}
+    var storageReady:Bool {loaded && file != nil}
+    var storageIdentity:URL? {loaded ? file:nil}
     func setEditorDraft(_ session:UUID,dirty:Bool) {editorDrafts[session]=dirty}
     func endEditorDraft(_ session:UUID) {editorDrafts.removeValue(forKey:session)}
     var center:UNUserNotificationCenter {UNUserNotificationCenter.current()}
     func load(folder:URL,qa:Bool) {
-        self.qa=qa;file=folder.appendingPathComponent("agenda.json")
+        loaded=false;refreshTimer?.invalidate();refreshTimer=nil;scheduleWork?.cancel();scheduleWork=nil;revision+=1;self.qa=qa;file=folder.appendingPathComponent("agenda.json")
         do {
             if FileManager.default.fileExists(atPath:file!.path) {
                 let archive=try JSONDecoder().decode(AgendaArchive.self,from:Data(contentsOf:file!))
                 guard archive.version==1 else {throw AgendaError.message("日程数据版本不兼容，未覆盖原文件。")}
                 guard Set(archive.events.map(\.id)).count==archive.events.count else {throw AgendaError.message("日程记录存在重复标识")};for event in archive.events {try event.validate()}
-                try archive.preferences.validate();events=archive.events;preferences=archive.preferences;syncReceipts=archive.sync ?? [:]
-            }
-            loaded=true
+                try archive.preferences.validate();events=archive.events;preferences=archive.preferences;syncReceipts=archive.sync ?? [:];operationReceipts=archive.operations ?? [:]
+            } else {events=[];preferences=AgendaPreferences();syncReceipts=[:];operationReceipts=[:]}
+            tasks=[];taskRecords=[];taskKey="";loaded=true;error=nil
         }catch{self.error="日程读取失败：\(error.localizedDescription)";return}
         if !qa {center.delegate=self;center.setNotificationCategories([UNNotificationCategory(identifier:"AIBRO_AGENDA",actions:[UNNotificationAction(identifier:"LATER",title:"10 分钟后提醒",options:[])],intentIdentifiers:[])])}
         refreshTimer=Timer.scheduledTimer(withTimeInterval:300,repeats:true){[weak self]_ in Task{@MainActor in self?.reschedule()}}
         reschedule()
     }
-    private func persist(_ items:[AgendaEvent],_ settings:AgendaPreferences) throws {
+    private func persist(_ items:[AgendaEvent],_ settings:AgendaPreferences,operations:[String:AgendaCommitReceipt]?=nil) throws {
         guard loaded,let file else {throw AgendaError.message("日程存储尚未就绪，未写入。")}
-        let bytes=try JSONEncoder().encode(AgendaArchive(events:items,preferences:settings,sync:syncReceipts))
+        let bytes=try JSONEncoder().encode(AgendaArchive(events:items,preferences:settings,sync:syncReceipts,operations:operations ?? operationReceipts))
         try bytes.write(to:file,options:.atomic)
     }
     func acknowledgeSync(_ changes:[AgendaSyncChange]) throws {
@@ -72,7 +77,7 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
             receipts[change.noteID]=change.receipt
         }
         guard loaded,let file else {throw AgendaError.message("日程存储尚未就绪")}
-        try JSONEncoder().encode(AgendaArchive(events:next,preferences:preferences,sync:receipts)).write(to:file,options:.atomic)
+        try JSONEncoder().encode(AgendaArchive(events:next,preferences:preferences,sync:receipts,operations:operationReceipts)).write(to:file,options:.atomic)
         events=next;syncReceipts=receipts;reschedule()
     }
     func resolveSync(_ conflict:AgendaSyncConflict,useRemote:Bool) throws {
@@ -95,6 +100,28 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
             throw AgendaError.message("日程已有更新，当前输入已保留。请返回并重新打开最新日程后再编辑。")
         }
         try save(event)
+    }
+    /// A stable operation receipt and its event commit share the same archive.
+    /// Replaying an acknowledged request never overwrites a later human edit.
+    @discardableResult func commit(_ event:AgendaEvent,expected:AgendaEvent?,requestID:String) throws -> AgendaCommitReceipt {
+        guard storageReady else {throw AgendaError.message("日程存储尚未就绪，未确认旧请求。")}
+        guard !requestID.isEmpty,requestID.count<=200,!event.id.isEmpty,event.kind != "task" else {throw AgendaError.message("日程请求无效。")}
+        try event.validate()
+        struct Operation:Encodable {let event:AgendaEvent;let expected:AgendaEvent?}
+        let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys]
+        let bytes=try encoder.encode(Operation(event:AgendaWire.normalized(event),expected:expected.map(AgendaWire.normalized)))
+        let receipt=AgendaCommitReceipt(eventID:event.id,fingerprint:SHA256.hash(data:bytes).map{String(format:"%02x",$0)}.joined())
+        if let prior=operationReceipts[requestID] {
+            guard prior == receipt else {throw AgendaError.message("日程请求编号冲突，原记录未改动。")}
+            return prior
+        }
+        guard events.first(where:{$0.id==event.id}) == expected else {throw AgendaError.message("日程已有更新，当前输入已保留。请载入最新日程后再编辑。")}
+        var next=events,nextReceipts=operationReceipts
+        if let index=next.firstIndex(where:{$0.id==event.id}) {next[index]=event}else{next.append(event)}
+        nextReceipts[requestID]=receipt
+        try persist(next,preferences,operations:nextReceipts)
+        operationReceipts=nextReceipts;events=next;reschedule();onChanged?()
+        return receipt
     }
     func importEvents(_ items:[AgendaEvent],replace:Bool, projectID:String) throws {
         guard Set(items.map(\.id)).count == items.count else {throw AgendaError.message("导入存在重复标识，请重新生成预览。")};var next=events

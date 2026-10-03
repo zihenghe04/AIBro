@@ -84,11 +84,11 @@
     onTextEdit?.(previous, { start, removed: before.length - start - end, inserted: after.length - start - end, beforeLength: before.length });
     previous.replaceData(start, before.length - start - end, after.slice(start, after.length - end));
   }
-  function sync(previous, next, onTextEdit) {
-    if (previous.isEqualNode(next)) return;
+  function sync(previous, next, onTextEdit, frozen = 0) {
+    if (!frozen && previous.isEqualNode(next)) return;
     if (previous.nodeType === 3 || previous.nodeType === 8) { text(previous, next, onTextEdit); return; }
     attributes(previous, next);
-    const before = [...previous.childNodes], after = [...next.childNodes];
+    const before = [...previous.childNodes].slice(frozen), after = [...next.childNodes];
     const byContent = new Map(), signatures = new Map(), remaining = new Map();
     for (const child of before) {
       const value = signature(child); signatures.set(child, value);
@@ -100,7 +100,7 @@
       remaining.set(value, (remaining.get(value) || 0) + 1);
     }
     const used = new Set();
-    let cursor = previous.firstChild;
+    let cursor = before[0] || null;
     for (const fresh of after) {
       const value = signatures.get(fresh);
       remaining.set(value, remaining.get(value) - 1);
@@ -124,7 +124,7 @@
   function patch(previous, next, options = {}) {
     root.StreamMarkdown?.prepareCommit?.(previous, next);
     if (!canPatch(previous, next)) return false;
-    if (root.StreamMarkdown?.commitBody?.(previous, next, options.selection)) {
+    if (root.StreamMarkdown?.commitBody?.(previous, next, options.selection, frozen => sync(previous,next,options.onTextEdit,frozen))) {
       attributes(previous, next); return true;
     }
     // Token spans may replace plain code Text nodes at a fence boundary. Keep

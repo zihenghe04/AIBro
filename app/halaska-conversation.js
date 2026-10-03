@@ -8,18 +8,18 @@
   const activityLabels = { completed: ['已完成', 'Completed'], done: ['已完成', 'Completed'], 'completed-local': ['已完成', 'Completed'],
     running: ['进行中', 'Running'], pending: ['待执行', 'Pending'], failed: ['失败', 'Failed'], cancelled: ['已停止', 'Stopped'],
     'awaiting-approval': ['等待审批', 'Needs approval'], 'awaiting-save': ['等待保存', 'Needs saving'], rejected: ['已拒绝', 'Declined'], unknown: ['未确认', 'Unconfirmed'] };
-  const kindLabels = { tool: ['工具', 'Tool'], step: ['阶段', 'Stage'], summary: ['公开摘要', 'Public summary'], commentary: ['进展', 'Progress'], group: ['工具组', 'Tool group'] };
+  const kindLabels = { tool: ['工具', 'Tool'], step: ['阶段', 'Stage'], summary: ['模型返回', 'Model output'], reasoning: ['模型返回', 'Model output'], response: ['回复', 'Response'], commentary: ['进展', 'Progress'], group: ['工具组', 'Tool group'] };
 
   function activityProps(item = {}, message = {}) {
     const status = Object.prototype.hasOwnProperty.call(activityLabels, item.status) ? item.status : 'unknown';
     const active = message.live === true && status === 'running';
     const title = item.kind === 'tool' ? String(item.name || text('工具操作', 'Tool operation'))
       : item.kind === 'step' ? String(item.text || text('执行阶段', 'Activity stage'))
-      : item.kind === 'summary' ? text('深度思考', 'Thinking summary') : text('模型进展', 'Model progress');
+      : ['summary', 'reasoning'].includes(item.kind) ? text('模型思考', 'Model reasoning') : text('模型进展', 'Model progress');
     const start = Number(item.at), end = Number(item.updatedAt);
     const elapsed = start > 0 && Number.isFinite(start) && Number.isFinite(end) && end > start
       ? root.AgentProgress?.duration(start, end) || '' : '';
-    return { title, status, active, elapsed, kindLabel: text(...(kindLabels[item.kind] || ['活动', 'Activity'])),
+    return { title, status, active, elapsed, ...(item.kind === 'reasoning' ? { detail: root.ConversationProcess?.preview(item.text) || '' } : {}), kindLabel: text(...(kindLabels[item.kind] || ['活动', 'Activity'])),
       statusLabel: status === 'running' && !active ? text('未确认结束', 'End not recorded') : text(...activityLabels[status]) };
   }
 
@@ -89,24 +89,27 @@
 
   function summaryProps(message, run = {}) {
     const payload = { ...message, runStatus: run.status || message.runStatus, phase: run.phase || message.phase };
-    const entries = root.AgentProgress?.entries(payload) || [];
+    const continuous = root.ConversationProcess?.hasFlow(message);
+    const entries = continuous ? root.ConversationProcess.flowEntries(message, run) : root.AgentProgress?.entries(payload) || [];
     const active = [...entries].reverse().find(item => item.status === 'running');
     const status = message.live ? 'running' : run.status || message.runStatus || (message.retryRunId ? 'failed' : 'unknown');
     const phase = root.AgentProgress?.phase(payload, active) || 'waiting';
-    const saved = !message.live && ['completed', 'completed-local', 'done'].includes(status) && root.RunCheckpoint?.view(run)?.phase === 'committed';
+    const saved = !message.live && ['completed', 'completed-local', 'done'].includes(status) && root.RunCheckpoint?.view(run)?.hasSavedResult === true;
     const label = saved ? text('结果已保存', 'Results saved') : text(...(message.live ? phaseLabels[phase] || phaseLabels.waiting : settledLabels[status] || ['执行记录', 'Activity']));
     // The complete public content stays in the existing expandable timeline.
     // Its current last line is a summary, not a substitute for that content.
-    const detail = !message.live ? '' : active?.kind === 'tool' ? active.name || text('工具操作', 'Tool operation')
+    const detail = !message.live ? '' : active?.kind === 'tool' ? active.name || active.call?.request?.title || text('工具操作', 'Tool operation')
       : active?.kind === 'step' ? active.text : active?.text ? active.text.split('\n').filter(Boolean).pop() : '';
     const startedAt = Number(run.startedAt || message.startedAt || message.at);
     const finishedAt = Number(run.finishedAt || message.finishedAt);
     const elapsed = startedAt > 0 && (message.live || finishedAt >= startedAt)
       ? root.AgentProgress?.duration(startedAt, message.live ? Date.now() : finishedAt) || '' : '';
     const tools = Array.isArray(run.toolCalls) ? run.toolCalls.length : 0;
-    const count = tools ? (entries.length ? text(`${entries.length} 项进展 · ${tools} 次工具调用`, `${entries.length} entries · ${tools} tool calls`) : text(`${tools} 次工具调用`, `${tools} tool calls`))
+    const count = continuous ? text(`${entries.length} 项过程`, `${entries.length} process entries`) : tools ? (entries.length ? text(`${entries.length} 项进展 · ${tools} 次工具调用`, `${entries.length} entries · ${tools} tool calls`) : text(`${tools} 次工具调用`, `${tools} tool calls`))
       : text(`${entries.length} 项活动`, `${entries.length} activities`);
-    return { status, phase, label, detail, startedAt, elapsed, count, keyboardHint: text('展开 / 收起', 'Expand / collapse') };
+    const streamReception = root.StreamReception?.project(run.streamReception, { live: message.live, phase }) ? run.streamReception : null;
+    const issueCount = root.ToolScheduler?.issueCount?.(run) || 0;
+    return { status, phase, label, detail, startedAt, elapsed, count, issueCount, streamReception, keyboardHint: text('展开 / 收起', 'Expand / collapse') };
   }
 
   function enhanceProcessTabs(wrapper, previous) {
@@ -121,6 +124,7 @@
     if (!progress || !tools) return;
     const props = { messageId: wrapper.dataset.messageId, value: host.dataset.view,
       progressCount: Number(host.dataset.progressCount), toolCount: Number(host.dataset.toolCount),
+      issueCount: Number(host.dataset.issueCount), toolFilter: host.dataset.toolFilter,
       progressPanelId: progress.id, toolsPanelId: tools.id };
     progress.setAttribute('aria-labelledby', progress.id + '-tab'); tools.setAttribute('aria-labelledby', tools.id + '-tab');
     stageSummary(host, 'AgentProcessTabs', props, previous?.querySelector(selector));
@@ -130,7 +134,7 @@
     const host = wrapper?.querySelector('.conversation-process-navigation');
     const record = host && records.get(host);
     if (!record || record.deferred || record.name !== 'AgentProcessTabs') return;
-    const props = { ...record.props, value };
+    const props = { ...record.props, value, toolFilter: host.dataset.toolFilter };
     root.HalaskaUI.update(host, props); records.set(host, { ...record, props });
   }
 
@@ -186,7 +190,9 @@
     }
     // Only summary contents become React-owned. Native details and its body
     // stay with AgentProgress, including persisted pins and text selection.
-    const entries = new Map((root.AgentProgress?.entries(message) || []).map(item => [item.id, item]));
+    const entries = new Map((root.ConversationProcess?.hasFlow(message)
+      ? root.ConversationProcess.flowEntries(message, run).map(item => ({ ...item, id: root.ConversationProcess.flowKey(item) }))
+      : root.AgentProgress?.entries(message) || []).map(item => [item.id, item]));
     for (const row of progress?.querySelectorAll('.progress-item[data-activity-id]') || []) {
       const item = entries.get(row.dataset.activityId);
       const prior = item && priorSummaries.get(`item:${item.id}`);

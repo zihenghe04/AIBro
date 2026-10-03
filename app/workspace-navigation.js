@@ -52,7 +52,7 @@
     const visible = conversation => active(conversation) && (hooks.visibleConversation ? hooks.visibleConversation(conversation) : globalThis.PrivateMode?.shows ? globalThis.PrivateMode.shows(conversation) : ordinaryConversation(conversation));
     const currentRoute = () => routeFor(getState(), doc.body.dataset.view, visible);
     const scrollPositions = new Map(), composerPositions = new Map();
-    let previous = null, pending = false, restoreVersion = 0, host = null, crumbs = null, tabs = null, rendered = '', conversationMenu = null, conversationMenuCleanup = null, kitTabsHost = null, navigationVersion = 0, transition = null;
+    let previous = null, pending = false, restoreVersion = 0, host = null, crumbs = null, tabs = null, rendered = '', conversationMenu = null, conversationMenuCleanup = null, kitTabsHost = null, pathHost = null, navigationVersion = 0, transition = null;
     const english = () => doc.documentElement?.lang?.startsWith('en');
     const t = (zh,en) => english() ? en : zh;
     const memory = state => { state.ui ||= {}; state.ui.workspaceNavigation ||= {projects:{}}; state.ui.workspaceNavigation.projects ||= {}; return state.ui.workspaceNavigation; };
@@ -218,8 +218,11 @@
       for(const row of doc.querySelectorAll('button[data-project-id]')){const scoped=row.dataset.projectId===matched;row.classList.toggle('workspace-current-project',scoped);if(scoped)row.setAttribute('aria-current','location');else if(row.getAttribute('aria-current')==='location')row.removeAttribute('aria-current');}
       doc.body.classList.toggle('workspace-navigation-ready',relevant);if(!relevant){closeConversations();return;}
       const resumed=route.project ? conversationFor(state,route.project.id,visible) : null;
-      const key=JSON.stringify([resumed?.id,resumed?.title,route.key,route.project?.name,route.project?.workspace,route.conversation?.title,route.conversation?.projectId,route.conversation?.workspace,english()]);
-      if(key===rendered)return;rendered=key;crumbs.replaceChildren();
+      const paths=route.conversation ? hooks.conversationPathCount?.(route.conversation) || 0 : 0;
+      const key=JSON.stringify([resumed?.id,resumed?.title,route.key,route.project?.name,route.project?.workspace,route.conversation?.title,route.conversation?.projectId,route.conversation?.workspace,paths,english()]);
+      if(key===rendered)return;rendered=key;
+      if(pathHost){globalThis.HalaskaUI?.unmount?.(pathHost);pathHost=null;}
+      crumbs.replaceChildren();
       const useKit=!!route.project&&!!globalThis.HalaskaUI;
       if(!useKit){tabs.replaceChildren();kitTabsHost=null;}
       else{for(const child of [...tabs.children])if(child!==kitTabsHost)child.remove();}
@@ -255,6 +258,14 @@
         crumb(route.conversation?.title||t('新对话','New chat'),null,{current:true,id:'workspaceConversationCrumb'});
         const choose=button(unavailable?t('更换项目','Change project'):t('选择项目','Choose project'),()=>hooks.chooseProject?.(),'workspace-choose-project');choose.id='workspaceChooseProject';tabs.append(choose);
         const hint=node('span','workspace-scope-hint',t('在同一项目中连续处理对话、资料与任务','Keep chats, sources and tasks together in a project'));tabs.append(hint);
+      }
+      if(paths>0 && hooks.openConversationPaths){
+        const id=route.conversation.id;
+        const open=()=>{const current=currentRoute();if(current.view==='agent'&&current.conversation?.id===id){closeConversations();hooks.openConversationPaths();}};
+        const label=t(`${paths+1} 个分支`,`${paths+1} branches`),title=t('切换这条对话的分支','Switch branches in this chat');
+        pathHost=node('span','workspace-paths');crumbs.append(pathHost);
+        if(globalThis.HalaskaUI){globalThis.HalaskaUI.mount(pathHost,'Button',{id:'workspacePathsToggle',children:label,variant:'ghost',size:'sm',title,'aria-label':label,'aria-haspopup':'dialog',onClick:open,style:{padding:'4px 8px',minHeight:28,height:28,fontSize:11,boxShadow:'none'}});}
+        else{const toggle=button(label,open);toggle.id='workspacePathsToggle';toggle.title=title;toggle.setAttribute('aria-haspopup','dialog');pathHost.append(toggle);}
       }
       const allChats=button(t('切换对话','Switch chat'),openConversations,'workspace-all-chats');allChats.id='workspaceConversationsToggle';allChats.setAttribute('aria-haspopup','dialog');allChats.setAttribute('aria-expanded',String(!!conversationMenu));allChats.setAttribute('aria-controls','workspaceConversationMenu');crumbs.append(allChats);
     }

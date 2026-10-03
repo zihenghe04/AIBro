@@ -11,7 +11,7 @@ function harness() {
   const context = vm.createContext({
     window:{ReadingPane:{snapshot:()=>reader},flushLocalDrafts:async()=>{calls.push('drafts');return true;},flushWorkspace:async()=>{calls.push('workspace');}},
     state:{},storageHydrated:true,serverSaveInFlight:false,serverConflict:false,importMaterials:{},
-    approvalBusy:()=>false,stageAnswerFeedbackDraft:{},commitConversationOrganization:{},draftSaveTimer:null,
+    approvalBusy:()=>false,stageAnswerFeedbackDraft:{},commitConversationOrganization:{},commitConversationPath:{},draftSaveTimer:null,
     sendMessage:{},purgeTrash:{},contentDeletePending:false,$:()=>agent,
     document:{activeElement:null,querySelector:selector=>nodes.get(selector)||null}
   });
@@ -37,7 +37,7 @@ test('actual document loading, image insertion, saving and import work still blo
 });
 
 test('model, workspace-write and maintenance-adjacent modal gates remain active',()=>{
-  for(const set of [h=>h.context.sendMessage.busy=true,h=>h.context.serverSaveInFlight=true,h=>h.context.serverConflict=true,h=>h.context.state._pendingLocalSave=true,h=>h.context.window.AgentQueue={anyBusy:()=>true},h=>h.nodes.set('dialog[open]:not(#cloudSyncDialog)',{}),h=>h.nodes.set('#modelPicker:not([hidden])',{})]) {
+  for(const set of [h=>h.context.sendMessage.busy=true,h=>h.context.serverSaveInFlight=true,h=>h.context.serverConflict=true,h=>h.context.state._pendingLocalSave=true,h=>h.context.commitConversationPath.busy=true,h=>h.context.window.AgentQueue={anyBusy:()=>true},h=>h.nodes.set('dialog[open]:not(#cloudSyncDialog)',{}),h=>h.nodes.set('#modelPicker:not([hidden])',{})]) {
     const h=harness();set(h);assert.equal(h.context.cloudConnectionBusy(),true);
   }
 });

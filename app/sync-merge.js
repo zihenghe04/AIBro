@@ -53,6 +53,14 @@
     }
     return result;
   }
+  function validateLibraryFolders(items) {
+    const seen=new Set();
+    for(const item of items){
+      const key=JSON.stringify([item.workspace,item.projectId||null,item.folderPath]);
+      if(seen.has(key))throw new MergeConflict(['folders','library'],'同一位置存在重复资料目录');
+      seen.add(key);
+    }
+  }
   function validate(snapshot) {
     if (!object(snapshot)) throw new MergeConflict([],'快照必须为对象');
     for (const collection of COLLECTIONS) {
@@ -61,8 +69,9 @@
     }
     const folders = get(snapshot,'folders',{});
     if (Array.isArray(folders)) index(folders,['folders'],true);
-    else if (object(folders)) for (const group of ['projects','conversations']) index(get(folders,group,[]),['folders',group]);
+    else if (object(folders)) for (const group of ['projects','conversations','library']) index(get(folders,group,[]),['folders',group]);
     else throw new MergeConflict(['folders'],'文件夹集合格式无效');
+    if(object(folders)&&own(folders,'library'))validateLibraryFolders(folders.library);
   }
   function mergeValue(base, proposed, current, path) {
     const field = path.at(-1);
@@ -122,9 +131,10 @@
         put(result,'folders',mergeList(...values,['folders'],true));
       } else {
         put(result,'folders',copy(values[1]));
-        for (const group of ['projects','conversations']) if (values.some(value => own(value,group))) put(result.folders,group,mergeList(...values.map(value => get(value,group,[])),['folders',group]));
+        for (const group of ['projects','conversations','library']) if (values.some(value => own(value,group))) put(result.folders,group,mergeList(...values.map(value => get(value,group,[])),['folders',group]));
       }
     }
+    if(object(result.folders)&&own(result.folders,'library'))validateLibraryFolders(result.folders.library);
     if (own(current,'_revision')) result._revision = copy(current._revision); else delete result._revision;
     return result;
   }

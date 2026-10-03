@@ -35,6 +35,7 @@
 
   function createController(hooks, env = {}) {
     const document = env.document || globalThis.document;
+    const sourceAnalysis = env.AttachmentAnalysis || globalThis.AttachmentAnalysis || (typeof require === 'function' ? require('./attachment-analysis.js') : null);
     const surface = document.getElementById('previewDialog');
     if (!surface) throw new Error('Reading pane requires the existing preview renderer');
     let tabs = [], activeKey = null, visible = false, parked = false, expanded = false, opener = null, navigationVersion = 0, metadataTimer = null, renderedActiveKey = null, tablistWidth = 0, renderedVisible = false;
@@ -57,11 +58,15 @@
     let backIsland = null, returning = false;
     const heading = node('span', 'reading-heading', '阅读区');
     const caption = node('span', 'reading-caption', '资料与笔记');
+    const chatHost = node('span', 'reading-chat-action'); chatHost.hidden = true;
+    const chat = button('引用到对话', '引用到对话', event => referenceInChat(event)); chat.id = 'readingChat';
+    chatHost.append(chat);
+    let chatIsland = null, referencing = false;
     const maximize = button('↗', '放大阅读区', () => {
       expanded = !expanded; updateShell();
     }); maximize.id = 'readingExpand';
     const collapse = button('−', '收起阅读区，保留标签', () => hide()); collapse.id = 'readingCollapse';
-    toolbar.append(backHost, heading, caption, maximize, collapse);
+    toolbar.append(backHost, heading, caption, chatHost, maximize, collapse);
     const tablist = node('div', 'reading-tabs'); tablist.id = 'readingTabs';
     tablist.setAttribute('role', 'tablist'); tablist.setAttribute('aria-label', '打开的资料');
     tablist.setAttribute('aria-orientation', 'horizontal');
@@ -135,7 +140,7 @@
       document.body.classList.toggle('reading-expanded', shown && expanded);
       const active = tabs.find(tab => tab.key === activeKey), item = active && hooks.getItem(active.kind, active.id);
       updateOrigin(active);
-      const pdf = active?.kind === 'import' && (/^application\/pdf(?:;|$)/i.test(item?.mimeType || '') || /\.pdf$/i.test(item?.originalName || item?.name || ''));
+      const pdf = active?.kind === 'import' && !sourceAnalysis?.isBookmarkOnly?.(item) && (/^application\/pdf(?:;|$)/i.test(item?.mimeType || '') || /\.pdf$/i.test(item?.originalName || item?.name || ''));
       document.body.classList.toggle('reading-pdf', !!(shown && pdf));
       // Keep one tablist and one document surface. Only the lightweight strip
       // joins the PDF toolbar; notes and media retain their original layout.
@@ -161,6 +166,7 @@
       if (shown && tablist.clientWidth !== tablistWidth) revealTab(activeKey);
     }
     function updateOrigin(tab) {
+      updateChatAction(tab);
       const location = tab?.origin && hooks.resolveOrigin?.(tab.origin);
       const label = location?.label || '返回工作区';
       const detail = location?.caption || (location ? '入口已删除、归档或不可用' : '保留阅读标签');
@@ -178,6 +184,47 @@
         back.textContent = props.children; back.title = props.title; back.setAttribute('aria-label', props['aria-label']);
         back.disabled = props.disabled || returning;
       }
+    }
+    function chatAction(tab) {
+      return tab && hooks.onChat && hooks.getItem(tab.kind, tab.id) ? hooks.chatAction?.(tab) : null;
+    }
+    function updateChatAction(tab) {
+      const action = chatAction(tab);
+      chatHost.hidden = !action;
+      if (!action) return;
+      const label = action.label || '引用到对话';
+      const props = { id: 'readingChat', variant: 'ghost', size: 'sm', children: label,
+        title: action.title || label, 'aria-label': label, disabled: !!action.disabled,
+        loading: referencing, onClick: event => referenceInChat(event),
+        style: { height: 28, minHeight: 28, padding: '4px 7px', fontSize: 11, whiteSpace: 'nowrap' } };
+      const kit = env.HalaskaUI || globalThis.HalaskaUI;
+      if (kit?.mount) {
+        if (chatIsland) chatIsland.update(props);
+        else { chatHost.replaceChildren(); chatIsland = kit.mount(chatHost, 'Button', props); }
+      } else {
+        chat.textContent = label; chat.title = props.title; chat.setAttribute('aria-label', label);
+        chat.disabled = props.disabled || referencing;
+      }
+    }
+    async function referenceInChat(event) {
+      const tab = tabs.find(entry => entry.key === activeKey), action = chatAction(tab);
+      if (!visible || parked || !action || action.disabled || referencing) return false;
+      // Capture before a menu takes focus. The hook owns routing and reference
+      // persistence; this toolbar never closes or remounts the active editor.
+      const version = navigationVersion, key = activeKey;
+      const anchor = event?.currentTarget || chatHost.querySelector('button');
+      captureActive(); persist();
+      const snapshot = { ...tab, origin: cleanOrigin(tab.origin), bookmark: cleanBookmark(tab.bookmark) };
+      referencing = true;
+      try {
+        // A menu must first accept an enabled anchor. Keep the in-flight guard
+        // synchronous, then paint busy only when the host returns async work.
+        const result = hooks.onChat(snapshot, { anchor, event,
+          isCurrent: () => version === navigationVersion && activeKey === key && visible && !parked && !!hooks.getItem(tab.kind, tab.id) });
+        if (result?.then) updateChatAction(tab);
+        return await result;
+      } catch (error) { hooks.onError?.(error); return false; }
+      finally { referencing = false; updateChatAction(tabs.find(entry => entry.key === activeKey)); }
     }
     async function returnToOrigin() {
       const tab = tabs.find(entry => entry.key === activeKey);
@@ -293,6 +340,21 @@
       if (!visible) opener = document.activeElement;
       visible = true; parked = false; renderTabs(); persist();
       return true;
+    }
+    function referenceOrigin(kind, id, source) {
+      const from = tabs.find(tab => tab.key === activeKey);
+      if (!visible || parked || !from || from.kind !== source?.kind || from.id !== source?.id) return undefined;
+      const targetKey = keyFor(kind, id), seen = new Set();
+      let cursor = from;
+      // Existing tabs are reading positions, not proof of a cycle. Follow
+      // typed predecessor identities before accepting this explicit entry.
+      while (cursor) {
+        if (cursor.key === targetKey || seen.has(cursor.key)) return undefined;
+        seen.add(cursor.key);
+        const origin = cleanOrigin(cursor.origin);
+        cursor = origin?.view === 'document' ? tabs.find(tab => tab.key === keyFor(origin.kind, origin.id)) : null;
+      }
+      return { view: 'document', kind: from.kind, id: from.id };
     }
     function selectTab(key, { focus = false } = {}) {
       const focusKey = document.activeElement?.dataset?.readingKey || document.activeElement?.dataset?.readingCloseKey;
@@ -410,7 +472,7 @@
       if (visible && !parked && tablist.clientWidth !== tablistWidth) revealTab(activeKey);
     }).observe(tablist);
     if (hooks.loadSession) restoreSession(hooks.loadSession());
-    return { present, close, hide, reopen, resume, reconcile, setPage, revealWorkspace, beforeNavigate, restoreSession, sessionMetadata, returnToOrigin,
+    return { present, close, hide, reopen, resume, reconcile, setPage, revealWorkspace, beforeNavigate, restoreSession, sessionMetadata, returnToOrigin, referenceOrigin,
       remember: () => persist({ capture: true }),
       bookmark: (kind, id) => cleanBookmark(tabs.find(tab => tab.key === keyFor(kind, id))?.bookmark),
       refreshTabs: () => { captureActive(); renderTabs(); persist(); },
@@ -422,6 +484,7 @@
   return { createController, cleanBookmark, init(hooks, env) { controller = createController(hooks, env); return controller; },
     beforeNavigate: (...args) => controller?.beforeNavigate(...args) ?? true,
     returnToOrigin: (...args) => controller?.returnToOrigin(...args),
+    referenceOrigin: (...args) => controller?.referenceOrigin(...args),
     restoreSession: (...args) => controller?.restoreSession(...args),
     sessionMetadata: (...args) => controller?.sessionMetadata(...args),
     bookmark: (...args) => controller?.bookmark(...args),

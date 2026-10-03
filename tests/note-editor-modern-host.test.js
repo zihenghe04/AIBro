@@ -49,7 +49,7 @@ function harness(options = {}) {
       for (const callback of this.listeners[type] || []) await callback(event);
       return event;
     }
-    focus() { document.activeElement = this; }
+    focus() { document.activeElement = this; document.fire?.('focusin', { target: this }); }
     scrollIntoView() { this.scrolled = true; }
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
     querySelectorAll(query) {
@@ -68,14 +68,20 @@ function harness(options = {}) {
     }
     get innerHTML() { return this.html || ''; }
   }
-  const document = { createElement: tag => new Element(tag), activeElement: null, documentElement: { lang: 'zh-CN' } };
+  const documentListeners = {};
+  const document = { createElement: tag => new Element(tag), activeElement: null, documentElement: { lang: 'zh-CN' },
+    addEventListener(type, callback) { (documentListeners[type] ||= []).push(callback); },
+    removeEventListener(type, callback) { documentListeners[type] = (documentListeners[type] || []).filter(item => item !== callback); },
+    fire(type, event = {}) { for (const callback of [...documentListeners[type] || []]) callback(event); }
+  };
   document.body = new Element('body');
   const host = new Element('section'); document.body.append(host);
   const environmentListeners = {};
   const env = {
     document, module: { exports: {} }, console, Promise, AbortController,
     setTimeout(callback) { timers.set(++timerId, callback); return timerId; },
-    clearTimeout(id) { timers.delete(id); }, addEventListener(type, callback) { (environmentListeners[type] ||= []).push(callback); }
+    clearTimeout(id) { timers.delete(id); }, addEventListener(type, callback) { (environmentListeners[type] ||= []).push(callback); },
+    removeEventListener(type, callback) { environmentListeners[type] = (environmentListeners[type] || []).filter(item => item !== callback); }
   };
   if (options.history) env.DocumentEditHistory = require('./editor-history-fixture.cjs');
   if (options.documentMarkdown) env.DocumentMarkdown = options.documentMarkdown;
@@ -83,15 +89,24 @@ function harness(options = {}) {
   const makeAdapter = kind => ({ mount(target, config) {
     options.onMount?.(kind, config);
     let value = config.value, range = { start: 0, end: 0, exact: true }, composing = false;
+    const contentDOM = options.nativeFocus ? new Element('div') : target;
+    if (options.nativeFocus) { contentDOM.setAttribute('contenteditable', 'true'); target.append(contentDOM); }
     const handle = {
-      kind, target, config, initialValue: value, sets: [], writes: [], disabled: [], destroyed: false, flushes: 0, focusCount: 0,
+      kind, target, contentDOM, config, initialValue: value, sets: [], writes: [], disabled: [], destroyed: false, flushes: 0, focusCount: 0,
       ready: options.ready?.(kind, value) || Promise.resolve(true),
       getValue() { return value; },
       setValue(next, options = {}) { this.sets.push(next); this.writes.push({ value: next, ...options }); value = next; },
-      setDisabled(next) { this.disabled.push(next); },
-      selectionSource() { return { ...range }; },
-      setSelectionRange(start, end) { range = { start, end, exact: true }; },
-      focus() { this.focusCount++; target.focus(); },
+      setDisabled(next) { this.disabled.push(next);
+        if (options.nativeFocus) {
+          contentDOM.setAttribute('contenteditable', String(!next));
+          // Model the WebKit blur caused by readonly; the real adapter retains
+          // its selection model across editable-prop changes.
+          if (next && document.activeElement === contentDOM) document.activeElement = document.body;
+        }
+      },
+      selectionSource() { return { ...range, ...(options.inexactSelection ? {exact:false} : {}) }; },
+      setSelectionRange(start, end, direction = 'forward') { range = { start, end, direction, exact: true }; },
+      focus() { this.focusCount++; contentDOM.focus(); },
       destroy() { this.destroyed = true; },
       isComposing() { return composing; },
       flushPending() { this.flushes++; return Promise.resolve(options.flushPending?.(this) ?? (!composing && options.flushResult !== false)); },
@@ -703,4 +718,61 @@ test('first AI draft from reading cold-loads source before creating its undoable
  delete h.env.DocumentEditHistory;h.env.DocumentEditors.ensure=async()=>{await loader();h.env.DocumentEditHistory=require('./editor-history-fixture.cjs')};
  h.mount('n',{mode:'read'});await settle();await h.click('apply-ai');await settle();assert.equal(h.api.snapshot().mode,'edit');assert.equal(h.api.currentContent().content,raw+'AI 草稿');
  h.current('source').config.onHistory('undo');await settle();assert.equal(h.api.currentContent().content,raw);assert.equal(h.calls.saves,0);
+});
+
+
+test('keyboard save restores the same visual/source editor and directional selection after WebKit readonly blur', async () => {
+  for (const mode of ['rich', 'edit']) for (const direction of ['forward', 'backward']) {
+    const pending = deferred(), h = harness({ nativeFocus:true, save:() => pending.promise });
+    h.mount('n', {mode}); await settle(); const editor = h.current(mode === 'rich' ? 'visual' : 'source');
+    editor.type(raw + ' manual'); editor.setSelectionRange(5, 10, direction); editor.focus(); const original = editor.contentDOM;
+    const saving = h.api.save(); await settle(); assert.equal(h.env.document.activeElement, h.env.document.body);
+    pending.resolve(true); assert.equal(await saving, true);
+    assert.equal(h.env.document.activeElement, original); assert.equal(editor.destroyed, false); assert.equal(editor.focusCount, 2);
+    assert.deepEqual({...editor.selectionSource()}, {start:5,end:10,direction,exact:true}); assert.equal(editor.sets.length, 0);
+    assert.equal((h.environmentListeners.blur || []).length, 0, 'temporary save guards are removed');
+  }
+});
+test('Ctrl/Cmd S surface shortcuts preserve a caret and do not create an additional save', async () => {
+  for (const modifier of ['ctrlKey', 'metaKey']) {
+    const pending=deferred(),h=harness({nativeFocus:true,save:()=>pending.promise});h.mount('n',{mode:'rich'});await settle();const editor=h.current('visual');
+    editor.type(raw+' shortcut');editor.setSelectionRange(7,7,'none');editor.focus();
+    const event=await h.el('note-document').fire('keydown',{key:'s',[modifier]:true,target:editor.contentDOM});await settle();
+    assert.equal(event.defaultPrevented,true);assert.equal(h.calls.saves,1);pending.resolve(true);await settle();
+    assert.equal(h.env.document.activeElement,editor.contentDOM);assert.equal(editor.selectionSource().start,7);assert.equal(editor.selectionSource().end,7);
+  }
+});
+test('toolbar save never redirects focus to prose even when macOS leaves focus in the editor on button click', async () => {
+  const h=harness({nativeFocus:true});h.mount('n',{mode:'rich'});await settle();const editor=h.current('visual');editor.type(raw+' clicked');editor.focus();
+  assert.equal(await h.toolbar.props.onSave(),true);assert.equal(editor.focusCount,1);assert.equal(h.env.document.activeElement,h.env.document.body);
+});
+test('a failed save and unchanged recovery cleanup restore keyboard editing without resetting history', async () => {
+  for (const scenario of ['failed','unchanged']) {
+    const h=harness({nativeFocus:true,history:true,...(scenario==='failed'?{save:()=>false}:{recovery:{}})});h.mount('n',{mode:'rich'});await settle();await settle();const editor=h.current('visual');
+    if(scenario==='failed')editor.type(raw+' retained');editor.setSelectionRange(3,3,'none');editor.focus();const setsBefore=editor.sets.length;
+    assert.equal(await h.api.save(),scenario!=='failed');assert.equal(h.env.document.activeElement,editor.contentDOM);assert.equal(editor.selectionSource().start,3);
+    assert.equal(editor.sets.length,setsBefore);assert.equal(h.api.currentContent().content,scenario==='failed'?raw+' retained':raw);
+  }
+});
+test('user focus, input, pointer, scroll or window blur during pending save cancels focus restoration', async () => {
+  for (const intent of ['focus','keydown','pointerdown','wheel','blur']) {
+    const pending=deferred(),h=harness({nativeFocus:true,save:()=>pending.promise});h.mount('n',{mode:'rich'});await settle();const editor=h.current('visual');editor.type(raw+' pending');editor.focus();
+    const saving=h.api.save();await settle();
+    if(intent==='focus'){const elsewhere=h.env.document.createElement('input');h.env.document.body.append(elsewhere);elsewhere.focus();elsewhere.remove();h.env.document.activeElement=h.env.document.body;}
+    else if(intent==='blur')for(const listener of h.environmentListeners.blur || [])listener();
+    else h.env.document.fire(intent,{target:h.env.document.body});
+    pending.resolve(true);assert.equal(await saving,true);assert.equal(editor.focusCount,1);assert.equal(h.env.document.activeElement,h.env.document.body);
+  }
+});
+test('pending navigation and forced document replacement do not reclaim editor focus after save', async () => {
+  for(const intent of ['leave','replace']){
+    const pending=deferred(),h=harness({nativeFocus:true,save:()=>pending.promise});h.mount('n',{mode:'rich'});await settle();const editor=h.current('visual');editor.type(raw+' old');editor.focus();const saving=h.api.save();await settle();let leaving;
+    if(intent==='leave')leaving=h.api.beforeLeave();else {h.api.unmount({force:true});h.mount('other',{mode:'edit'});await settle();h.current('source').focus();}
+    pending.resolve(true);await saving;if(leaving)await leaving;assert.equal(editor.focusCount,1);
+    assert.equal(h.env.document.activeElement,intent==='leave'?h.env.document.body:h.current('source').contentDOM);
+  }
+});
+test('inexact visual source mapping preserves the adapter model selection without an unsafe raw range conversion', async () => {
+  const h=harness({nativeFocus:true,inexactSelection:true});h.mount('n',{mode:'rich'});await settle();const editor=h.current('visual');editor.type(raw+' **bold**');editor.setSelectionRange(4,11,'backward');editor.focus();
+  assert.equal(await h.api.save(),true);assert.equal(h.env.document.activeElement,editor.contentDOM);assert.equal(editor.selectionSource().start,4);assert.equal(editor.selectionSource().end,11);assert.equal(editor.selectionSource().direction,'backward');
 });

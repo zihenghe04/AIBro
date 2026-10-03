@@ -19,7 +19,7 @@ COLLECTIONS = ('projects', 'tasks', 'notes', 'imports', 'papers', 'conversations
 COMMON = set('id title name description workspace projectId project folderId folderPath createdAt updatedAt archived deletedAt tags sourceAttachmentIds sourceAttachmentId sourceConversationId agentRunId'.split())
 FIELDS = {
  'projects': COMMON | set('status dueAt deadline completedAt color icon'.split()),
- 'tasks': COMMON | set('status priority startAt dueAt completedAt checklist sourceNoteIds dependsOn provenance'.split()),
+ 'tasks': COMMON | set('status priority startAt dueAt completedAt checklist sourceNoteIds dependsOn provenance workflowCategory'.split()),
  'notes': COMMON | set('content kind paperId userEdited userEditedAt revisionHistory aiDraft aiDraftHistory provenance sourceNoteIds relatedNoteIds mergedNoteIds consolidatedSections sourceComparison projectMemoryType memoryDate memoryRunIds managedIndex wikiFileBacked wikiCategory wikiMigratedAt wikiImportHash wikiOriginalName wikiImportBatch'.split()),
  'imports': COMMON | set('originalName content pages parser mimeType size url warning error blobHash analysis importOrigin'.split()),
  'papers': COMMON | set('noteId authors year venue doi arxivId url sourceUrl canonicalKey metadata paperType structured userEdits confidence reviewed reviewedAt relations provenance'.split()),
@@ -148,8 +148,27 @@ def clean(value, depth=0, provenance_context=None):
 
 def record(kind, item):
     if not isinstance(item, dict): raise ValueError('同步记录格式无效。')
+    if kind == 'folders' and item.get('kind') == 'library':
+        folder = item.get('folderPath')
+        if (not isinstance(folder, str) or not folder or len(folder) > 240 or re.search(r'[\x00-\x1f\x7f]', folder)
+                or any(part in ('', '.', '..') or part != part.strip() for part in folder.split('/')) or '\\' in folder
+                or len(folder.split('/')) > 6 or item.get('workspace') not in ('日常', '课程', '科研')
+                or item.get('projectId') is not None and (not isinstance(item['projectId'], str) or not IDENTIFIER.fullmatch(item['projectId']))):
+            raise ValueError('资料目录归属或路径无效。')
     context = 'note' if kind == 'notes' else 'artifact' if kind in ('tasks', 'papers') else None
     result = clean({key: value for key, value in item.items() if key in FIELDS[kind]}, provenance_context=context)
+    if kind == 'tasks':
+        # Only the category identity syncs, never the external-inbox source ID.
+        # Explicit null means a deliberate removal and must outrank provenance.
+        if 'workflowCategory' in item:
+            category = item['workflowCategory']
+            if category is not None and (not isinstance(category, str) or category not in ('P0', 'P1', 'P2', 'P3')):
+                raise ValueError('任务分类无效。')
+            result['workflowCategory'] = category
+        elif isinstance(item.get('sourceTaskInbox'), dict) and item['sourceTaskInbox'].get('category') in ('P0', 'P1', 'P2', 'P3'):
+            result['workflowCategory'] = item['sourceTaskInbox']['category']
+    if kind == 'folders' and item.get('kind') == 'library':
+        result.update({key: item.get(key) for key in ('folderPath', 'workspace', 'projectId')})
     if kind == 'trash':
         data = item.get('data') or {}; result['data'] = {}
         for key in COLLECTIONS:
@@ -170,6 +189,47 @@ def all_imports(snapshot):
     yield from snapshot.get('imports', [])
     for entry in snapshot.get('trash', []): yield from (entry.get('data') or {}).get('imports', [])
 
+def public_library_folder(snapshot, folder):
+    def hidden(value):
+        return any(value.get(key) for key in ('private', 'ephemeral', 'incognito', 'deleted', 'deletedAt', 'archived', 'archivedAt')) or value.get('status') in ('archived', 'deleted')
+    def inherited_private(value):
+        # Same privacy ancestry as the reader: a public-looking source may
+        # originate in a private run or conversation, including retired owners.
+        queue, seen = [value], set()
+        for row in queue:
+            if not isinstance(row, dict) or id(row) in seen: continue
+            seen.add(id(row))
+            if any(row.get(key) for key in ('private', 'ephemeral', 'incognito')): return True
+            provenance = row.get('provenance')
+            if isinstance(provenance, dict): queue.append(provenance.get('origin'))
+            for kind, key in (('projects','projectId'), ('agentRuns','agentRunId'), ('agentRuns','runId'), ('conversations','sourceConversationId'), ('conversations','conversationId')):
+                identifier = row.get(key)
+                if not identifier: continue
+                values = list(snapshot.get(kind, []))
+                if kind == 'agentRuns': values += snapshot.get('runs', [])
+                for bundle in snapshot.get('trash', []):
+                    values += (bundle.get('data') or {}).get(kind, [])
+                    if kind == 'agentRuns': values += (bundle.get('data') or {}).get('runs', [])
+                queue.extend(item for item in values if item.get('id') == identifier)
+        return False
+    if hidden(folder): return False
+    if folder.get('projectId'):
+        projects = [p for p in snapshot.get('projects', []) if p.get('id') == folder['projectId']]
+        if len(projects) != 1: return False
+        project = projects[0]
+        if hidden(project) or inherited_private(project): return False
+        if project.get('workspace') != folder.get('workspace'): return False
+    for kind in ('imports', 'notes', 'papers'):
+        members = snapshot.get(kind, [])
+        for item in members:
+            path = item.get('folderPath') or ('原始资料' if kind == 'imports' else '')
+            if not isinstance(path, str): continue
+            if (item.get('projectId') or None) != (folder.get('projectId') or None): continue
+            workspace = project.get('workspace') if folder.get('projectId') else item.get('workspace', '日常')
+            if workspace != folder.get('workspace') or not (path == folder.get('folderPath') or path.startswith(str(folder.get('folderPath')) + '/')): continue
+            if hidden(item) or inherited_private(item) or sum(row.get('id') == item.get('id') for row in members) != 1: return False
+    return True
+
 def project(snapshot):
     output = {}
     for kind in COLLECTIONS:
@@ -188,8 +248,14 @@ def project(snapshot):
                     wire = wire_id(identifier, mid)
                     if ('messages', wire) in output: raise ValueError('同一对话存在重复消息 ID。')
                     output[('messages', wire)] = record('messages', {**message, 'conversationId': identifier, 'position': position})
-    for group in ('projects', 'conversations'):
+    library_scopes = set()
+    for group in ('projects', 'conversations', 'library'):
         for folder in (snapshot.get('folders') or {}).get(group, []):
+            if group == 'library':
+                if not public_library_folder(snapshot, folder): continue
+                scope = dump([folder.get('workspace'), folder.get('projectId'), folder.get('folderPath')])
+                if scope in library_scopes: raise ValueError('同一位置存在重复资料目录。')
+                library_scopes.add(scope)
             if not folder.get('id'): raise ValueError('文件夹缺少稳定 ID。')
             wire = wire_id(group, folder['id'])
             if ('folders', wire) in output: raise ValueError('同类文件夹存在重复 ID。')
@@ -421,6 +487,14 @@ class SyncStore:
                 for project_item in item.get('data',{}).get('projects',[]):
                     prior=old_projects.get(project_item.get('id'),{})
                     if 'localFolder' in prior: project_item['localFolder']=prior['localFolder']
+                # Creation receipts remain local even while a note is trashed.
+                # Restoring the same capture must still resolve a lost native
+                # acknowledgement, without copying old content over peer edits.
+                old_notes={n['id']:n for n in old.get('data',{}).get('notes',[])}
+                for note_item in item.get('data',{}).get('notes',[]):
+                    prior=old_notes.get(note_item.get('id'),{})
+                    for key in ('sourceQuickCaptureId','quickCaptureFingerprint'):
+                        if key in prior: note_item[key]=prior[key]
             grouped[row['kind']].append({**local,**item})
         for kind in COLLECTIONS: snapshot[kind]=grouped[kind]
         by_conv={}
@@ -429,6 +503,13 @@ class SyncStore:
             messages=sorted(by_conv.get(conversation['id'],[]),key=lambda m:(m.get('position',0),m.get('createdAt',0),m['id']))
             conversation['messages']=[{k:v for k,v in m.items() if k not in ('position','conversationId')} for m in messages]
         snapshot['folders']={kind:[{k:v for k,v in item.items() if k!='kind'} for item in grouped['folders'] if item.get('kind')==kind] for kind in ('projects','conversations')}
+        library=[{k:v for k,v in item.items() if k!='kind'} for item in grouped['folders'] if item.get('kind')=='library']
+        # Private or orphaned directory metadata stays local, including when an
+        # unrelated remote record causes reconstruction of this snapshot.
+        local_folders=[item for item in previous.get('folders',{}).get('library',[]) if not public_library_folder(previous,item)]
+        if library or 'library' in previous.get('folders',{}):
+            local_ids={item['id'] for item in local_folders}
+            snapshot['folders']['library']=local_folders+[item for item in library if item['id'] not in local_ids]
         snapshot.setdefault('agentRuns',[])
         return snapshot
     def apply_changes(self, changes, cursor, before_commit=None):

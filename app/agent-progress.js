@@ -6,8 +6,10 @@
   function phase(message, active) {
     if (!message.live) return 'settled';
     if (active?.kind === 'tool') return 'tool';
-    if (active?.kind === 'summary' || message.phase === 'reasoning') return 'thinking';
-    if (active?.kind === 'commentary' || message.phase === 'output') return 'writing';
+    if (active?.kind === 'summary' || active?.kind === 'reasoning') return 'thinking';
+    if (active?.kind === 'commentary' || active?.kind === 'response') return 'writing';
+    if (message.phase === 'reasoning') return 'thinking';
+    if (message.phase === 'output') return 'writing';
     return 'waiting';
   }
   // Keep owned record and evidence subtrees connected. Each React adapter must
@@ -33,6 +35,41 @@
     const selected=selection?.rangeCount&&(previous.contains(selection.anchorNode)||previous.contains(selection.focusNode))
       ? {anchor:selection.anchorNode,anchorOffset:selection.anchorOffset,focus:selection.focusNode,focusOffset:selection.focusOffset,
         anchorIsStart:selectedRange?selectedRange.startContainer===selection.anchorNode&&selectedRange.startOffset===selection.anchorOffset:undefined}:null;
+    // An automatically opened segment can finish while its text is selected
+    // or an inner control has keyboard focus. Keep that reading surface open
+    // for this patch only; never manufacture a durable user pin. Explicit user
+    // closes (including an in-flight close animation) still take precedence.
+    const selectedText=selected&&(selected.anchor!==selected.focus||selected.anchorOffset!==selected.focusOffset);
+    const processRoots=[before,ledger].filter(Boolean);
+    const readable=node=>node&&processRoots.some(scope=>scope.contains(node))&&(()=>{
+      for(let parent=node.parentElement||node.parentNode;parent&&parent!==previous;parent=parent.parentElement||parent.parentNode){
+        if(parent.nodeName==='DETAILS'&&!parent.open&&!parent.querySelector(':scope > summary')?.contains(node))return false;
+      }
+      return true;
+    })();
+    const readers=[focused,...(selectedText?[selected.anchor,selected.focus]:[])].filter(readable);
+    const selectedDetails=new Set();
+    if(selectedText&&selectedRange?.intersectsNode)for(const scope of processRoots){
+      for(const details of [scope,...scope.querySelectorAll('details[open]')]){
+        if(details.nodeName!=='DETAILS'||!details.open)continue;
+        const summary=details.querySelector(':scope > summary');
+        try{if([...details.children].some(child=>child!==summary&&selectedRange.intersectsNode(child)))selectedDetails.add(details);}catch{}
+      }
+    }
+    const holdsReading=details=>{
+      if(details.nodeName!=='DETAILS')return false;
+      const summary=details.querySelector(':scope > summary');
+      return selectedDetails.has(details)||readers.some(node=>details.contains(node)&&!summary?.contains(node));
+    };
+    const keepOpen=(details,nextDetails=details)=>nextDetails.getAttribute('data-progress-user-open')!=='false'
+      &&details._interactionDesiredOpen!==false&&holdsReading(details);
+    // A new reasoning segment can change the default tab. Keep the current
+    // visible reading surface for this paint, without persisting a user choice.
+    const priorView=before?.querySelector(':scope > .conversation-process-navigation')?.dataset.view;
+    const explicitNextView=after?.querySelector(':scope > .conversation-process-navigation')?.dataset.explicitView;
+    const readingPanel=priorView&&before?.querySelector(`:scope > [data-live-key="process-${priorView}-panel"]`);
+    const heldView=readingPanel&&!readingPanel.hidden&&readers.some(node=>readingPanel.contains(node))
+      &&(!explicitNextView||explicitNextView===priorView)?priorView:null;
     const priorPhase=before?.dataset.progressPhase;
     const priorStates=new Map([...(before?.querySelectorAll('[data-activity-id]')||[])].map(row=>[row.dataset.activityId,row.dataset.activityState]));
     function key(n){
@@ -53,6 +90,7 @@
     };
     function sync(a,b){
       if(a===body&&b===nextBody&&root.StreamingBody?.patch(a,b,{selection:selected,onTextEdit:(node,edit)=>root.StreamingBody.remapSelection(selected,node,edit)}))return;
+      if(a.dataset?.liveKey==='flow-text'&&b.dataset?.liveKey==='flow-text'&&root.StreamingBody?.patch(a,b,{selection:selected,onTextEdit:(node,edit)=>root.StreamingBody.remapSelection(selected,node,edit)}))return;
       if(a.dataset?.citationPanel&&b.dataset?.citationPanel&&root.CitationEvidence?.patchSection?.(a,b))return;
       if(a.dataset?.halaskaConversation&&b.dataset?.halaskaConversation&&root.HalaskaConversation?.patchIsland(a,b))return;
       // A settled receipt now lives in the retained process subtree. Its new
@@ -61,10 +99,16 @@
       if(a.dataset?.liveKey?.startsWith('checkpoint-')&&a.dataset.liveKey===b.dataset?.liveKey&&typeof b._refreshCheckpoint==='function'){
         a._refreshCheckpoint=b._refreshCheckpoint;b._refreshCheckpoint(a);return;
       }
-      if(a.isEqualNode(b))return;
+      if(a.isEqualNode(b)){
+        // An identical ancestor can bypass the per-body patch. Still transfer
+        // the freshly validated render ownership to its retained flow bodies.
+        const oldFlow=a.querySelectorAll?.('[data-live-key="flow-text"]')||[],newFlow=b.querySelectorAll?.('[data-live-key="flow-text"]')||[];
+        for(let i=0;i<oldFlow.length;i++)root.StreamMarkdown?.adoptBody?.(oldFlow[i],newFlow[i]);
+        return;
+      }
       if(a.nodeType!==b.nodeType||a.nodeName!==b.nodeName){a.replaceWith(b);return;}
       if(a.nodeType===3){a.nodeValue=b.nodeValue;return;}
-      for(const attr of [...a.attributes])if(!(a._interactionDesiredOpen!==undefined&&['open','style'].includes(attr.name))&&attr.name!=='data-activity-paused'&&!b.hasAttribute(attr.name))a.removeAttribute(attr.name);
+      for(const attr of [...a.attributes])if(!(a._interactionDesiredOpen!==undefined&&['open','style'].includes(attr.name))&&!(attr.name==='open'&&keepOpen(a,b))&&attr.name!=='data-activity-paused'&&!b.hasAttribute(attr.name))a.removeAttribute(attr.name);
       for(const attr of [...b.attributes])if(!(a._interactionDesiredOpen!==undefined&&['open','style'].includes(attr.name))&&a.getAttribute(attr.name)!==attr.value)a.setAttribute(attr.name,attr.value);
       let cursor=a.firstChild;
       for(const child of [...b.childNodes]){
@@ -82,13 +126,22 @@
       }
       while(cursor){const following=cursor.nextSibling;cursor.remove();cursor=following;}
     }
-    for(const [newNode,oldNode] of preserved)sync(oldNode,newNode);
+    for(const [newNode,oldNode] of preserved){
+      root.ToolScheduler?.prepareText?.(oldNode,newNode,{keepOpen});
+      sync(oldNode,newNode);
+    }
+    // Grouping can add a new parent around the same retained, selected row.
+    // That new disclosure must not conceal the row merely because it has no
+    // previous DOM identity; untouched sibling groups still settle normally.
+    for(const scope of processRoots)for(const details of [scope,...scope.querySelectorAll('details')]){
+      if(details.nodeName==='DETAILS'&&!details.open&&keepOpen(details))details.open=true;
+    }
     for(const attr of [...previous.attributes])if(!next.hasAttribute(attr.name))previous.removeAttribute(attr.name);
     for(const attr of [...next.attributes])if(previous.getAttribute(attr.name)!==attr.value)previous.setAttribute(attr.name,attr.value);
     // A transport delta can arrive many times per second. Only actual phase or
     // lifecycle changes animate, never every new word or elapsed-time update.
     if(before&&after){
-      if(priorPhase!==before.dataset.progressPhase)root.ActivityMotion?.animate(before.querySelector('.progress-phase-label'),[{opacity:0,transform:'translateY(4px)'},{opacity:1,transform:'translateY(0)'}],{duration:220,easing:'cubic-bezier(.2,0,0,1)'});
+      if(priorPhase!==before.dataset.progressPhase&&!before.querySelector('[data-lifecycle-stable-heading]'))root.ActivityMotion?.animate(before.querySelector('.progress-phase-label'),[{opacity:0,transform:'translateY(4px)'},{opacity:1,transform:'translateY(0)'}],{duration:220,easing:'cubic-bezier(.2,0,0,1)'});
       for(const row of before.querySelectorAll('[data-activity-id]')){
         const old=priorStates.get(row.dataset.activityId);
         if(old&&old!==row.dataset.activityState)root.ActivityMotion?.animate(row.querySelector('.progress-mark'),[{opacity:.35,transform:'scale(.82)'},{opacity:1,transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.2,0,0,1)'});
@@ -102,6 +155,8 @@
       if(node!==cursor)previous.insertBefore(node,cursor);
       cursor=node.nextSibling;
     }
+    if(heldView){root.ConversationProcess?.select?.(previous,heldView);root.HalaskaConversation?.setProcessView?.(previous,heldView);}
+    root.ConversationProcess?.filterTools?.(previous, { readingNodes: [focused, ...(selectedText ? [selected.anchor, selected.focus] : [])] });
     // DOM reparenting a first activity into its group may blur a summary. Restore
     // only the exact still-connected control; no focus jump to a replacement.
     if(focused?.isConnected&&previous.contains(focused)&&root.document.activeElement!==focused)focused.focus?.({preventScroll:true});
@@ -145,7 +200,8 @@
   }
   function openAttr(message, key, auto) {
     const choice = pinned(message, key);
-    return (choice === null ? !!auto : choice) ? ' open' : '';
+    return ((choice === null ? !!auto : choice) ? ' open' : '')
+      +(choice===null?'':` data-progress-user-open="${choice}"`);
   }
   function pin(message, key, open) {
     if (!message || typeof key !== 'string' || !key) return false;
@@ -171,29 +227,10 @@
     const newest = items[items.length-1];
     // 思考段与 NewMax 的“深度思考”对齐命名（Responses 的思考摘要与 chat 的
     // reasoning_content 明文思考共用此段类型，都是模型的思考内容本身）。
-    const title = item => item.kind === 'step' ? item.text : item.kind === 'tool' ? (item.name || '工具操作') : item.kind === 'summary' ? '深度思考' : '模型进展';
-    const clock = value => { const date = new Date(value); return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}:${String(date.getSeconds()).padStart(2,'0')}`; };
-    // 阶段行（step）过去渲染成不可展开的纯文本，用户点“模型思考与规划”这类行没有任何
-    // 反应，也就看不到该阶段的思考与工具明细。现在每个条目都可展开：阶段行展开后列出
-    // 该阶段期间记录的过程明细索引（标题 + 摘要首行），时间线本身保持平铺不变。
-    const stepBody = (item, index) => {
-      const scope = [];
-      for (let cursor = index + 1; cursor < items.length && items[cursor].kind !== 'step'; cursor++) scope.push(items[cursor]);
-      const lines = [];
-      const at = Number(item.at);
-      if (Number.isFinite(at) && at > 0) lines.push(`阶段开始：${clock(at)}`);
-      if (scope.length) {
-        lines.push(`本阶段记录 ${scope.length} 段过程明细：`);
-        for (const entry of scope.slice(0, 12)) {
-          const text = String(entry.text || '').split('\n').map(line => line.trim()).filter(Boolean).pop() || '';
-          lines.push(`· ${title(entry)}${text ? `：${text.slice(0, 120)}` : ''}`);
-        }
-        if (scope.length > 12) lines.push(`· 其余 ${scope.length - 12} 段见下方时间线`);
-      } else {
-        lines.push('该阶段没有单独的过程记录。');
-      }
-      return `<div class="progress-item-body">${esc(lines.join('\n'))}</div>`;
-    };
+    const title = item => item.kind === 'step' ? item.text : item.kind === 'tool' ? (item.name || '工具操作') : item.kind === 'summary' ? t('模型思考', 'Model reasoning') : '模型进展';
+    // A stage title is an actual lifecycle marker, not a recorded explanation.
+    // Never manufacture an expandable body from timestamps or nearby events:
+    // reasoning and tool content have their own durable records below.
     const activeText = active && (active.kind === 'summary' || active.kind === 'commentary') ? active.text.split('\n').filter(Boolean).pop() : active ? title(active) : '';
     const status = message.live ? 'running' : message.runStatus || (message.retryRunId ? 'failed' : 'unknown');
     const labels = {completed:'已完成',done:'已完成','completed-local':'已完成',failed:'执行失败',cancelled:'已停止','awaiting-approval':'等待审批',rejected:'已拒绝'};
@@ -208,11 +245,10 @@
       return `${esc(base)}<span class="progress-cost">${esc(duration(start, end))}</span>`;
     };
     const rowMarkup = (item, index) => {
-      // 每个条目都必须可展开：阶段行给出该阶段的过程明细索引，活动段给出自身正文。
-      // 没有任何正文可显示时退化为静态行（当前仅剩理论上不会出现的空段）。
-      const body = item.kind === 'step' ? stepBody(item, index) : item.text ? `<div class="progress-item-body">${esc(item.text)}</div>` : '';
+      const detail = item.kind === 'step' ? item.detail : item.text;
+      const body = typeof detail === 'string' && detail.trim() ? `<div class="progress-item-body">${esc(detail)}</div>` : '';
       const state = itemState(item), label = stateLabels[countState(item)];
-      return `<li class="progress-item is-${esc(state)}" data-activity-id="${esc(item.id)}" data-activity-state="${esc(state)}"><span class="progress-mark" aria-label="${label}">${mark(state)}</span><div class="progress-item-content">${body ? `<details data-progress-key="${esc(item.id)}"${openAttr(message, item.id, message.live && ['running','pending'].includes(state))}><summary>${itemTitle(item)}</summary>${body}</details>` : `<span>${itemTitle(item)}</span>`}</div></li>`;
+      return `<li class="progress-item is-${esc(state)}" data-activity-id="${esc(item.id)}" data-activity-state="${esc(state)}"><span class="progress-mark" aria-label="${label}">${mark(state)}</span><div class="progress-item-content">${body ? `<details data-progress-key="${esc(item.id)}"${openAttr(message, item.id, message.live && ['running','pending'].includes(state))}><summary>${itemTitle(item)}</summary>${body}</details>` : `<span class="progress-stage-label">${itemTitle(item)}</span>`}</div></li>`;
     };
     // Consecutive tool calls form one real disclosure, not an extra summary
     // after the same N rows. Its key is anchored to the first call so appending

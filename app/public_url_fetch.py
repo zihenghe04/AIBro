@@ -11,6 +11,7 @@ from pathlib import PurePosixPath
 import re
 import socket
 import ssl
+import threading
 import time
 import urllib.parse
 import zlib
@@ -18,6 +19,11 @@ import zlib
 
 MAX_BYTES = 64 * 1024 * 1024
 MAX_REDIRECTS = 5
+DOH_TIMEOUT = 8
+DOH_MAX_BYTES = 64 * 1024
+DOH_HOST = 'cloudflare-dns.com'
+DOH_BOOTSTRAP = ('1.1.1.1', '1.0.0.1')
+FAKE_DNS_NETWORKS = (ipaddress.ip_network('198.18.0.0/15'), ipaddress.ip_network('2001:2::/48'))
 
 
 class PublicFetchError(ValueError):
@@ -61,7 +67,51 @@ def _public_ip(value):
             and not address.is_unspecified and not getattr(address, 'is_site_local', False))
 
 
-def _resolve(host, port):
+def _dns_name(value):
+    if not isinstance(value, str):
+        return None
+    name = value[:-1] if value.endswith('.') else value
+    name = name.lower()
+    if not 1 <= len(name) <= 253 or any(not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label)
+                                      for label in name.split('.')):
+        return None
+    return name
+
+
+def _doh_hostname(host):
+    name = _dns_name(host)
+    if not name or '.' not in name or not re.search(r'[a-z]', name.rsplit('.', 1)[-1]):
+        return False
+    # Do not leak local/special-use names to an external resolver. Numeric URL
+    # spellings (including legacy inet_aton forms) never enable this fallback.
+    if name.endswith(('.localhost', '.local', '.internal', '.invalid', '.test', '.example', '.onion',
+                      '.arpa', '.lan', '.home', '.corp', '.localdomain')):
+        return False
+    try:
+        socket.inet_aton(name)
+        return False
+    except OSError:
+        return True
+
+
+def _fake_dns_answers(host, addresses):
+    if not _doh_hostname(host) or not addresses:
+        return False
+    try:
+        for family, socktype, proto, _, address in addresses:
+            if family not in (socket.AF_INET, socket.AF_INET6) or socktype != socket.SOCK_STREAM or proto not in (0, socket.IPPROTO_TCP):
+                return False
+            value = ipaddress.ip_address(address[0])
+            if '%' in address[0] or (value.version == 4) != (family == socket.AF_INET):
+                return False
+            if not any(value.version == network.version and value in network for network in FAKE_DNS_NETWORKS):
+                return False
+    except (ValueError, TypeError, IndexError):
+        return False
+    return True
+
+
+def _resolve(host, port, deadline=None):
     if host == 'localhost' or host.endswith(('.localhost', '.local', '.internal')):
         raise PublicFetchError('只能读取公网地址，不能访问本机或内网服务。', 'NON_PUBLIC_URL', 403)
     try:
@@ -70,6 +120,10 @@ def _resolve(host, port):
         raise PublicFetchError('无法解析网页域名，请检查地址或网络。', 'DNS_FAILED', 502) from None
     if not addresses:
         raise PublicFetchError('网页域名没有可连接的地址。', 'DNS_FAILED', 502)
+    # Recognized benchmark ranges are only a compatibility signal. They never
+    # become connection targets; any mixed/other private answer still fails.
+    if _fake_dns_answers(host, addresses):
+        return _doh_addresses(host, port, deadline if deadline is not None else time.monotonic() + DOH_TIMEOUT)
     if any(family not in (socket.AF_INET, socket.AF_INET6) or not _public_ip(address[0])
            for family, _, _, _, address in addresses):
         raise PublicFetchError('只能读取公网地址，不能访问本机或内网服务。', 'NON_PUBLIC_URL', 403)
@@ -96,6 +150,10 @@ class _PinnedConnection(http.client.HTTPConnection):
                 # resolve the hostname a second time or inherit proxy settings.
                 connection.connect(address)
                 if self.secure:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError()
+                    connection.settimeout(remaining)
                     connection = ssl.create_default_context().wrap_socket(connection, server_hostname=self.host)
                 self.sock = connection
                 return
@@ -103,6 +161,177 @@ class _PinnedConnection(http.client.HTTPConnection):
                 last_error = error
                 connection.close()
         raise last_error or OSError('No usable public address')
+
+
+def _invalid_dns():
+    return PublicFetchError('安全域名解析返回了无法验证的结果，未连接网页。收藏已保留，可稍后重试。', 'DNS_RESPONSE_INVALID', 502)
+
+
+def _parse_doh_answer(payload, host, qtype):
+    """Accept only the requested question and its bounded CNAME terminal RRset."""
+    try:
+        if not isinstance(payload, dict) or type(payload.get('Status')) is not int or payload['Status'] != 0:
+            raise ValueError()
+        if payload.get('TC') is not False or payload.get('CD') is not False or type(qtype) is not int or qtype not in (1, 28):
+            raise ValueError()
+        questions = payload.get('Question')
+        if not isinstance(questions, list) or len(questions) != 1 or not isinstance(questions[0], dict):
+            raise ValueError()
+        question = questions[0]
+        if _dns_name(question.get('name')) != host or type(question.get('type')) is not int or question['type'] != qtype:
+            raise ValueError()
+        answers = payload.get('Answer', [])
+        if not isinstance(answers, list) or len(answers) > 128:
+            raise ValueError()
+        aliases, records = {}, []
+        for entry in answers:
+            if not isinstance(entry, dict) or type(entry.get('type')) is not int or not 1 <= entry['type'] <= 65535:
+                raise ValueError()
+            owner = _dns_name(entry.get('name'))
+            if not owner or not _doh_hostname(owner):
+                raise ValueError()
+            if entry['type'] not in (1, 5, 28):
+                continue  # DNSSEC metadata is not a connection target.
+            if not isinstance(entry.get('data'), str) or type(entry.get('TTL')) is not int or not 0 <= entry['TTL'] <= 0xffffffff:
+                raise ValueError()
+            if entry['type'] == 5:
+                target = _dns_name(entry['data'])
+                if not target or not _doh_hostname(target) or owner in aliases and aliases[owner] != target:
+                    raise ValueError()
+                aliases[owner] = target
+            else:
+                address = ipaddress.ip_address(entry['data'])
+                if '%' in entry['data'] or not _public_ip(str(address)):
+                    raise PublicFetchError('安全域名解析包含非公网地址，已停止连接。', 'NON_PUBLIC_URL', 403)
+                if entry['type'] != qtype or address.version != (4 if qtype == 1 else 6):
+                    raise ValueError()
+                records.append((owner, str(address)))
+        terminal, seen = host, set()
+        while terminal in aliases:
+            if terminal in seen or len(seen) >= 8:
+                raise ValueError()
+            seen.add(terminal)
+            terminal = aliases[terminal]
+        if any(owner not in seen for owner in aliases) or any(owner != terminal for owner, _ in records):
+            raise ValueError()
+        return list(dict.fromkeys(address for _, address in records))
+    except PublicFetchError:
+        raise
+    except (ValueError, TypeError, KeyError):
+        raise _invalid_dns() from None
+
+
+def _doh_query(host, qtype, deadline):
+    if not _doh_hostname(host) or type(qtype) is not int or qtype not in (1, 28):
+        raise _invalid_dns()
+    path = '/dns-query?' + urllib.parse.urlencode({'name': host, 'type': qtype, 'cd': 'false'})
+    for bootstrap in DOH_BOOTSTRAP:
+        if time.monotonic() >= deadline:
+            break
+        connection = response = watchdog = None
+        expired = threading.Event()
+        try:
+            addresses = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, (bootstrap, 443))]
+            connection = _PinnedConnection(DOH_HOST, 443, addresses, min(3, deadline - time.monotonic()), True)
+            connection.connect()
+            active_socket = connection.sock
+
+            def expire(active_socket=active_socket, expired=expired):
+                expired.set()
+                try:
+                    active_socket.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError()
+            # A read timeout alone allows a slow header/body to keep extending
+            # its lifetime. Shutdown this exact socket at the absolute deadline.
+            watchdog = threading.Timer(remaining, expire)
+            watchdog.daemon = True
+            watchdog.start()
+            active_socket.settimeout(remaining)
+            connection.request('GET', path, headers={'Host': DOH_HOST, 'Accept': 'application/dns-json', 'Accept-Encoding': 'identity'})
+            response = connection.getresponse()
+            if response.status != 200 or response.headers.get_content_type() != 'application/dns-json':
+                raise _invalid_dns()
+            if response.headers.get('Content-Encoding', '').strip().lower() not in ('', 'identity'):
+                raise _invalid_dns()
+            declared = response.headers.get('Content-Length')
+            if declared is not None and (len(declared.strip()) > 10 or not re.fullmatch(r'[0-9]+', declared.strip())):
+                raise _invalid_dns()
+            expected = int(declared) if declared is not None else None
+            if expected is not None and expected > DOH_MAX_BYTES:
+                raise _invalid_dns()
+            if response.headers.get('Transfer-Encoding', '').lower() not in ('', 'chunked') or declared is not None and response.headers.get('Transfer-Encoding'):
+                raise _invalid_dns()
+            raw = bytearray()
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or expired.is_set():
+                    raise TimeoutError()
+                active_socket.settimeout(remaining)
+                chunk = response.read1(min(16384, DOH_MAX_BYTES + 1 - len(raw)))
+                if not chunk:
+                    break
+                raw.extend(chunk)
+                if len(raw) > DOH_MAX_BYTES:
+                    raise _invalid_dns()
+            if time.monotonic() >= deadline or expired.is_set():
+                raise TimeoutError()
+            if expected is not None and len(raw) != expected:
+                raise _invalid_dns()
+
+            def unique_object(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError()
+                    result[key] = value
+                return result
+
+            def invalid_constant(_):
+                raise ValueError()
+
+            try:
+                return json.loads(raw.decode('utf-8'), object_pairs_hook=unique_object, parse_constant=invalid_constant)
+            except (ValueError, UnicodeError, RecursionError):
+                raise _invalid_dns() from None
+        except PublicFetchError:
+            raise
+        except (OSError, http.client.HTTPException):
+            if expired.is_set() or time.monotonic() >= deadline:
+                break
+            # Try only the second fixed public bootstrap, never a discovered
+            # endpoint, an environment proxy, or the original fake addresses.
+        finally:
+            if watchdog is not None:
+                watchdog.cancel()
+            if response is not None:
+                response.close()
+            if connection is not None:
+                connection.close()
+    if time.monotonic() >= deadline:
+        raise PublicFetchError('安全域名解析等待超时，收藏已保留。', 'DNS_FALLBACK_TIMEOUT', 504)
+    raise PublicFetchError('当前网络返回代理虚拟地址，安全域名解析暂时不可用。收藏已保留，可稍后重试。', 'DNS_FALLBACK_FAILED', 502)
+
+
+def _doh_addresses(host, port, deadline):
+    deadline = min(deadline, time.monotonic() + DOH_TIMEOUT)
+    values = []
+    for qtype in (1, 28):
+        if time.monotonic() >= deadline:
+            raise PublicFetchError('安全域名解析等待超时，收藏已保留。', 'DNS_FALLBACK_TIMEOUT', 504)
+        # Do not connect until BOTH families have been validated. Failed AAAA
+        # is not equivalent to a successful empty AAAA answer.
+        values.extend(_parse_doh_answer(_doh_query(host, qtype, deadline), host, qtype))
+    if time.monotonic() >= deadline:
+        raise PublicFetchError('安全域名解析等待超时，收藏已保留。', 'DNS_FALLBACK_TIMEOUT', 504)
+    if not values:
+        raise PublicFetchError('安全域名解析没有返回公网地址，收藏已保留。', 'DNS_FAILED', 502)
+    return [(socket.AF_INET6 if ':' in value else socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP,
+             (value, port, 0, 0) if ':' in value else (value, port)) for value in dict.fromkeys(values)]
 
 
 def _open(url, host, port, addresses, timeout, user_agent, cookie=None):
@@ -173,9 +402,12 @@ def fetch_public_url(url, *, max_bytes=MAX_BYTES, timeout=45, total_timeout=180,
         if visit in visited:
             raise PublicFetchError('网页发生循环重定向。', 'REDIRECT_LOOP', 502)
         visited.add(visit)
-        addresses = _resolve(host, port)
         connection = response = None
         try:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError()
+            addresses = _resolve(host, port, deadline=deadline)
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError()

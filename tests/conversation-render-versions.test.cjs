@@ -114,11 +114,23 @@ test('removing a completed run retires its large primitive values after the next
   assert.equal(contains(h.env.conversationRenderVersions.snapshots.rows.get('m')?.snapshot),false);
 });
 
-test('small plain rows retain the JSON path and retire structural snapshots when they become small again',()=>{
-  const h=fixture();h.state.agentRuns=[];const first=h.snapshot();assert.equal(typeof first.row,'string');assert.equal(h.env.conversationRenderVersions.snapshots.rows.size,0);
+test('plain rows compare content without serialized answers and switch external dependencies without stale versions',()=>{
+  const h=fixture();h.state.agentRuns=[];const first=h.snapshot();assert.equal(typeof first.row,'number');assert.equal(h.env.conversationRenderVersions.snapshots.rows.size,1);
   h.message.text='A'.repeat(9000);const large=h.snapshot();assert.equal(typeof large.row,'number');assert.equal(h.env.conversationRenderVersions.snapshots.rows.size,1);
-  h.message.text='Small again';const small=h.snapshot();assert.equal(typeof small.row,'string');assert.equal(h.env.conversationRenderVersions.snapshots.rows.size,0);assert.deepEqual(h.snapshot(),small);
-  h.message.attachments=[{id:'inline',dataUrl:'data:image/png;base64,'+'A'.repeat(100000)}];assert.equal(typeof h.snapshot().row,'number');
+  h.message.text='Small again';const small=h.snapshot();assert.notEqual(small.row,large.row);assert.deepEqual(h.snapshot(),small);
+  h.message.attachments=[{id:'inline',dataUrl:'data:image/png;base64,'+'A'.repeat(100000)}];const rich=h.snapshot();assert.notEqual(rich.row,small.row);
+  delete h.message.attachments;assert.notEqual(h.snapshot().row,rich.row);assert.equal(h.env.conversationRenderVersions.snapshots.rows.get('m').plain,true);
+});
+
+test('plain-message in-place corrections and equal replacements invalidate only their stable row identities',()=>{
+  const h=fixture();h.state.agentRuns=[];h.conversation.messages.push({id:'second',role:'user',text:'Unchanged'});
+  const rows=()=>{const v=h.env.conversationRenderVersions(h.conversation);return h.conversation.messages.map(v.rowVersion);};
+  let previous=rows();
+  for(const change of [()=>h.message.text='Corrected',()=>h.message.modelConfig={model:'first'},()=>h.message.modelConfig.model='second',
+    ()=>h.message.progressPins={a:true},()=>h.message.progressPins.a=false,()=>delete h.message.progressPins,
+    ()=>h.conversation.messages[0]={...h.conversation.messages[0]}]){
+    change();const next=rows();assert.notEqual(next[0],previous[0]);assert.equal(next[1],previous[1]);previous=next;
+  }
 });
 
 test('long text and media remain primitive values, do not allocate a serialized full-body snapshot, and still invalidate',()=>{

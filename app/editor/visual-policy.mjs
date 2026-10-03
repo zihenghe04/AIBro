@@ -31,8 +31,17 @@ export function safeDocumentUrl(value, { image = false } = {}) {
 
 export function diagnoseMarkdown(ast) {
   let reason = '';
-  function visit(node) {
+  function visit(node, parent) {
     if (!node || reason) return;
+    // Milkdown 7.22 serializes an empty paragraph as this attribute-free HTML
+    // marker. Its remarkPreserveEmptyLinePlugin converts the marker back to an
+    // empty paragraph (or an empty table cell) before ProseMirror parsing. Our
+    // preflight sees processor.parse(), before that transform. Admit only the
+    // same whole-node/sole-child positions, never inline or attributed HTML.
+    const emptyLine = node.type === 'html' && /^<br\s*\/?\s*>$/i.test(String(node.value || '').trim())
+      && (['root', 'blockquote', 'listItem'].includes(parent?.type)
+        || (['paragraph', 'tableCell'].includes(parent?.type) && parent.children?.length === 1));
+    if (emptyLine) return;
     if (!supportedNodes.has(node.type)) {
       reason = node.type === 'html' ? '这份文档包含 HTML，使用 Markdown 源码可完整保留这些内容。'
         : /footnote/i.test(node.type) ? '这份文档包含脚注，请使用 Markdown 源码编辑以保留引用。'
@@ -49,7 +58,7 @@ export function diagnoseMarkdown(ast) {
     if (node.type === 'code' && node.meta) {
       reason = '代码围栏包含额外属性，请使用 Markdown 源码编辑以完整保留。'; return;
     }
-    for (const child of node.children || []) visit(child);
+    for (const child of node.children || []) visit(child, node);
   }
   visit(ast);
   return { supported: !reason, reason };

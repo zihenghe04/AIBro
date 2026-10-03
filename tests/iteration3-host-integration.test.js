@@ -1,3 +1,4 @@
+const installConversationPathHost = require('./helpers/conversation-path-host.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -218,6 +219,7 @@ function feedbackFixture(options = {}) {
     saveDocumentDurably: async () => { calls.saves.push(copy(state)); return options.save ? options.save() : true; },
     sendMessage: () => { calls.sends++; throw Error('Feedback staging cannot send'); },
   });
+  installConversationPathHost(context);
   vm.runInContext(feedbackHost, context);
   return { state, input, context, calls, stage: values => context.stageAnswerFeedbackDraft({ conversationId: 'chat-a', text: 'Suggested correction', ...values }), get conversation() { return state.conversations.find(item => item.id === 'chat-a'); } };
 }

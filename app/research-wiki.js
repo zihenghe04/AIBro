@@ -22,6 +22,21 @@ function resolveLink(state,id,target){
  return note.id;
 }
 function resolveSource(state,id,href){const note=(state.notes||[]).find(n=>n.id===id&&active(n));if(!note||note.wikiFileError||note.projectId&&!(state.projects||[]).some(p=>p.id===note.projectId&&active(p)))return null;const target=note.wikiSourceLinks?.[href];if(!(note.sourceAttachmentIds||[]).includes(target))return null;const source=(state.imports||[]).find(i=>i.id===target&&active(i));return source&&(!source.projectId||(state.projects||[]).some(p=>p.id===source.projectId&&active(p)))?source:null;}
+// Typed references are identities, not paths or persisted title snapshots. Use
+// the same live access gate as document/task navigation before reading labels.
+function resolveReference(state,ownerId,target,{resolveOrigin,privateMode=false}={}){
+ if(typeof target!=='string'||typeof resolveOrigin!=='function'||privateMode)return null;
+ const match=/^(note|task|project):([A-Za-z0-9_-]{1,256})$/.exec(target);if(!match)return null;
+ const [,kind,id]=match,origin=kind==='project'?{view:'project',projectId:id}:kind==='task'?{view:'task',id}:{view:'document',kind:'note',id};
+ try{
+  if(!resolveOrigin(state,{view:'document',kind:'note',id:ownerId},{privateMode}).available||!resolveOrigin(state,origin,{privateMode}).available)return null;
+  const records=state[{note:'notes',task:'tasks',project:'projects'}[kind]];
+  const matches=Array.isArray(records)?records.filter(record=>record?.id===id):[];
+  if(matches.length!==1)return null;
+  const title=kind==='project'?matches[0].name:matches[0].title;
+  return{kind,id,title:typeof title==='string'?title:''};
+ }catch{return null;}
+}
 function linkedNotes(state,note){return [...String(note.content||'').matchAll(/\[[^\]\n]*\]\(([^)\n]+)\)/g)].map(m=>resolveLink(state,note.id,m[1])).filter(Boolean);}
 const reads=new WeakMap();
 const revision=n=>JSON.stringify([n.id,n.title,n.content,n.kind,n.updatedAt,n.projectId,n.aiDraft]);
@@ -65,5 +80,5 @@ function apply(state,action,context){
 function related(state,note){const available=n=>active(n)&&(!n.projectId||(state.projects||[]).some(p=>p.id===n.projectId&&active(p)));const ids=[...new Set([...(note.sourceNoteIds||[]),...(note.relatedNoteIds||[]),...linkedNotes(state,note)])];return{sources:ids.map(id=>(state.notes||[]).find(n=>n.id===id&&available(n))||{id,unavailable:true}),backlinks:(state.notes||[]).filter(n=>available(n)&&n.id!==note.id&&[...(n.sourceNoteIds||[]),...(n.relatedNoteIds||[]),...linkedNotes(state,n)].includes(note.id))};}
 function catalog(state,scope={},offset=0){if(!Number.isSafeInteger(offset)||offset<0)throw Error('Wiki 分页位置无效');if(scope.workspace&&!['auto','科研'].includes(scope.workspace))return{entries:[],total:0,nextOffset:null};const all=entries(state,scope.projectId?{projectId:scope.projectId}:{}).filter(n=>!scope.projectId||n.projectId===scope.projectId);return{entries:all.slice(offset,offset+20).map(n=>({id:n.id,title:n.title,wikiType:typeOf(n),projectId:n.projectId||null,updatedAt:n.updatedAt,pendingDraft:!!n.aiDraft,unavailable:!!n.wikiFileError})),total:all.length,offset,nextOffset:offset+20<all.length?offset+20:null,contentRead:false};}
 function instructions(state,scope){return '\n科研 Wiki 是跨对话保存的研究记忆，以下只是目录而非已核验证据：'+JSON.stringify(catalog(state,scope))+'。用 knowledgeRequests:[{type:"wiki_list",offset:20}] 继续分页；用 read(recordType:"note",id,offset) 读取原文、再读取关联证据。不能把待审阅草稿或模型推断当作已验证事实。仅在用户要求沉淀/保存研究记忆时提交 actions:[{type:"upsert_wiki",wikiType:"experiment",title,projectId,sections:{...},sourceNoteIds:[],sourceAttachmentIds:[],noteId:更新时原ID,baseUpdatedAt:更新时读取版本}]。wikiType 与章节：'+JSON.stringify(Object.fromEntries(Object.entries(TYPES).map(([k,v])=>[k,fields(k)])))+'。缺少依据标明未记录；保留矛盾和失败证据，标明被推翻结论的边界及依据。更新必须读完现有正文、保留全部章节与用户内容，只保存待审阅草稿。已有草稿时使用 read(recordType:"note",id,variant:"draft",offset) 读完草稿并继续合并新材料，不要求用户先采纳；旧草稿由系统保留历史。已有 paperId 的论文导读使用 upsert_paper，不重复生成论文 Wiki。';}
-return {TYPES,COMMON,fields,active,typeOf,entries,markdown,apply,related,catalog,instructions,revision,trackRead,resolveLink,resolveSource,linkedNotes};
+return {TYPES,COMMON,fields,active,typeOf,entries,markdown,apply,related,catalog,instructions,revision,trackRead,resolveLink,resolveSource,resolveReference,linkedNotes};
 });

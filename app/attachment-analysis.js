@@ -1,9 +1,9 @@
 /* Evidence-based attachment analysis status. No parser/model calls or mutations. */
 (function (root, factory) {
-  const api = factory();
+  const api = factory(root);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AttachmentAnalysis = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
   'use strict';
   const list = value => Array.isArray(value) ? value.filter(Boolean) : [];
   const id = value => typeof value === 'string' && value.length > 0 && value.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value);
@@ -108,12 +108,62 @@
     // structured papers are the only conservative legacy fallback.
     return !Object.hasOwn(source, 'analysis') && (analysisKind(record.kind) || type === 'paper');
   }
+  // An append operation first saves a proposal, not a finished analysis. Its
+  // later durable adoption is a separate receipt: project that evidence without
+  // rewriting the original result or manufacturing a source.analysis stamp.
+  function adoptedAnalysis(state = {}, source, { conversationId } = {}) {
+    const review = root.DraftReview || (typeof require === 'function' ? require('./draft-review.js') : null);
+    const evidence = root.CitationEvidence || (typeof require === 'function' ? require('./citation-evidence.js') : null);
+    const artifacts = root.ArtifactProvenance || (typeof require === 'function' ? require('./artifact-provenance.js') : null);
+    if (!source || !review?.proposalStatus || !evidence?.status || !artifacts?.access || isBookmarkOnly(source)
+      || !Number.isFinite(source.updatedAt) || artifacts.access(state, { type: 'import', id: source.id }).record !== source) return [];
+    const outputs = [];
+    for (const run of list(state.agentRuns)) {
+      if (!list(run.fileChanges).some(change => change.type === 'note' && change.operation === 'drafted' && linked(change.after?.aiDraft, source.id))) continue;
+      if (!id(run.id) || !realCompleted(run) || run.deleted || run.deletedAt || run.approvalSaveError
+        || conversationId && run.conversationId !== conversationId
+        || list(state.agentRuns).filter(item => item.id === run.id).length !== 1) continue;
+      const receipt = run.executionReceipt, approval = run.approvalReceipt;
+      if (receipt && (receipt.version !== 1 || receipt.phase !== 'committed') || approval?.savePending) continue;
+      if (!receipt && !(approval?.metadataSettled === true && Number.isFinite(approval.settledAt) && approval.settledAt >= approval.appliedAt)) continue;
+      if (!artifacts.access(state, { type: 'import', id: source.id, runId: run.id }).available) continue;
+      const read = list(run.evidenceSources).some(row => row.type === 'import' && row.id === source.id && row.provided === true && row.bodyHash
+        && ['read', 'read_page', 'read_file', 'attachment_text', 'attachment_original', 'attachment_image', 'explicit_reference'].includes(row.origin)
+        && Number.isFinite(row.recordUpdatedAt) && source.updatedAt <= row.recordUpdatedAt
+        && evidence.status({ ...row, runId: run.id }, state).kind === 'snapshot');
+      if (!read) continue;
+      for (const change of list(run.fileChanges)) {
+        if (change.type !== 'note' || change.operation !== 'drafted'
+          || !list(run.results).some(row => row.type === 'note' && row.id === change.id && row.operation === 'drafted')
+          || receipt && !list(receipt.results).some(row => row.type === 'note' && row.id === change.id && row.operation === 'drafted')) continue;
+        const note = artifacts.access(state, { type: 'note', id: change.id, runId: run.id }).record;
+        const origin = change.after?.aiDraft?.provenance?.origin, body = note?.provenance;
+        if (!note || !linked(note, source.id) || !linked(change.after?.aiDraft, source.id) || !meaningfulNote(state, note, source)
+          || origin?.recorded !== true || origin.runId !== run.id || body?.origin?.runId !== run.id
+          || body.output?.type !== 'note' || body.output.id !== note.id || body.output.variant !== 'body'
+          || !body.outputStamp || body.outputStamp !== artifacts.outputStamp('note', note)) continue;
+        if (review.proposalStatus(state, change, { runId: run.id, includeReview: false }).status === 'adopted') outputs.push({ runId: run.id, noteId: note.id });
+      }
+    }
+    return outputs;
+  }
+  // A saved URL is useful metadata, but it is not a downloaded source. Check
+  // actual payloads as well as the bookmark parser so later ingestion can
+  // unlock reading/analysis without inventing a second capability flag.
+  function isBookmarkOnly(item) {
+    return !!item && (item.parser === 'bookmark' || typeof item.url === 'string' && !!item.url.trim())
+      && item.fileStored !== true && !(typeof item.dataUrl === 'string' && item.dataUrl.trim())
+      && !(typeof item.content === 'string' && item.content.trim())
+      && !list(item.pages).some(page => typeof page?.text === 'string' && page.text.trim());
+  }
   function derive(state = {}, item) {
     const source = item && list(state.imports).find(entry => entry.id === item.id);
     const pending = (taskIds = []) => ({ status: 'pending', label: '待 AI 分析', detail: taskIds.length ? `已关联 ${taskIds.length} 个任务；尚无可用的分析笔记或论文记录。` : '尚无可用的分析笔记或论文记录；文字索引、改名和归档不代表已分析。', noteIds: [], paperIds: [], taskIds });
     if (!source || !visible(state, source)) return pending();
     const tasks = list(state.tasks).filter(record => visible(state, record) && linked(record, source.id));
-    const notes = list(state.notes).filter(record => visible(state, record) && linked(record, source.id) && meaningfulNote(state, record, source) && provenance(state, source, record, 'note'));
+    if (isBookmarkOnly(source)) return { status: 'bookmark', label: '已收藏链接', detail: '仅保存网址；尚未下载网页或建立文字索引。请在“添加资料”中导入网页，或上传原始文件后再分析。', noteIds: [], paperIds: [], taskIds: ids(tasks.map(task => task.id)) };
+    const adopted = new Set(adoptedAnalysis(state, source).map(output => output.noteId));
+    const notes = list(state.notes).filter(record => visible(state, record) && linked(record, source.id) && meaningfulNote(state, record, source) && (adopted.has(record.id) || provenance(state, source, record, 'note')));
     const papers = list(state.papers).filter(record => visible(state, record) && linked(record, source.id) && meaningfulPaper(state, record, source) && provenance(state, source, record, 'paper'));
     const noteIds = ids(notes.map(note => note.id)), paperIds = ids(papers.map(paper => paper.id)), taskIds = ids(tasks.map(task => task.id));
     if (!noteIds.length && !paperIds.length) {
@@ -144,7 +194,7 @@
     }
     const markedIds = [];
     const imports = list(state.imports).map(source => {
-      if (!visible(state, source)) return source;
+      if (!visible(state, source) || isBookmarkOnly(source)) return source;
       const notes = [], papers = [];
       for (const { type, record } of outputs.values()) {
         if (!linked(record, source.id)) continue;
@@ -187,5 +237,5 @@
     }
     return { state: next, markedIds: list(state.imports).filter(source => marked.has(source.id)).map(source => source.id) };
   }
-  return { derive, markCompleted, migrateLegacy };
+  return { derive, markCompleted, migrateLegacy, isBookmarkOnly, adoptedAnalysis };
 });

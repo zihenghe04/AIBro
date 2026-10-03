@@ -1,3 +1,4 @@
+const installConversationPathHost = require('./helpers/conversation-path-host.cjs');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(require.resolve('../app/app.js'),'utf8');
 function harness(){
@@ -9,6 +10,7 @@ function harness(){
  const sendMessage=Object.assign(()=>{}, {busy:false});let saves=0;
  const h=vm.createContext({state,sendMessage,Date,toast(){},save(){saves++},renderConversation(){}});
  vm.runInContext(source.slice(source.indexOf('function retryAttachmentIdsFor('),source.indexOf('function showRetryAttachmentEditor(')),h);
+  installConversationPathHost(h);
  return {h,c,sent,failed,run,state,sendMessage,saves:()=>saves};
 }
 test('retry can exclude broken or all attachments without deleting sources or changing drafts/history',()=>{

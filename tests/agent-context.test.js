@@ -22,7 +22,14 @@ test('token budget controls payload size, not fixed chunk count, and every resul
  const seen=[];let offset=0;do{const p=W.page(long,{offset,maxTokens:4000});seen.push(...p.entries.map(x=>x.id));offset=p.nextOffset;}while(offset!==null);assert.equal(new Set(seen).size,140);assert.throws(()=>W.page(short,{maxTokens:-1}));
 });
 test('source diversification never loses a lower-ranked source or duplicates chunks',()=>{
- const rows=Array.from({length:30},(_,i)=>({id:'c'+i,type:'note',recordId:i<20?'long-document':'other-'+i}));const out=W.diversify(rows);assert.ok(out.findIndex(e=>e.id==='c20')<20);assert.equal(new Set(out.map(x=>x.id)).size,30);
+ const rows=Array.from({length:30},(_,i)=>({id:'c'+i,type:'note',recordId:i<20?'long-document':'other-'+i,score:30-i/2}));
+ const out=W.diversify(rows);
+ assert.ok(out.findIndex(e=>e.id==='c20')<20,'a comparably relevant alternate source is promoted');
+ assert.deepEqual(out.slice(0,2),rows.slice(0,2),'the strongest original passages retain their positions');
+ assert.equal(out.length,rows.length);assert.equal(new Set(out.map(x=>x.id)).size,30);
+ assert.deepEqual(out.map(x=>x.id).sort(),rows.map(x=>x.id).sort(),'every lower-ranked chunk remains reachable');
+ const unscored=rows.map(({score,...row})=>row);
+ assert.deepEqual(W.diversify(unscored),unscored,'absent relevance evidence cannot justify promotion');
 });
 
 test('library overview exposes available spaces and projects without dumping bodies or foreign/deleted sources',()=>{
@@ -31,8 +38,8 @@ test('library overview exposes available spaces and projects without dumping bod
 });
 
 test('current agenda capability overrides stale history but remains unavailable without a native editor',()=>{
- const options={history:{text:'目前不支持重复日程'},fullInstruction:'用户可以直接在对话中创建单次或重复日程。 AGENDA_SCHEMA'};
- const native=C.create({...options,hasAgenda:true});assert.match(native.instructions(),/历史助手答复可能来自旧版本/);assert.doesNotMatch(native.instructions(),/AGENDA_SCHEMA/);native.capability('agenda');assert.match(native.instructions(),/AGENDA_SCHEMA/);
+ const options={history:{text:'目前不支持重复日程'},fullInstruction:'用户可以直接在对话中创建单次或重复日程。 AGENDA_SCHEMA\n日程归属必须用projectId字段填写真实项目ID；不能仅在details写关联成功。'};
+ const native=C.create({...options,hasAgenda:true});assert.match(native.instructions(),/历史助手答复可能来自旧版本/);assert.doesNotMatch(native.instructions(),/AGENDA_SCHEMA/);native.capability('agenda');assert.match(native.instructions(),/AGENDA_SCHEMA/);assert.match(native.instructions(),/日程归属必须用projectId字段/);
  const web=C.create(options);assert.match(web.instructions(),/当前端未提供原生日程编辑器/);assert.throws(()=>web.capability('agenda'),/当前端未提供/);assert.deepEqual(web.loaded(),[]);
 });
 

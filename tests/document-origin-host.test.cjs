@@ -39,6 +39,16 @@ test('tab and save retention never replace their existing origin with the backgr
  assert.equal(editor.onOpenLink,h.context.openSavedDocumentSource,'The host wires its actual source-link handler alongside save retention');
  editor.onSaved('n',{});assert.deepEqual(plain(h.calls.at(-1)),['open-note','n',{retainOrigin:true}]);const count=h.calls.length;editor.onSaved('n',{leaving:true});assert.equal(h.calls.length,count+1,'A leave-save refreshes tab metadata without reopening its document');
 });
+test('inline save refreshes metadata without reopening or moving the live editor',()=>{
+ const h=harness();let editor,active='n';h.window.NoteEditor.init=value=>{editor=value;};h.window.NoteEditor.inlineActive=id=>id===active;
+ h.window.ReadingPane.reconcile=()=>h.calls.push(['reconcile']);
+ Object.assign(h.context,{saveDocumentDurably:()=>{},generateNoteSelection:()=>{},renderAll:()=>{},openSavedDocumentSource:()=>{},openNote:()=>{throw Error('reopening reparents the editor and resets viewport');}});
+ const heading=new h.Node();heading.textContent='Before';h.nodes.set('previewTitle',heading);h.state.previewRecord={type:'note',id:'n'};h.state.notes[0].title='After';
+ vm.runInContext(source.split('\n').find(value=>value.startsWith('window.NoteEditor?.init(')),h.context);
+ const scroller={scrollTop:932},selection={start:421,end:421};h.nodes.set('previewDialog',scroller);h.document.activeElement=selection;
+ editor.onSaved('n',{inline:true});assert.equal(heading.textContent,'After');assert.equal(scroller.scrollTop,932);assert.equal(h.document.activeElement,selection);assert.deepEqual(h.calls,[['refresh-tabs'],['reconcile']]);
+ h.state.previewRecord={type:'note',id:'other'};active='other';heading.textContent='Other document';editor.onSaved('n',{inline:true});assert.equal(heading.textContent,'Other document','an old save cannot replace a new document header');
+});
 test('reader links capture their predecessor and an already open target retains its route to avoid cycles',()=>{
  const h=harness(),link=new h.Node();h.nodes.get('readingPane').append(link);Object.assign(h.snapshot,{visible:true,activeKey:'a',tabs:[{key:'a',kind:'note',id:'n'}]});
  assert.deepEqual(plain(h.capture('import','pdf',{anchor:link})),{view:'document',kind:'note',id:'n'});

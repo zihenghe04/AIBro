@@ -119,6 +119,7 @@ struct AgendaView:View {
                 HStack{Image(systemName:"bell");Text(NativeL10n.notificationStatus(store.notificationStatus));Spacer();Text(nativeUI("本机时间：\(TimeZone.current.identifier)", "Local time: \(TimeZone.current.identifier)"))}.font(.caption).foregroundStyle(.secondary)
             }.padding(30).frame(maxWidth:1400).frame(maxWidth:.infinity)
         }.background(StudioPalette.canvas)
+        .background(AgendaAgentReviewHost(controller: model.agendaAgent))
         .sheet(item:$selectedDay){selection in AgendaDayDetail(model:model,store:store,date:selection.date)}
         .sheet(item:$editor){event in AgendaEditor(model:model,store:store,event:event)}
         .sheet(item:$model.agendaDraft){event in AgendaEditor(model:model,store:store,event:event)}
@@ -263,6 +264,10 @@ struct AgendaEditor:View {
     private func requestDismiss() {if dirty {discardPrompt=true}else{closeEditor()}}
     private func saveEditor() {
         do {
+            guard model.ready,model.snapshot?.privateMode != true else {throw AgendaError.message(nativeUI("工作区尚未就绪或处于私密模式，当前输入已保留。", "The workspace is unavailable or in private mode. Your input is retained."))}
+            let scope=AgendaEditingScope(projects:(model.snapshot?.projects ?? []).map{AgendaEditingProject(id:$0.id,title:$0.title)},
+                documents:(model.snapshot?.documents ?? []).map{AgendaEditingDocument(id:$0.id,title:$0.title,projectID:$0.projectId,kind:$0.kind)})
+            try scope.validate(event,expected:expected)
             if !event.documentID.isEmpty && expected == nil && !(model.snapshot?.documents?.contains(where:{$0.id==event.documentID}) ?? false) {
                 throw AgendaError.message(nativeUI("来源资料已不可用，请重新选择关联资料。", "The source is no longer available. Choose another linked source."))
             }
@@ -275,7 +280,7 @@ struct AgendaEditor:View {
             ScrollView{VStack(alignment:.leading,spacing:17){TextField(nativeUI("日程名称", "Event title"),text:$event.title).font(.title3).textFieldStyle(.roundedBorder)
                 if event.source=="随记" {Text(nativeUI("由随记创建的日程草稿。请确认日期、时间和提醒；保存前不会安排通知。", "Drafted from a quick note. Check the date, time and reminder. Notifications are scheduled only after saving.")).font(.caption).foregroundStyle(.secondary)}
                 AgendaChoice(title:nativeUI("类型", "Type"),value:$event.kind,options:[("event",nativeUI("日程", "Agenda")),("course",nativeUI("课程", "Courses")),("meeting",nativeUI("会议", "Meeting"))])
-                Toggle(nativeUI("全天", "All day"),isOn:$event.allDay).onChange(of:event.allDay){_,yes in if yes{let c=event.calendar();event.start=c.startOfDay(for:event.start);event.end=c.date(byAdding:.day,value:1,to:event.start)!}}
+                Toggle(nativeUI("全天", "All day"),isOn:$event.allDay).onChange(of:event.allDay){_,yes in AgendaEditorFields.allDay(&event,enabled:yes)}
                 DatePicker(nativeUI("开始", "Start"),selection:$event.start,displayedComponents:event.allDay ? [.date]:[.date,.hourAndMinute]);DatePicker(event.allDay ? nativeUI("结束（不含该日）", "End (exclusive)"):nativeUI("结束", "End"),selection:$event.end,displayedComponents:event.allDay ? [.date]:[.date,.hourAndMinute])
                 AgendaChoice(title:nativeUI("时区", "Time zone"),value:$event.timeZone,options:TimeZone.knownTimeZoneIdentifiers.map{($0,$0)})
                 TextField(nativeUI("地点 / 会议链接", "Location / Meeting link"),text:$event.location).textFieldStyle(.roundedBorder)

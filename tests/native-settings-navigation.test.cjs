@@ -15,8 +15,8 @@ const settings=method('openWorkspaceSettings');
 const scripts=[...settings.matchAll(/callAsyncJavaScript\("""\n([^]*?)\n\s*"""/g)].map(match=>match[1]);
 const run=(script,env)=>vm.runInNewContext(`(async()=>{${script}})()`,env);
 
-test('sidebar, toolbar and Command-comma share one workspace destination and preserve Appearance',()=>{
- assert.equal((swift.match(/model\.openWorkspaceSettings\(\)/g)||[]).length,3);
+test('sidebar, toolbar, Command-comma and quick entry share one workspace destination and preserve Appearance',()=>{
+ assert.equal((swift.match(/model\.openWorkspaceSettings\(\)/g)||[]).length,4);
  assert.match(swift,/CommandGroup\(replacing:\.appSettings\)[^\n]+keyboardShortcut\(",",modifiers:\.command\)/);
  assert.doesNotMatch(swift,/\\\.openSettings|struct Preferences:View|Settings\s*\{Preferences|NSApp\.keyWindow\?\.close/);
  assert.match(swift,/ToolbarItem \{ AppearanceControl\(model:model\) \}/);

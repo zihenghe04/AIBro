@@ -30,7 +30,7 @@ Hybrid retrieval combines BM25 and cosine-ranked vectors using reciprocal rank f
 
 Settings → Knowledge base semantic search accepts a separate OpenAI-compatible embedding endpoint, model, key and optional dimensions. ChatGPT/Codex subscription sign-in is not a general embedding API credential; API access and billing are separate. Local keyless services are supported explicitly. Connection tests send only synthetic test text.
 
-The desktop key is independently encrypted through Electron safeStorage. The chat credential is never reused. Browser-only mode keeps the embedding key in session memory, not localStorage. Settings contain no key.
+The macOS App stores its independent embedding key in the local authenticated encrypted NativeCredentials store; old Keychain records are read only without prompting during migration. If the old key cannot be read, explicitly saving a new key bypasses that dependency. The legacy Electron shell uses safeStorage. The chat credential is never reused. Browser-only mode keeps the embedding key in session memory, not localStorage. Settings contain no key. Native credential storage is implemented in [NativeCredentials.swift](../native/Sources/AIBro/NativeCredentials.swift).
 
 Use **Update vector index now** for manual updates, or enable **Automatically update changed content after saving**. Automatic work is debounced until workspace persistence succeeds and the Agent is idle. Only saved text and metadata participate; unadopted draft text is not substituted for the saved note. SHA-256 fingerprints avoid re-embedding unchanged passages. Completed batches survive interruption; edits/deletions during a request cannot introduce stale searchable evidence.
 

@@ -26,6 +26,9 @@ const fixed = [
   'a\r\n\r\nb\r\n\r\nc\r\nend',
   'a\n\n[x](aibro://conversation/conv_1)\n\nend',
   '😀\n\n<script>literal</script> [x](javascript:alert(1))\n\nend',
+  '- [ ] Parent [[cite:ev1]]\n  - child **one**\n    3. ordered\n    4. child\n- [x] finished\n\nAfter',
+  '> A folded source\n> on another line.\n>\n> - quoted item\n>   - nested\n> > another source\n\nAfter',
+  '- Example\n  ```js\n  const n = 1;\n  ```\n- Next\n\nAfter',
 ];
 test('incremental actual parser equals full parser at every partial grammar boundary', () => {
   const { render } = environment();
@@ -90,4 +93,24 @@ test('production uses message ownership, final release even before preview, and 
   assert.match(source, /StreamMarkdown.render\(markdownOwner, text, renderRichText, !!message.live\)[\s\S]{0,140}CitationEvidence\?\.decorate/);
   assert.match(source, /finally \{\s*window.StreamMarkdown\?\.release\(liveMessage\)/);
   assert.match(source, /function normalizeStateShape\(candidate\) \{\s*window.StreamMarkdown\?\.clear\(\)/);
+});
+
+test('status-only updates reuse raw Markdown but revisions, dependency changes and settling parse current content',()=>{
+  const {env,render}=environment(),pool=Stream.create(),owner={};let parses=0,probes=0;
+  const counted=(...args)=>{if(args[2]?.probeOnly)probes++;else parses++;return render(...args);};
+  const text='Unchanged **answer** $x$.\n\nA final paragraph.';
+  const initial=pool.render(owner,text,counted,true);
+  for(let i=0;i<20;i++)assert.equal(pool.render(owner,text,counted,true),initial);
+  assert.equal(parses,1);assert.equal(probes,20);
+  const revised=text.replace('answer','revision');assert.equal(pool.render(owner,revised,counted,true),render(revised));assert.equal(parses,2);
+  env.MathRender.inlineMath=()=>'<b>new math</b>';assert.match(pool.render(owner,revised,counted,true),/new math/);assert.equal(parses,3);
+  assert.equal(pool.render(owner,revised,counted,false),render(revised));assert.equal(parses,4);assert.equal(pool.inspect().entries,0);
+});
+
+test('unversioned renderers never reuse stale output and raw-HTML cache shares the bounded pool budget',()=>{
+  const pool=Stream.create({maxCharacters:200}),owner={};let revision=0;
+  const dynamic=text=>`${text}:${++revision}`;
+  assert.notEqual(pool.render(owner,'same',dynamic,true),pool.render(owner,'same',dynamic,true));
+  const {render}=environment();pool.render(owner,'<>&'.repeat(500),render,true);
+  assert.equal(pool.inspect().entries,0);assert.ok(pool.inspect().characters<=200);
 });

@@ -22,7 +22,7 @@ function harness() {
     tasks: [{ id: 'a', title: 'saved A', description: 'saved description', projectId: 'p', workspace: '科研', status: 'todo', priority: 'medium', checklist: [], deliverable: { kind: 'text', mustInclude: 'saved keyword' } }, { id: 'b', title: 'saved B', projectId: 'q', workspace: '课程', checklist: [] }],
     conversations: [], currentProjectId: 'p', ui: { projectTab: 'tasks' } };
   const $ = selector => nodes.get(selector.replace(/^#/, ''));
-  const window = { DocumentOrigin, CitationEvidence, PrivateMode: { isOn: () => false }, TaskDeliverable: { normalize: x => x || null, validate: () => ({ ok: true }) } };
+  const window = { DocumentOrigin, CitationEvidence, TaskWorkflow: require('../app/task-workflow'), PrivateMode: { isOn: () => false }, TaskDeliverable: { normalize: x => x || null, validate: () => ({ ok: true }) } };
   const c = vm.createContext({ state, document, window, DocumentOrigin, TaskDeliverable: window.TaskDeliverable, $, toast: text => calls.push(['toast', text]), Option: function(text, value) { return { text, value }; },
     saveDocumentDurably: async () => { calls.push(['save']); return true; }, save: () => calls.push(['save']), renderAll: () => {}, taskDueValue: () => null, workspaceName: x => x, visibleProject: () => true });
   vm.runInContext(cut('const taskEditorContexts =', 'function taskSources('), c);
@@ -38,6 +38,7 @@ function harness() {
     node('taskDeliverableValue', 'span');
     $('#taskTitleInput').value = task.title; $('#taskDescriptionInput').value = task.description || '';
     $('#taskStatusInput').value = task.status || 'todo'; $('#taskPriorityInput').value = task.priority || 'medium';
+    $('#taskWorkflowInput').value = window.TaskWorkflow.category(task) || '';
     $('#taskWorkspaceInput').value = task.workspace; $('#taskProjectInput').value = task.projectId || ''; $('#taskReminderInput').value = 'inherit';
     dependencies.splice(0, dependencies.length, { dataset: { dependencyId: 'dep' }, checked: false });
     c.renderDeliverableEditor(task);

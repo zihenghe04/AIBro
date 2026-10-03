@@ -27,3 +27,11 @@ test('browser export is pure, preserves prototype safety and uses the same JSON 
   assert.deepEqual(clone(result), fixture.expected);
   assert.equal({}.x, undefined);
 });
+
+test('shared library folders merge by stable ID and reject scoped name collisions across independent creates',()=>{
+ const folder=(id,folderPath)=>({id,folderPath,workspace:'科研',projectId:'p'}),base={folders:{projects:[{id:'sidebar',name:'keep'}],conversations:[],library:[]}};
+ const left=clone(base),right=clone(base);left.folders.library=[folder('a','A')];right.folders.library=[folder('b','B')];
+ const result=SyncMerge.merge(base,left,right);assert.deepEqual(result.folders.library,[folder('a','A'),folder('b','B')]);assert.deepEqual(result.folders.projects,base.folders.projects);
+ right.folders.library=[folder('b','A')];assert.throws(()=>SyncMerge.merge(base,left,right),error=>error instanceof SyncMerge.MergeConflict&&error.path.join('/')==='folders/library');
+ right.folders.library=[{...folder('b','A'),projectId:'other'}];assert.equal(SyncMerge.merge(base,left,right).folders.library.length,2);
+});

@@ -2,7 +2,7 @@
    三条边界：
    1) 只读取原消息，不改写消息、不改写任何既有笔记；
    2) 只从原文取材生成标题（去 Markdown 标记后截断），不总结、不改写、不调用模型；
-   3) 同一条消息只存一次（按 sourceMessageId 查重），重复点击是"打开已有文档"而不是再造一份。 */
+   3) 同一对话中的同一条消息只存一次，重复点击打开已有文档；复制到新对话的消息独立保存。 */
 (function (root, factory) {
   const api = factory(typeof module === 'object' && module.exports ? require('./artifact-provenance.js') : root.ArtifactProvenance);
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -34,32 +34,61 @@
     return '';
   }
 
-  function findMessage(state, messageId) {
+  function findMessage(state, messageId, conversationId) {
     const conversations = (state && state.conversations) || [];
-    for (const conversation of conversations) {
-      const message = (conversation.messages || []).find(item => item && item.id === messageId);
-      if (message) return { conversation, message };
+    // A fork retains prefix message IDs. An explicit owner must never fall
+    // back to the first matching message in a different conversation.
+    const owners = conversationId === undefined ? conversations : conversations.filter(item => item?.id === conversationId);
+    if (conversationId !== undefined && (typeof conversationId !== 'string' || !conversationId || owners.length !== 1)) return null;
+    const matches = [];
+    for (const conversation of owners) {
+      if (!conversation || conversation.deletedAt || conversation.archived) continue;
+      for (const message of conversation.messages || []) {
+        if (message && message.id === messageId && !message.deletedAt) matches.push({ conversation, message });
+      }
     }
-    return null;
+    return matches.length === 1 ? matches[0] : null;
   }
 
-  function existingNote(state, messageId) {
-    return ((state && state.notes) || []).find(note => note
+  function existingNote(state, messageId, conversationId) {
+    const candidates = ((state && state.notes) || []).filter(note => note
       && note.sourceMessageId === messageId
       && !note.deletedAt
-      && !note.archived) || null;
+      && !note.archived);
+    if (conversationId === undefined) return candidates.length === 1 ? candidates[0] : null;
+    if (typeof conversationId !== 'string' || !conversationId) return null;
+    const owned = candidates.find(note => note.sourceConversationId === conversationId);
+    if (owned) return owned;
+    // Older notes did not persist the owner. Reuse only when the message's
+    // owner is provable; never relabel or overwrite a user's legacy note.
+    const source = findMessage(state, messageId);
+    const legacy = candidates.filter(note => !note.sourceConversationId);
+    const retainedOwners = [...(state?.conversations || []), ...(state?.trash || []).flatMap(bundle => bundle?.data?.conversations || [])]
+      .filter(owner => (owner?.messages || []).some(message => message?.id === messageId));
+    // Archiving/trashing the original does not transfer its legacy output to
+    // a copied prefix. A known branch is still ambiguous after hard deletion.
+    return source?.conversation.id === conversationId && !source.conversation.branchedFrom
+      && retainedOwners.length === 1 && legacy.length === 1 ? legacy[0] : null;
+  }
+
+  function citationRun(state, found, evidence) {
+    const { message, conversation } = found;
+    const runId = message.runId || message.pendingRunId || message.retryRunId;
+    const runs = (state.agentRuns || []).filter(item => item?.id === runId);
+    const direct = runs.length === 1 && runs[0].conversationId === conversation.id ? runs[0] : null;
+    // A copied message can carry an explicit citation receipt, not a new
+    // execution. The evidence module revalidates that receipt and its owner.
+    return evidence?.runForCitations ? evidence.runForCitations(message, direct, state) : direct;
   }
 
   // Only explicit prose citations become navigable source relationships.
   // A delivered attachment or search hit alone is not support for this answer.
   // Keep the same code-span/fence boundary as CitationEvidence.exportText.
-  function citedSources(state, messageId, evidence) {
-    const found = findMessage(state, messageId);
+  function citedSources(state, messageId, evidence, conversationId) {
+    const found = findMessage(state, messageId, conversationId);
     if (!found || found.message.role === 'user' || !evidence?.sourcesFor || !evidence?.markers || !evidence?.access) return [];
     const { message } = found;
-    const runId = message.runId || message.pendingRunId || message.retryRunId;
-    const runs = (state.agentRuns || []).filter(item => item?.id === runId);
-    const run = runs.length === 1 && runs[0].conversationId === found.conversation.id ? runs[0] : null;
+    const run = citationRun(state, found, evidence);
     if (!run) return [];
     const sources = evidence.sourcesFor(message, run, state), used = new Map();
     let prose = '', fence = null;
@@ -102,14 +131,14 @@
   // id 由调用方注入（保持本模块不依赖运行时的 uid）。
   function plan(state, messageId, options = {}) {
     const now = Number(options.now) || Date.now();
-    const found = findMessage(state, messageId);
+    const found = findMessage(state, messageId, options.conversationId);
     if (!found) return { kind: 'missing' };
     const text = String(found.message.text || '');
     if (!text.trim()) return { kind: 'empty' };
-    const existing = existingNote(state, messageId);
+    const existing = existingNote(state, messageId, found.conversation.id);
     if (existing) return { kind: 'exists', note: existing };
     const conversation = found.conversation || {};
-    const sources = citedSources(state, messageId, options.citationEvidence);
+    const sources = citedSources(state, messageId, options.citationEvidence, conversation.id);
     const note = {
       id: String(options.id || ''),
       kind: '对话产出',
@@ -125,13 +154,11 @@
     };
     const noteSources = [...new Set(sources.filter(source => source.type === 'note').map(source => source.id))];
     if (noteSources.length) note.sourceNoteIds = noteSources;
-    const runId = found.message.runId || found.message.pendingRunId || found.message.retryRunId;
-    const runs = ((state && state.agentRuns) || []).filter(run => run?.id === runId);
     if (found.message.role !== 'user' && options.citationEvidence?.documentText) {
-      const run = runs.length === 1 && runs[0].conversationId === conversation.id && provenance?.capture ? runs[0] : null;
+      const run = citationRun(state, found, options.citationEvidence);
       note.content = options.citationEvidence.documentText(found.message, run, state);
       note.title = titleFromMessage(note.content) || note.title;
-      if (run) note.provenance = provenance.capture(state, run, { type: 'note', id: note.id, record: note, operation: 'captured', at: now });
+      if (run && provenance?.capture) note.provenance = provenance.capture(state, run, { type: 'note', id: note.id, record: note, operation: 'captured', at: now });
     }
     return { kind: 'create', note };
   }

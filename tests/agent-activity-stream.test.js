@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync(require.resolve('../app/sse-frame-scanner'), 'utf8') + '\n' + fs.readFileSync(require.resolve('../app/agent-transport'), 'utf8');
 const encode = value => new TextEncoder().encode(value);
 async function run(events, options = {}) {
-  const activities = [], phases = [], deltas = [];
+  const activities = [], phases = [], deltas = [], attempts = [];
   const payload = options.json ? JSON.stringify(events) : [...events,{type:'response.completed'}].map(event => `data: ${JSON.stringify(event)}\r\n\r\n`).join('');
   const ctx = vm.createContext({ AbortController, TextDecoder, WorkstationCore: require('../app/workstation-core'), fetch: async () => new Response(new ReadableStream({ start(controller) {
     const bytes = encode(payload);
@@ -14,8 +14,16 @@ async function run(events, options = {}) {
     controller.close();
   } }), { headers: { 'content-type': options.json ? 'application/json' : 'text/event-stream' } }) });
   vm.runInContext(source, ctx);
-  const output = await ctx.AgentTransport.requestPlan({ base: 'https://example.invalid/v1', input: 'fixture', onActivity: value => activities.push(JSON.parse(JSON.stringify(value))), onPhase: (...value) => phases.push(value), onDelta: value => deltas.push(value) });
-  return { output, activities, phases, deltas, latest: id => activities.filter(item => item.id === id).at(-1) };
+  const output = await ctx.AgentTransport.requestPlan({ base: 'https://example.invalid/v1', input: 'fixture', onAttempt: value => attempts.push(JSON.parse(JSON.stringify(value))), onActivity: value => activities.push(JSON.parse(JSON.stringify(value))), onPhase: (...value) => phases.push(value), onDelta: value => deltas.push(value) });
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[0].status, 'running'); assert.equal(attempts[1].status, 'completed');
+  assert.equal(attempts[0].id, attempts[1].id);
+  for (const activity of activities) assert.equal(activity.attemptId, attempts[0].id);
+  const matching = id => {
+    const colon = id.indexOf(':'), kind = id.slice(0, colon), local = id.slice(colon + 1);
+    return activities.filter(item => item.id.startsWith(kind + ':' + item.attemptId + ':') && item.id.endsWith(':' + local));
+  };
+  return { output, activities, phases, deltas, matching, latest: id => matching(id).at(-1) };
 }
 const answer = { type: 'response.output_text.delta', item_id: 'answer', delta: '{"actions":[]}' };
 
@@ -28,7 +36,7 @@ test('public summary deltas and authoritative snapshots update one activity with
     { type: 'response.output_item.done', item: { type: 'reasoning', id: 'r', summary: [{ type: 'summary_text', text: '正在核对课件图表。' }, { type: 'summary_text', text: '接着检查公式。' }], content: [{ type: 'reasoning_text', text: 'PRIVATE RAW' }], encrypted_content: 'PRIVATE ENCRYPTED' } }, answer
   ], { fragmented: true });
   assert.equal(h.output, answer.delta);
-  assert.deepEqual(h.latest('summary:r:0'), { id: 'summary:r:0', kind: 'summary', name: '公开摘要', status: 'completed', text: '正在核对课件图表。' });
+  assert.deepEqual(h.latest('summary:r:0'), { id: h.latest('summary:r:0').id, attemptId: h.latest('summary:r:0').attemptId, kind: 'summary', name: '公开摘要', status: 'completed', text: '正在核对课件图表。' });
   assert.equal(h.latest('summary:r:1').text, '接着检查公式。');
   assert.equal(h.activities.length, 4, 'Repeated completed snapshots must not create duplicate rows or updates');
   assert.match(h.phases.filter(item => item[1]).at(-1)[1], /^正在核对课件图表。\n\n接着检查公式。$/);
@@ -77,7 +85,7 @@ test('observed tools expose only bounded names and lifecycle, while function req
     { type: 'response.output_item.done', item: { id: 'failed', type: 'mcp_call', name: 'bad', status: 'failed', error: { message: 'PRIVATE ERROR' }, output: 'PRIVATE OUTPUT' } },
     { type: 'response.tool_activity', id: 'bad-name', name: 'PRIVATE '.repeat(100), status: 'running', text: 'PRIVATE DESCRIPTION' }, answer
   ]);
-  assert.deepEqual(h.activities.filter(item => item.id === 'tool:codex-tool').map(item => item.status), ['running', 'completed']);
+  assert.deepEqual(h.matching('tool:codex-tool').map(item => item.status), ['running', 'completed']);
   assert.equal(h.latest('tool:codex-tool').name, 'pdf.read');
   assert.equal(h.latest('tool:search').status, 'completed');
   assert.equal(h.latest('tool:named-mcp').name, 'read_pdf');
@@ -126,8 +134,8 @@ test('more than 100 summary parts preserve independent identities through actual
  const roundTrip=JSON.parse(JSON.stringify({agentRuns:[{activities:message.activities}],conversations:[{messages:[message]}]}));
  const rows=roundTrip.conversations[0].messages[0].activities;
  assert.equal(rows.length,126);assert.equal(rows[0].text,content);
- assert.equal(rows.find(r=>r.id==='summary:many:0').text,'distinct part 0');
- assert.equal(rows.find(r=>r.id==='summary:many:124').text,'distinct part 124');
+ assert.equal(rows.find(r=>r.id===h.latest('summary:many:0').id).text,'distinct part 0');
+ assert.equal(rows.find(r=>r.id===h.latest('summary:many:124').id).text,'distinct part 124');
  assert.deepEqual(roundTrip.agentRuns[0].activities,rows);
  assert.match(Progress.markup(roundTrip.conversations[0].messages[0]),/PUBLIC_END/);
 });

@@ -1,0 +1,13 @@
+#composer.composer-kit .composer-primary-row>[data-composer-control="composerVoice"]{flex:0 0 auto}
+#composer.composer-kit #composerVoice{width:30px!important;height:30px!important;padding:6px!important;border-radius:8px;color:var(--muted)}
+#composer.composer-kit #composerVoice:hover{color:var(--text);background:var(--panel-hover)}
+#composer.composer-kit #composerVoice:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.composer-dictation-status[hidden]{display:none!important}
+.composer-dictation-status{padding:0 var(--composer-content-inset,16px) 10px}
+.composer-dictation-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding-top:8px;font-size:12px;color:var(--muted)}
+.composer-dictation-copy{display:flex;align-items:center;gap:7px;min-width:0;overflow-wrap:anywhere}
+.composer-dictation-copy time{font-variant-numeric:tabular-nums;white-space:nowrap}
+.composer-dictation-dot{width:6px;height:6px;border-radius:50%;background:var(--red);flex:none}
+.composer-dictation-actions{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.composer-dictation-actions button{min-height:28px!important;height:auto!important;padding:4px 8px!important;font-size:11px!important;white-space:nowrap}
+@container message-composer (max-width:420px){.composer-dictation-bar{align-items:flex-start;flex-direction:column}.composer-dictation-actions{align-self:flex-end}}

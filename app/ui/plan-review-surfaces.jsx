@@ -5,14 +5,16 @@ const labels = { todo: ['待开始','To do'], in_progress: ['进行中','In prog
 const optionLabel = option => labels[option.label] ? t(...labels[option.label]) : option.label;
 function Editor({ spec, disabled, id, onChange }) {
   const shared = { id, disabled, 'aria-label': spec.label };
+  const labelFor = option => ['workflowCategory', 'patch.workflowCategory'].includes(spec.key) ? option.label : optionLabel(option);
   if (spec.type === 'textarea') return <textarea {...shared} rows={5} value={spec.value} onChange={e => onChange(e.target.value)} maxLength={200000} />;
-  if (spec.type === 'tasks') return <select {...shared} multiple size={Math.min(4, Math.max(2, spec.options.length))} value={spec.value} onChange={e => onChange([...e.target.selectedOptions].map(option => option.value))}>{spec.options.map(option => <option key={option.value} value={option.value}>{optionLabel(option)}</option>)}</select>;
-  if (spec.options) return <select {...shared} value={spec.value} onChange={e => onChange(spec.type === 'project' && e.target.value === '__standalone' ? null : e.target.value)}>{spec.type !== 'project' && <option value="">{t('未指定','Unspecified')}</option>}{spec.options.map(option => <option key={option.value} value={option.value}>{optionLabel(option)}</option>)}</select>;
+  if (spec.type === 'tasks') return <select {...shared} multiple size={Math.min(4, Math.max(2, spec.options.length))} value={spec.value} onChange={e => onChange([...e.target.selectedOptions].map(option => option.value))}>{spec.options.map(option => <option key={option.value} value={option.value}>{labelFor(option)}</option>)}</select>;
+  if (spec.options) return <select {...shared} value={spec.value} onChange={e => onChange(spec.type === 'project' && e.target.value === '__standalone' ? null : e.target.value)}>{spec.type !== 'project' && !spec.options.some(option => option.value === '') && <option value="">{t('未指定','Unspecified')}</option>}{spec.options.map(option => <option key={option.value} value={option.value}>{labelFor(option)}</option>)}</select>;
   // Preserve the original ISO precision/timezone and numeric timestamps until a
   // deliberate edit. Native datetime-local would silently strip these values.
   return <input {...shared} type="text" value={spec.value} onChange={e => onChange(spec.type === 'date' && !e.target.value ? null : e.target.value)} maxLength={4000} placeholder={spec.type === 'date' ? '2026-09-24 / 2026-09-24T14:30:00+08:00' : ''} />;
 }
 function reviewValue(value, field, row) {
+  if (field.path === 'patch.workflowCategory') return row.fields.find(spec => spec.key === field.path)?.options?.find(option => option.value === (value ?? ''))?.label || String(value);
   if (value === undefined || value === null || value === '') return t('未设置','Not set');
   if (Array.isArray(value)) {
     if (!value.length) return t('空列表','Empty list');
