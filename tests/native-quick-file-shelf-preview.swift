@@ -15,6 +15,15 @@ actor DelayedShelfPreviewResolver {
     }
 }
 
+@MainActor final class CountingShelfQuickLook: QLPreviewView {
+    var closeCount = 0
+    var detachedBeforeClose = false
+    override func close() {
+        closeCount += 1; detachedBeforeClose = superview == nil
+        super.close()
+    }
+}
+
 @main struct FileShelfPreviewChecks {
     @MainActor static func main() async throws {
         _ = NSApplication.shared; NSApp.setActivationPolicy(.prohibited)
@@ -143,18 +152,54 @@ actor DelayedShelfPreviewResolver {
         try Data("Synthetic Quick Look content".utf8).write(to: stableURL)
         let stableArchive = NativeQuickFileShelfArchive(directory: root.appendingPathComponent("StableShelf"))
         let stableItem = try await stableArchive.add([stableURL]).rows[0].item
-        let resource = NativeQuickFileShelfPreviewResource(item: stableItem, batch: try NativeQuickFileShelfCopyBatch(items: [stableItem]))
-        let quickLookHost = NSHostingView(rootView: NativeQuickFileShelfQuickLook(resource: resource))
+        var batch: NativeQuickFileShelfCopyBatch? = try NativeQuickFileShelfCopyBatch(items: [stableItem])
+        weak var leasedBatch = batch
+        let resource = NativeQuickFileShelfPreviewResource(item: stableItem, batch: batch!)
+        batch = nil
+        let counted = CountingShelfQuickLook(frame: .zero, style: .normal)!
+        let owned = NativeQuickFileShelfQuickLookView(resource: resource, makePreview: { counted })
+        window.contentView = owned; owned.frame = NSRect(x:0,y:0,width:700,height:430); owned.layoutSubtreeIfNeeded()
+        resource.invalidate()
+        check(!resource.isValid && counted.closeCount == 0 && leasedBatch != nil, "Invalidation never closes a mounted QL view or releases its access lease")
+        owned.dismantle()
+        check(counted.closeCount == 1 && counted.detachedBeforeClose && leasedBatch == nil, "Single owner detaches QL before close, then releases its access lease")
+        owned.dismantle()
+        check(counted.closeCount == 1, "Repeated dismantle cannot close a terminal QL view twice")
+        var lateCreations = 0
+        let late = NativeQuickFileShelfQuickLookView(resource: resource, makePreview: { lateCreations += 1; return QLPreviewView(frame:.zero,style:.normal) })
+        check(lateCreations == 0 && late.subviews.isEmpty, "Invalidated resources refuse late attachment before constructing Quick Look")
+        late.dismantle()
+
+        // Exercise real SwiftUI identity replacement with mounted QL views,
+        // rather than only moving the controller between unresolved resources.
+        let stableSecond = root.appendingPathComponent("Stable-second.txt")
+        try Data("Synthetic second Quick Look content".utf8).write(to: stableSecond)
+        let liveStore = NativeQuickFileShelfStore(directory: root.appendingPathComponent("LivePreviewShelf"))
+        liveStore.setAvailable(true); liveStore.setVisible(true); await settle { liveStore.loaded && !liveStore.busy }
+        liveStore.add([stableURL,stableSecond]); await settle { !liveStore.busy }
+        liveStore.selection = Set(liveStore.rows.map(\.id))
+        let live = NativeQuickFileShelfPreviewController(store: liveStore)
+        let quickLookHost = NSHostingView(rootView: NativeQuickFileShelfPreview(controller: live))
         window.contentView = quickLookHost; quickLookHost.frame = NSRect(x:0,y:0,width:700,height:430)
+        check(live.open(), "Actual inline host opens a two-file selection")
         quickLookHost.layoutSubtreeIfNeeded()
         func quickLook(_ view: NSView) -> QLPreviewView? {
             if let view = view as? QLPreviewView { return view }
             return view.subviews.compactMap(quickLook).first
         }
-        await settle { quickLook(quickLookHost) != nil }
+        await settle { quickLook(quickLookHost) != nil && live.resource != nil }
+        let initialView = quickLook(quickLookHost)!, initialPath = live.resource!.url.path
         check(quickLook(quickLookHost)?.autostarts == false, "Actual production Quick Look view never autostarts media")
-        check((quickLook(quickLookHost)?.previewItem?.previewItemURL ?? nil)?.lastPathComponent == stableURL.lastPathComponent, "Actual Quick Look view receives the resolved original URL")
-        resource.close()
+        check((initialView.previewItem?.previewItemURL ?? nil)?.path == initialPath, "Actual Quick Look view receives the resolved original URL")
+        live.move(1)
+        await settle { live.index == 1 && live.resource != nil && quickLook(quickLookHost) != nil && quickLook(quickLookHost) !== initialView }
+        let secondView = quickLook(quickLookHost)!
+        check(initialView.superview == nil && (secondView.previewItem?.previewItemURL ?? nil)?.path == live.resource?.url.path, "Next replaces the mounted QL view and previews the actual second file")
+        live.move(-1)
+        await settle { live.index == 0 && live.resource?.url.path == initialPath && quickLook(quickLookHost) != nil && quickLook(quickLookHost) !== secondView }
+        check(secondView.superview == nil && (quickLook(quickLookHost)?.previewItem?.previewItemURL ?? nil)?.path == initialPath, "Previous closes the retired view once and returns to the first file")
+        live.close(); await settle { quickLook(quickLookHost) == nil }
+        check(!live.presented && liveStore.selection.count == 2, "Closing the mounted multi-file preview removes QL and preserves selection")
         let hosted = NSHostingView(rootView: NativeQuickFileShelfView(store: store))
         window.contentView = hosted; hosted.frame = NSRect(x:0,y:0,width:700,height:430); hosted.layoutSubtreeIfNeeded()
         check(hosted.fittingSize.width > 0, "Full production shelf view mounts with inline preview owner")

@@ -10,12 +10,24 @@ import Quartz
     let item: NativeQuickFileShelfItem
     let url: URL
     private var lease: NativeQuickFileShelfCopyBatch?
-    private weak var view: QLPreviewView?
+    private weak var host: NativeQuickFileShelfQuickLookView?
+    private(set) var isValid = true
     init(item: NativeQuickFileShelfItem, batch: NativeQuickFileShelfCopyBatch) {
         self.item = item; url = batch.urls[0]; lease = batch
     }
-    func attach(_ view: QLPreviewView) { self.view = view }
-    func close() { view?.close(); view = nil; lease = nil }
+    func attach(_ host: NativeQuickFileShelfQuickLookView) -> Bool {
+        guard isValid, lease != nil, self.host == nil else { return false }
+        self.host = host; return true
+    }
+    func invalidate() {
+        isValid = false
+        // A mounted host owns teardown. Keep access until it detaches/closes QL.
+        if host == nil { lease = nil }
+    }
+    func didDetach(_ host: NativeQuickFileShelfQuickLookView) {
+        guard self.host === host else { return }
+        self.host = nil; isValid = false; lease = nil
+    }
 }
 
 /// One explicit selection snapshot. A later selection, hidden page, private
@@ -74,7 +86,7 @@ import Quartz
     }
     private func select(_ next: Int) {
         generation &+= 1; let token = generation
-        work?.cancel(); resource?.close(); resource = nil; issue = nil
+        work?.cancel(); resource?.invalidate(); resource = nil; issue = nil
         index = next; loading = true
         let item = items[next]
         work = Task { @MainActor [weak self, resolve] in
@@ -92,14 +104,14 @@ import Quartz
         }
     }
     private func showUnavailable(_ item: NativeQuickFileShelfItem) {
-        resource?.close(); resource = nil
+        resource?.invalidate(); resource = nil
         issue = nativeUI("原文件不可访问，无法预览。可查看其他选中项，或返回后重新添加原件。", "The original is unavailable. Preview another selected item, or go back and add the original again.")
         store?.referenceUnavailable(item.id)
     }
     func close(restoreFocus: Bool = true) {
         let wasPresented = presented, savedSelection = Set(items.map(\.id))
         generation &+= 1; let token = generation
-        work?.cancel(); work = nil; resource?.close(); resource = nil
+        work?.cancel(); work = nil; resource?.invalidate(); resource = nil
         presented = false; loading = false; issue = nil; items = []; index = 0
         guard wasPresented, restoreFocus else { return }
         // The retained table keeps selection and scroll. Defer only until the
@@ -162,15 +174,48 @@ struct NativeQuickFileShelfPreview: View {
 
 struct NativeQuickFileShelfQuickLook: NSViewRepresentable {
     let resource: NativeQuickFileShelfPreviewResource
-    func makeNSView(context: Context) -> QLPreviewView {
-        let view = QLPreviewView(frame: .zero, style: .normal)!
-        view.autostarts = false; view.shouldCloseWithWindow = false
-        resource.attach(view); view.previewItem = resource.url as NSURL
-        view.setAccessibilityLabel(nativeUI("文件预览", "File preview"))
-        return view
+    func makeNSView(context: Context) -> NativeQuickFileShelfQuickLookView {
+        NativeQuickFileShelfQuickLookView(resource: resource)
     }
-    func updateNSView(_ view: QLPreviewView, context: Context) {}
-    static func dismantleNSView(_ view: QLPreviewView, coordinator: ()) { view.close() }
+    func updateNSView(_ view: NativeQuickFileShelfQuickLookView, context: Context) {}
+    static func dismantleNSView(_ view: NativeQuickFileShelfQuickLookView, coordinator: ()) { view.dismantle() }
+}
+
+/// QLPreviewView.close is terminal. One host owns it; controller invalidation
+/// must never close a view still mounted in SwiftUI or close it a second time.
+@MainActor final class NativeQuickFileShelfQuickLookView: NSView {
+    private var preview: QLPreviewView?
+    private var resource: NativeQuickFileShelfPreviewResource?
+    private var dismantled = false
+    init(resource: NativeQuickFileShelfPreviewResource,
+         makePreview: () -> QLPreviewView? = { QLPreviewView(frame: .zero, style: .normal) }) {
+        super.init(frame: .zero)
+        guard resource.attach(self) else { return }
+        self.resource = resource
+        guard let view = makePreview() else { resource.didDetach(self); self.resource = nil; return }
+        preview = view
+        view.autostarts = false; view.shouldCloseWithWindow = false
+        view.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: leadingAnchor), view.trailingAnchor.constraint(equalTo: trailingAnchor),
+            view.topAnchor.constraint(equalTo: topAnchor), view.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+        view.previewItem = resource.url as NSURL
+        view.setAccessibilityLabel(nativeUI("文件预览", "File preview"))
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    func dismantle() {
+        guard !dismantled else { return }; dismantled = true
+        if let view = preview {
+            if let responder = window?.firstResponder as? NSView,
+               responder === view || responder.isDescendant(of: view) { window?.makeFirstResponder(nil) }
+            view.removeFromSuperview()
+            view.close()
+        }
+        preview = nil
+        resource?.didDetach(self); resource = nil
+    }
 }
 
 /// Quick Look's descendants can own first responder. A local, window-scoped
