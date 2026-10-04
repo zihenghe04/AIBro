@@ -11,9 +11,13 @@
     if (!api) return null;
     const doc = root.document, card = doc.createElement('article');
     card.id = 'quickEntrySettingsCard'; card.className = 'card';
-    card.innerHTML = '<h2></h2><p class="muted"></p><div class="permission-row"><div><b></b><small></small></div><label class="sound-toggle"><input id="quickEntryEnabled" type="checkbox"/></label></div><div class="permission-row"><label for="quickEntryMode"></label><select id="quickEntryMode"><option value="island"></option><option value="edge"></option><option value="menuBar"></option></select></div><div class="setting-actions"></div><p class="setting-help" role="status" aria-live="polite"></p>';
+    card.innerHTML = '<h2></h2><p class="muted"></p><div class="permission-row"><div><b></b><small></small></div><label class="sound-toggle"><input id="quickEntryEnabled" type="checkbox"/></label></div><div class="permission-row"><label for="quickEntryMode"></label><div class="quick-entry-mode-control"></div></div><div class="setting-actions"></div><p class="setting-help" role="status" aria-live="polite"></p>';
     panel.prepend(card);
-    const enabled = card.querySelector('input'), mode = card.querySelector('select');
+    const enabled = card.querySelector('input');
+    // A real Kit-owned select is excluded from the native global choice adapter,
+    // whose synthetic change event cannot authorize a settings write.
+    const modeControl = root.HalaskaUI.mount(card.querySelector('.quick-entry-mode-control'), 'KitSelect', { id: 'quickEntryMode', disabled: true, value: '' });
+    const mode = card.querySelector('select');
     const status = card.querySelector('[role="status"]'), detailHost = card.querySelector('.setting-actions');
     let confirmed = null, busy = false, revision = 0, failure = false, refreshPending = false;
     const t = (zh, en) => language() ? en : zh;
@@ -28,13 +32,11 @@
       card.querySelector('small').textContent = t('关闭后仍可从主窗口打开快捷工作台。', 'You can still open the quick panel from the main window when disabled.');
       enabled.setAttribute('aria-label', t('启用灵动岛与快捷入口', 'Enable island and quick entry'));
       card.querySelector('label[for="quickEntryMode"]').textContent = t('显示位置', 'Placement');
-      for (const [value, zh, en] of [['island', '顶部灵动岛', 'Top island'], ['edge', '屏幕侧边', 'Screen edge'], ['menuBar', '菜单栏', 'Menu bar']]) {
-        mode.querySelector(`option[value="${value}"]`).textContent = t(zh, en);
-      }
+      modeControl.update({ label: t('显示位置', 'Placement'),
+        options: [['island', '顶部灵动岛', 'Top island'], ['edge', '屏幕侧边', 'Screen edge'], ['menuBar', '菜单栏', 'Menu bar']].map(([value, zh, en]) => ({ value, label: t(zh, en) })),
+        value: confirmed?.preferredEnabledMode || '', disabled: busy || !confirmed?.isEnabled });
       enabled.checked = confirmed?.isEnabled === true;
       enabled.disabled = busy || !confirmed;
-      mode.value = confirmed?.preferredEnabledMode || '';
-      mode.disabled = busy || !confirmed?.isEnabled;
       card.setAttribute('aria-busy', String(busy));
       detail.update({ children: t('详细设置…', 'Detailed settings…'), disabled: busy });
       status.textContent = failure ? t('未能读取或更新快捷入口，请重新打开此设置重试。', 'Could not read or update quick entry. Reopen these settings to try again.')
@@ -67,6 +69,8 @@
       }
     }
     enabled.addEventListener('change', event => perform('enabled', enabled.checked, event));
+    // Listen on the retained native hit target, before React's value-only callback.
+    // Keep the original Event/currentTarget synchronously through the bridge.
     mode.addEventListener('change', event => perform('mode', mode.value, event));
     const refresh = () => {
       if (record?.selected !== 'appearance') return;

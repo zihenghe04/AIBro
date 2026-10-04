@@ -3,22 +3,28 @@ const { parseHTML } = require(process.env.AIBRO_TEST_DOM_MODULE || 'linkedom');
 const read = file => fs.readFileSync(require('node:path').join(__dirname, '..', file), 'utf8');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const state = mode => ({ status: 'ok', mode, isEnabled: mode !== 'off', preferredEnabledMode: mode === 'off' ? 'edge' : mode });
-function fixture({ native = true } = {}) {
+function fixture({ native = true, actualKit = false } = {}) {
   const { window } = parseHTML('<html lang="zh-CN"><body><section id="settings"><div class="page-heading"></div><div class="settings-grid"><article class="settings-connection-card"><input id="apiKey" value="synthetic-draft"/></article><article id="appearanceCard"></article></div><button id="saveSettings"></button></section></body></html>');
   // linkedom models select.value as read-only; browsers provide this setter.
   Object.defineProperty(window.HTMLSelectElement.prototype, 'value', { configurable: true, get() { return this.querySelector('option[selected]')?.value || ''; }, set(value) { const options = [...this.querySelectorAll('option')]; for (const option of options) option.removeAttribute('selected'); options.find(option => option.value === value)?.setAttribute('selected', ''); } });
   const calls = [], pending = [];
-  const api = Object.fromEntries(['state', 'setEnabled', 'setMode', 'openSettings'].map(name => [name, (...args) => { calls.push({ name, args }); return new Promise((resolve, reject) => pending.push({ resolve, reject })); }]));
+  const api = Object.fromEntries(['state', 'setEnabled', 'setMode', 'openSettings'].map(name => [name, (...args) => { calls.push({ name, args, eventCurrentTarget: args.at(-1)?.currentTarget, eventIsTrusted: args.at(-1)?.isTrusted }); return new Promise((resolve, reject) => pending.push({ resolve, reject })); }]));
   const localStorage = { getItem: () => null, setItem: () => assert.fail('Native mode must not use localStorage') };
-  const context = { window: null, document: window.document, localStorage, addEventListener: window.addEventListener.bind(window), dispatchEvent: window.dispatchEvent.bind(window), workstationDesktop: native ? { quickEntry: api } : undefined, HalaskaUI: { mount(host, name, initial) {
-    let props = initial; const button = name === 'Button' ? window.document.createElement('button') : null;
+  const context = { window: null, document: window.document, localStorage, Element: window.Element, HTMLElement: window.HTMLElement, Node: window.Node, Event: window.Event, MutationObserver: window.MutationObserver,
+    navigator: { userAgent: 'synthetic-settings-fixture' }, setTimeout, clearTimeout, queueMicrotask, console, requestAnimationFrame: fn => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+    addEventListener: window.addEventListener.bind(window), removeEventListener: window.removeEventListener.bind(window), dispatchEvent: window.dispatchEvent.bind(window), workstationDesktop: native ? { quickEntry: api } : undefined, HalaskaUI: { mount(host, name, initial) {
+    let props = initial; const button = name === 'Button' ? window.document.createElement('button') : null, select = name === 'KitSelect' ? window.document.createElement('select') : null;
+    host.dataset.halaskaRoot = name;
     if (button) { button.id = props.id; button.addEventListener('click', event => props.onClick(event)); host.append(button); }
-    const update = next => { props = { ...props, ...next }; if (button) { button.textContent = props.children || ''; button.disabled = !!props.disabled; } };
+    if (select) { select.id = props.id; host.append(select); }
+    const update = next => { props = { ...props, ...next }; if (button) { button.textContent = props.children || ''; button.disabled = !!props.disabled; } if (select) { select.replaceChildren(...(props.options || []).map(item => { const option = window.document.createElement('option'); option.value = item.value; option.textContent = item.label; return option; })); select.value = props.value; select.disabled = props.disabled; select.setAttribute('aria-label', props.label || ''); } };
     update({}); return { update };
   } } };
   // Navigation is already local UI state; allow its existing section key only.
   localStorage.setItem = key => assert.equal(key, 'workstation-settings-section-v1');
-  context.window = context; vm.runInNewContext(read('app/settings-workspace.js'), context);
+  context.window = context; vm.createContext(context);
+  if (actualKit) vm.runInContext(read('app/halaska-ui.js'), context);
+  vm.runInContext(read('app/settings-workspace.js'), context);
   context.SettingsWorkspace.init();
   return { context, window, doc: window.document, calls, pending, change(node) { node.dispatchEvent(new window.Event('change', { bubbles: true })); }, click(node) { node.dispatchEvent(new window.Event('click', { bubbles: true })); } };
 }
@@ -66,6 +72,36 @@ test('late reads do not overwrite later changes; failure keeps confirmed state a
   assert.equal(h.doc.getElementById('quickEntryEnabled').checked, false);
   h.doc.documentElement.lang = 'en'; h.doc.dispatchEvent(new h.window.Event('workstation-language-change'));
   assert.equal(h.doc.querySelector('#quickEntrySettingsCard h2').textContent, 'Island & quick entry');
+});
+test('production KitSelect escapes native select enhancement and forwards the original hit-target event synchronously', async () => {
+  const h = fixture({ actualKit: true }); h.pending.shift().resolve(state('island')); await flush();
+  const mode = h.doc.getElementById('quickEntryMode'), host = mode.closest('[data-halaska-root]');
+  assert.equal(host.dataset.halaskaRoot, 'KitSelect'); assert.equal(mode.getAttribute('aria-label'), '显示位置');
+  // Execute the existing production enhancement, not a second test renderer.
+  const adapter = read('native/Resources/bridge.js');
+  const start = adapter.indexOf('// Progressive enhancement: every single-value select');
+  const end = adapter.indexOf("if(typeof MutationObserver!=='undefined')", start);
+  assert.ok(start > 0 && end > start);
+  vm.runInContext(adapter.slice(start, end) + '\nwindow.refreshNativeChoicesForFixture = refreshNativeChoices;', h.context);
+  h.context.refreshNativeChoicesForFixture();
+  assert.equal(mode.classList.contains('native-choice-source'), false);
+  assert.equal(host.querySelector('.native-choices'), null);
+  const rawRow = h.doc.createElement('div'); rawRow.className = 'permission-row'; rawRow.innerHTML = '<select><option value="a">A</option><option value="b">B</option></select>'; h.doc.body.append(rawRow);
+  const raw = rawRow.querySelector('select'); raw.value = 'a';
+  // linkedom exposes no options collection; browsers provide it.
+  Object.defineProperty(raw, 'options', { get: () => raw.querySelectorAll('option') });
+  h.context.refreshNativeChoicesForFixture();
+  let adaptedEvent; raw.addEventListener('change', event => { adaptedEvent = event; });
+  rawRow.querySelector('[data-choice="b"]').click();
+  assert.ok(adaptedEvent instanceof h.window.Event); assert.notEqual(adaptedEvent.isTrusted, true);
+  const event = new h.window.Event('change', { bubbles: true });
+  // Synthetic DOM fixture models a physical event; native acceptance verifies real isTrusted.
+  event.isTrusted = true; mode.value = 'edge'; mode.dispatchEvent(event);
+  const call = h.calls.at(-1); assert.equal(call.name, 'setMode'); assert.equal(call.args[0], 'edge'); assert.equal(call.args[1], event);
+  assert.equal(call.eventCurrentTarget, mode); assert.equal(call.eventIsTrusted, true); assert.equal(call.eventCurrentTarget.closest('#quickEntrySettingsCard')?.id, 'quickEntrySettingsCard');
+  assert.equal(mode.disabled, true); h.pending.shift().resolve(state('edge')); await flush();
+  assert.equal(h.doc.getElementById('quickEntryMode'), mode); assert.equal(mode.value, 'edge'); assert.equal(mode.disabled, false);
+  h.doc.getElementById('settings').remove(); h.context.HalaskaUI.prune();
 });
 function bridge() {
   const { window } = parseHTML('<html><body><article id="quickEntrySettingsCard"><button></button></article></body></html>');
