@@ -1,3 +1,10 @@
+## 0.9.2 — 2026-10-04 · Mac 预览版
+
+- 可直接让 AI Bro 删除指定项目。Agent 会查询当前项目，再按照会话权限提交删除计划；默认需要在审批卡确认。
+- 项目与所属内容移入可恢复回收站，其他项目的成果、共享原件、本机目录和真实日程保留。发起操作的对话继续可用，结果可直接打开回收站查看。
+
+**English:** Ask AI Bro to delete a project. It checks the live project directory and follows the conversation's approval setting. Projects and their owned contents go to recoverable trash; shared originals, other projects, local folders and calendar events are retained.
+
 ## 0.9.1 — 2026-10-04 · Mac 预览版
 
 - 修复首次启动没有灵动岛的问题：未设置过入口时默认显示顶部灵动岛，已手动关闭的偏好仍会保留。

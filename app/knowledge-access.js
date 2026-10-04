@@ -8,7 +8,7 @@
  const batchLimit=32;
  // Only evidence reads may cross scheduler batches automatically. Commands,
  // live browser actions, delegation and unknown tools keep their existing cap.
- const chunkableReads=new Set(['agenda_list','agenda_read','task_list','list','search','neighbors','read','read_page','read_file','wiki_list','memory_read','capabilities','history_search','history_read','library_overview','evidence_log']);
+ const chunkableReads=new Set(['agenda_list','agenda_read','project_list','task_list','list','search','neighbors','read','read_page','read_file','wiki_list','memory_read','capabilities','history_search','history_read','library_overview','evidence_log']);
  function requestError(code,message,requestCount,details){
   return Object.assign(Error(message),{code,knowledgeDiagnostic:{version:1,code,requestCount,batchLimit,...details}});
  }
@@ -118,13 +118,13 @@
   if(['read','read_page'].includes(r.type))r.recordType=r.recordType||'note';
   if(r.type==='read')r.variant=r.variant||'current';
   if(r.type==='read_page'){r.page=pdfCursor(r.page,1);r.offset=pdfCursor(r.offset,0);}
-  if(['list','search','task_list','history_search'].includes(r.type))r.query=String(r.query||'').trim();
+  if(['list','search','project_list','task_list','history_search'].includes(r.type))r.query=String(r.query||'').trim();
   // Search execution uses this same effective budget. Reusing its result must
   // not require another tool call just because the model spells out a default.
   // Invalid budgets retain their original key/error rather than aliasing 4000.
   if(r.type==='search'){const n=Number(r.maxTokens??4000);if(Number.isSafeInteger(n)&&n>=256&&n<=16000)r.maxTokens=n;}
   if(r.type==='neighbors')r.radius=Number(r.radius??1);
-  const fields={agenda_list:['query','from','to','limit','offset'],agenda_read:['eventId','expectedVersion'],list:['query','offset'],search:['query','offset','maxTokens'],task_list:['query','offset'],read:['recordType','id','variant','offset'],read_page:['recordType','id','page','offset'],read_file:['refKey','offset'],wiki_list:['offset'],memory_read:['offset'],neighbors:['chunkId','version','radius'],library_overview:['offset','maxTokens'],capabilities:['name'],history_search:['query','offset','maxTokens'],history_read:['messageId','offset'],evidence_log:['runId','offset']};
+  const fields={agenda_list:['query','from','to','limit','offset'],agenda_read:['eventId','expectedVersion'],list:['query','offset'],search:['query','offset','maxTokens'],project_list:['query','offset'],task_list:['query','offset'],read:['recordType','id','variant','offset'],read_page:['recordType','id','page','offset'],read_file:['refKey','offset'],wiki_list:['offset'],memory_read:['offset'],neighbors:['chunkId','version','radius'],library_overview:['offset','maxTokens'],capabilities:['name'],history_search:['query','offset','maxTokens'],history_read:['messageId','offset'],evidence_log:['runId','offset']};
   const keys=fields[r.type]||Object.keys(r).filter(k=>k!=='type');
   return JSON.stringify(Object.fromEntries(['type',...keys.sort()].map(k=>[k,r[k]])));
  }

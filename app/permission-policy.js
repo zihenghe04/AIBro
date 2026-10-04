@@ -11,7 +11,7 @@
   // executor, not an authorization to run shell commands or write arbitrary
   // local files. Newly introduced action types require an explicit review.
   const WORKSTATION_ACTIONS = new Set([
-    'set_workspace', 'create_project', 'rename_attachment', 'assign_attachment', 'assign_record',
+    'set_workspace', 'create_project', 'delete_project', 'rename_attachment', 'assign_attachment', 'assign_record',
     'create_knowledge_item', 'create_note', 'update_note', 'append_note', 'upsert_paper', 'upsert_wiki',
     'create_task', 'update_task', 'delete_task', 'delete_note', 'delete_attachment', 'add_tag',
     'create_link', 'link_items', 'link_local_project'

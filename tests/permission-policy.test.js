@@ -37,7 +37,7 @@ test('the permission catalogue stays aligned with actions actually supported by 
   for (const type of supported) {
     assert.equal(Policy.needsApproval({mode:'full',actions:[{type}]}),false,`${type} needs an explicit policy when added to Core`);
     assert.equal(Policy.needsApproval({mode:'request',actions:[{type}]}),true);
-    assert.equal(Policy.needsApproval({mode:'smart',actions:[{type}]}),['delete_task','delete_note','delete_attachment'].includes(type));
+    assert.equal(Policy.needsApproval({mode:'smart',actions:[{type}]}),['delete_task','delete_note','delete_attachment','delete_project'].includes(type));
   }
 });
 
@@ -129,4 +129,13 @@ test('session allowance refuses empty batches and malformed allow maps', () => {
   assert.equal(Policy.canSessionAllow({ actions: [{ type: 'create_task' }], allows: 'yes' }), false);
   assert.equal(Policy.canSessionAllow({ actions: [{ type: 'create_task' }] }), false, '没有登记就没有会话级放行');
   assert.equal(Policy.canSessionAllow({}), false);
+});
+
+test('project deletion follows explicit permission modes and cannot be delegated or session allowed', () => {
+  const actions = [{ type: 'delete_project', projectId: 'project' }];
+  for (const mode of ['request', 'smart', 'legacy', undefined]) assert.equal(Policy.needsApproval({ mode, actions }), true);
+  assert.equal(Policy.needsApproval({ mode: 'full', actions }), false);
+  assert.equal(Policy.canDelegateReview({ actions, enabled: true }), false);
+  assert.equal(Policy.canSessionAllow({ actions, allows: { delete_project: true } }), false);
+  assert.deepEqual(Policy.allowableTypes(actions), []);
 });

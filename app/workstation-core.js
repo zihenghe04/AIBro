@@ -9,6 +9,7 @@
   const Provenance = typeof module === 'object' && module.exports ? require('./artifact-provenance.js') : globalThis.ArtifactProvenance;
   const Dependencies=typeof module==='object'&&module.exports?require('./task-dependencies'):globalThis.TaskDependencies;
   const Assignment=typeof module==='object'&&module.exports?require('./record-assignment'):globalThis.RecordAssignment;
+  const ProjectLifecycle = typeof module === 'object' && module.exports ? require('./project-lifecycle.js') : globalThis.ProjectLifecycle;
   const taskWorkflow = () => typeof module === 'object' && module.exports ? require('./task-workflow.js') : globalThis.TaskWorkflow;
   const spaces = ['日常', '课程', '科研'];
   const norm = value => String(value || '').trim().toLowerCase().replace(/[\s·_-]+/g, '');
@@ -152,6 +153,7 @@
   labels.upsert_wiki = '保存科研 Wiki';
   labels.upsert_paper = '保存论文分析';
   labels.delete_attachment = '资料移入回收站';
+  labels.delete_project = '项目移入回收站';
   labels.assign_record = '修改记录归属';
   // The delete guard only needs to answer one question: "did this attachment change
   // since the plan was read?" Storing the full attachment body for every in-scope item
@@ -186,8 +188,28 @@
       return active(item)&&(!item.projectId||active(parent))&&(!scope.projectId||item.projectId===scope.projectId)&&(!scope.workspace||scope.workspace==='auto'||(parent?.workspace||item.workspace)===scope.workspace);
     }).map(item=>[item.id,contentStamp(JSON.stringify(item))]));
   }
+  function projectSnapshots(state, scope = {}) {
+    const ids = Array.isArray(scope.projectIds) ? scope.projectIds : (state.projects || []).map(project => project.id);
+    return Object.fromEntries(ids.map(id => [id, ProjectLifecycle.snapshot(state, id)]));
+  }
   function applyPlan(original, actions, context = {}) {
     if (!Array.isArray(actions) || actions.length > 80) throw new Error('单次最多执行 80 个动作，请分批整理');
+    const projectDeletes = actions.filter(action => action?.type === 'delete_project');
+    if (projectDeletes.length) {
+      if (!ProjectLifecycle) throw new Error('项目管理模块尚未加载，请重启应用。');
+      if (projectDeletes.length !== actions.length) throw new Error('项目删除不能和创建、编辑或其他删除动作混在同一计划中，请分批执行。');
+      const ids = projectDeletes.map(action => action.projectId);
+      if (new Set(ids).size !== ids.length) throw new Error('同一计划不能重复删除同一个项目。');
+      const snapshots = context.projectSnapshots;
+      for (const id of ids) {
+        if (typeof id !== 'string' || !id.trim() || !snapshots || !Object.hasOwn(snapshots, id)) throw new Error('项目不在本轮允许删除范围内，请先读取项目列表并使用真实项目 ID。');
+        if (snapshots[id] !== ProjectLifecycle.snapshot(original, id)) throw new Error('项目或关联内容在读取后发生变化，请重新核对项目再删除。');
+      }
+      const outcome = ProjectLifecycle.remove(original, ids, context);
+      const results = outcome.summary.projects.map(project => ({ type: 'project', id: project.id, projectId: project.id, actionType: 'delete_project', operation: 'deleted', name: project.name, workspace: project.workspace,
+        text: `项目移入回收站：${project.name || project.id}`, counts: outcome.summary.counts, batchProjectCount: ids.length, projectDeletionSummary: outcome.summary, sharedImportsRetained: outcome.summary.sharedImportsRetained, agendaMirrorsRetained: outcome.summary.agendaMirrorsRetained, trashId: outcome.entry.id }));
+      return { state: outcome.state, results, projectIds: [], projectDeletionSummary: outcome.summary };
+    }
     const assignments=new Set();
     for(const action of actions.filter(a=>a?.type==='assign_record')){
       if(!Assignment)throw Error('记录归属模块尚未加载，请重启应用');
@@ -580,5 +602,5 @@
     const uniqueResults = [...new Map(results.map(r => [`${r.type}:${r.id}:${r.operation}`, r])).values()];
     return { state, results: uniqueResults, projectIds: [...touchedProjects], ...(assignments.size?{requiresAssignmentReview:uniqueResults.some(r=>r.requiresAssignmentReview)}:{}) };
   }
-  return { endpoint, folderPath, runLabel, parsePlan, validateCompletion, validateAnalysisDeliverables, responseIssue, partialMessage, dueInWeek, taskSources, applyPlan, attachmentSnapshots, contentStamp, migrateAttachmentSnapshots, actionLabels: labels };
+  return { endpoint, folderPath, runLabel, parsePlan, validateCompletion, validateAnalysisDeliverables, responseIssue, partialMessage, dueInWeek, taskSources, applyPlan, attachmentSnapshots, projectSnapshots, contentStamp, migrateAttachmentSnapshots, actionLabels: labels };
 });

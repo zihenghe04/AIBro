@@ -86,6 +86,8 @@
     "local-projects-ui.js",
     "local-project-agent.js",
     "content-lifecycle.js",
+    "project-lifecycle.js",
+    "project-access.js",
     "sync-merge.js",
     "cloud-sync-ui.js",
     "cloud-sync-ui.css",

@@ -11,7 +11,7 @@ function harness(extra = {}, kind = 'project') {
     tasks: [], notes: [], papers: [], imports: [], attachments: [], agentRuns: [], links: [], trash: [],
     currentConversationId: 'research-chat', ...extra
   };
-  const context = vm.createContext({ state, manageTarget: { kind, id: kind === 'project' ? 'course' : 'course-chat' },
+  const context = vm.createContext({ ProjectLifecycle: require('../app/project-lifecycle'), state, manageTarget: { kind, id: kind === 'project' ? 'course' : 'course-chat' },
     window: { confirm: () => true }, uid: () => 'generated-chat', save: noop, renderAll: noop, showView: noop,
     ensureConversation: noop, repairRelationships: noop, normalizeStateShape: noop, purgeTrash: { pendingId: null }, $: () => ({ close: noop }), $$: () => []
   });

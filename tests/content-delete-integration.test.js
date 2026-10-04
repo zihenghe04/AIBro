@@ -36,7 +36,7 @@ function harness(extra = {}, options = {}) {
     }
     return elements.get(id);
   };
-  const context = vm.createContext({
+  const context = vm.createContext({ ProjectLifecycle: require('../app/project-lifecycle'),
     taskEditorContexts: new Map(), taskEditorIntent: 0, renderDeliverableEditor() {}, state: initial(extra), ContentLifecycle: Lifecycle, Lifecycle, Core: {}, Research: {}, WorkstationTrash: trashUI, serverConflict: false,
     trashPurgeInFlight: new Set(), purgingTrashIds: new Set(), purgeInFlight: new Set(),
     uid: prefix => `${prefix}-test-${++serial}`, esc: value => String(value ?? ''), uiIcon: () => '',

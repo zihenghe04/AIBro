@@ -4,14 +4,14 @@
 <p align="center">Read course materials and papers, edit your notes, and plan tasks and events.</p>
 <p align="center"><sub>NATIVE MAC APP · LOCAL FIRST · YOUR MODELS · OPEN SOURCE</sub></p>
 <p align="center"><a href="README.md">简体中文</a> · English</p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.1"><strong>Download the Mac preview ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website and demos</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">Changelog</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.2"><strong>Download the Mac preview ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website and demos</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">Changelog</a></p>
 
 [![AI Bro: read course materials, ask questions, and edit study notes on Mac](launch/dist/assets/demo/hero-workspace.png)](https://zihenghe04.github.io/AIBro/?lang=en)
 <p align="center"><sub>Actual AI Bro 0.8.0 App interface, captured from an isolated demo workspace. Projects, documents, and responses are fictional; animations arrange interface steps and do not represent live model speed. <a href="https://zihenghe04.github.io/AIBro/?lang=en#workspace">Explore the workflows ↗</a></sub></p>
 
 Add course materials, papers, and notes to a project, then ask questions about them. AI Bro can help summarize key ideas, draft notes, and break work into tasks. Open the cited source to check an answer, or review and edit an AI draft before saving it. When you need the material for an exam or a report, search your saved documents and notes.
 
-The public download is **0.9.1, a Mac development preview** for Apple Silicon / macOS 14+, not yet Apple-notarized. [Release notes](docs/RELEASE_NOTES.md)
+The public download is **0.9.2, a Mac development preview** for Apple Silicon / macOS 14+, not yet Apple-notarized. [Release notes](docs/RELEASE_NOTES.md)
 
 ---
 
@@ -73,13 +73,13 @@ For multiple devices, connect your own sync service over HTTPS or an SSH tunnel 
 
 ## Get started
 
-1. Download the DMG and checksums from [v0.9.1 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.1), following the [installation guide](docs/DISTRIBUTION.md). Python and PDF support are bundled.
+1. Download the DMG and checksums from [v0.9.2 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.2), following the [installation guide](docs/DISTRIBUTION.md). Python and PDF support are bundled.
 2. Connect your model service in Settings and select a model.
 3. Create a project, add a document, and start a conversation.
 
 > Summarize the core ideas in this handout, include source page references, save a learning note, and suggest three revision tasks.
 
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.1"><strong>Download AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">See the demos</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.2"><strong>Download AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">See the demos</a></p>
 
 <details>
 <summary><strong>Preview boundaries and data handling</strong></summary>

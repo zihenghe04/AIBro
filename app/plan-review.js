@@ -7,6 +7,7 @@
   'use strict';
   const Assignment=typeof module==='object'&&module.exports?require('./record-assignment'):root.RecordAssignment;
   const taskWorkflow = () => typeof module === 'object' && module.exports ? require('./task-workflow.js') : root.TaskWorkflow;
+  const projectLifecycle = () => typeof module === 'object' && module.exports ? require('./project-lifecycle.js') : root.ProjectLifecycle;
   const workflowLabel = (state, value) => taskWorkflow().names(state)[value] || (value == null || value === '' ? t('未分类', 'Uncategorized') : String(value));
   const copy = value => value == null ? value : JSON.parse(JSON.stringify(value));
   const t = (zh, en) => /^en(?:-|$)/i.test(root.document?.documentElement.lang || '') ? en : zh;
@@ -16,7 +17,7 @@
   function stable(value) { if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']'; if (value && typeof value === 'object') return '{' + Object.keys(value).sort().filter(key => value[key] !== undefined && typeof value[key] !== 'function').map(key => JSON.stringify(key) + ':' + stable(value[key])).join(',') + '}'; return JSON.stringify(value); }
   function frozen(value) { if (value && typeof value === 'object') { Object.values(value).forEach(frozen); Object.freeze(value); } return value; }
   const names = {
-    create_project: ['创建项目', 'Create project'], set_workspace: ['切换后续步骤空间', 'Set space for following steps'],
+    create_project: ['创建项目', 'Create project'], delete_project: ['项目移入回收站', 'Move project to trash'], set_workspace: ['切换后续步骤空间', 'Set space for following steps'],
     assign_record: ['修改记录归属', 'Move existing record'],
     create_task: ['创建任务', 'Create task'], update_task: ['更新任务', 'Update task'], delete_task: ['任务移入回收站', 'Move task to trash'],
     create_note: ['保存笔记', 'Save note'], create_knowledge_item: ['保存知识', 'Save knowledge'], update_note: ['更新笔记', 'Update note'], append_note: ['追加笔记', 'Append to note'], delete_note: ['笔记移入回收站', 'Move note to trash'],
@@ -32,7 +33,10 @@
   const reviewTaskFields = [...taskFields, field('reminderMinutes', '提前提醒（分钟）', 'Reminder (minutes)'), field('checklist', '检查清单', 'Checklist')];
   const reviewTaskKeys = reviewTaskFields.map(spec => spec.key);
   const schemas = {
-    create_project: [field('name', '项目名称', 'Project name'), field('description', '项目说明', 'Description', 'textarea'), workspace], set_workspace: [workspace],
+    create_project: [field('name', '项目名称', 'Project name'), field('description', '项目说明', 'Description', 'textarea'), workspace],
+    // A deletion is accepted or rejected as one reviewed target. Editing the
+    // project ID here would reuse the model's authorization for another project.
+    delete_project: [], set_workspace: [workspace],
     assign_record: [field('targetProjectId', '新归属项目', 'Destination project', 'project')],
     create_task: [...taskFields, project, workspace], update_task: [...taskFields.map(item => ({ ...item, key: 'patch.' + item.key })), project],
     create_note: [...noteFields, field('folderPath', '资料夹', 'Folder'), project, workspace], create_knowledge_item: [...noteFields, field('folderPath', '资料夹', 'Folder'), project, workspace],
@@ -140,11 +144,16 @@
     for (const id of ids) { const item = lookup.get(id); if (item?.projectId) ids.add(item.projectId); if (item?.attachmentId) ids.add(item.attachmentId); for (const source of [...(item?.sourceAttachmentIds || []), ...(item?.sourceNoteIds || []), ...(item?.dependsOn || [])]) ids.add(source); }
     const complex = actions.some(a => ['upsert_wiki', 'upsert_paper'].includes(a.type));
     const completingTask = actions.some(a => a.type === 'update_task' && (a.status || a.patch?.status) === 'done');
+    const projectDeletions = actions.filter(action => action.type === 'delete_project').map(action => {
+      try { return { id: action.projectId, snapshot: projectLifecycle().snapshot(state, action.projectId) }; }
+      catch (error) { return { id: action.projectId, unavailable: error.message }; }
+    });
     return stable({
       records: collections.flatMap(key => (state[key] || []).filter(item => ids.has(item.id) || key === 'tasks' && taskNames.includes(normalization(item.title)) || key === 'notes' && (noteNames.includes(normalization(item.title)) || completingTask) || complex && ['notes', 'papers', 'imports'].includes(key)).map(item => [key, item])).sort((a, b) => stable([a[0], a[1].id]).localeCompare(stable([b[0], b[1].id]))),
       projects: [...(state.projects || [])].sort((a, b) => String(a.id).localeCompare(String(b.id))),
       links: (state.links || []).filter(link => ids.has(link.sourceId) || ids.has(link.targetId)).sort((a, b) => String(a.id).localeCompare(String(b.id))),
-      conversation: (state.conversations || []).filter(c => c.id === context.conversationId).map(({ id, projectId, workspace, archived, archivedAt, deleted, deletedAt }) => ({ id, projectId, workspace, archived, archivedAt, deleted, deletedAt }))
+      conversation: (state.conversations || []).filter(c => c.id === context.conversationId).map(({ id, projectId, workspace, archived, archivedAt, deleted, deletedAt }) => ({ id, projectId, workspace, archived, archivedAt, deleted, deletedAt })),
+      ...(projectDeletions.length ? { projectDeletions } : {})
     });
   }
   function createController(host = {}) {
@@ -247,19 +256,30 @@
       const d = draft(id), run = resolve(id);
       if (locked(d)) throw fault('PLAN_BUSY', '正在保存或批准。', 'Saving or approving.');
       if (stable(run.pendingActions || []) !== d.originalKey || stable(run.planFieldReview ?? null) !== d.originalMetadataKey || stable(contextFor(host, run)) !== d.contextKey) throw fault('PLAN_CHANGED', '原计划、字段决定或允许范围已变化，请重新载入。', 'The original plan, field decisions or allowed scope changed. Reload it.');
-      let outcome; const previousBase=d.reviewBase; d.reviewBase=reviewBase(host.getState(),d.rows); d.validationKey=null;
+      let outcome; const previousBase=d.reviewBase, previousContext=copy(d.context), previousContextKey=d.contextKey; d.reviewBase=reviewBase(host.getState(),d.rows); d.validationKey=null;
       try { if (typeof host.recheckPlan === 'function') {
         let validated = false;
-        const validateRechecked = () => { d.validationKey = null; outcome = validate(d); if (!outcome && d.validation.canSaveEmpty) outcome=preview(host,host.getState(),[],d.context); if (!outcome) throw fault('PLAN_INVALID', d.validation.error, d.validation.error); validated = true; return outcome; };
+        const reviewTargets = scopeActions(d).filter(action => ['update_task','delete_task'].includes(action.type) && d.context.allowedTaskIds?.includes(action.taskId) || action.type === 'delete_project' && Object.hasOwn(d.context.projectSnapshots || {}, action.projectId));
+        const validateRechecked = () => {
+          const nextContext = contextFor(host,run);
+          if (stable(nextContext) !== d.contextKey) {
+            const before = copy(d.context), after = copy(nextContext), reviewedProjects = new Set(reviewTargets.filter(action => action.type === 'delete_project').map(action => action.projectId));
+            delete before.projectSnapshots; delete after.projectSnapshots;
+            const oldSnapshots = d.context.projectSnapshots || {}, nextSnapshots = nextContext.projectSnapshots || {};
+            if (stable(before) !== stable(after) || stable(Object.keys(oldSnapshots).sort()) !== stable(Object.keys(nextSnapshots).sort()) || Object.keys(oldSnapshots).some(id => !reviewedProjects.has(id) && oldSnapshots[id] !== nextSnapshots[id])) throw fault('PLAN_SCOPE_CHANGED','重新核对不能扩大或改变本轮允许范围，请重新载入。','Rechecking cannot expand or change the allowed scope. Reload the plan.');
+            d.context = nextContext; d.contextKey = stable(nextContext);
+          }
+          d.validationKey = null; outcome = validate(d); if (!outcome && d.validation.canSaveEmpty) outcome=preview(host,host.getState(),[],d.context); if (!outcome) throw fault('PLAN_INVALID', d.validation.error, d.validation.error); validated = true; return outcome;
+        };
         try {
           // Suppressed fields may later be accepted again. Refresh only the
-          // already-authorized task versions, without making them executable.
-          const reviewTargets = scopeActions(d).filter(action => ['update_task','delete_task'].includes(action.type) && d.context.allowedTaskIds?.includes(action.taskId));
+          // already-authorized targets, without making them executable or
+          // expanding the originally read project IDs.
           const result = host.recheckPlan(run, actionsOf(d), validateRechecked, reviewTargets);
           if (result && typeof result.then === 'function' || !validated) throw fault('PLAN_RECHECK', '重新核对尚未完成，原批准版本保持不变。', 'Rechecking did not complete. The prior approval version is unchanged.');
         } catch (error) { d.validationKey = null; d.error = error.message; d.stale = true; throw error; }
       } else {outcome=validate(d);if(!outcome&&!d.validation.canSaveEmpty)throw fault('PLAN_INVALID',d.validation.error,d.validation.error);} }
-      catch(error){d.reviewBase=previousBase;d.validationKey=null;d.error=error.message;d.stale=true;throw error;}
+      catch(error){d.reviewBase=previousBase;d.context=previousContext;d.contextKey=previousContextKey;d.validationKey=null;d.error=error.message;d.stale=true;throw error;}
       d.revision++; d.baselineActions = scopeActions(d); d.baseline = scope(host.getState(), d.baselineActions, d.context, outcome); d.stale = false; d.error = ''; d.notice = t('已载入最新对象，请重新检查各步内容与结果。', 'Latest objects loaded. Review each step and its effects again.'); host.onChanged?.(id, 'rechecked'); return d;
     }
     function reload(id) { const previous = draft(id); if (locked(previous)) throw fault('PLAN_BUSY', '正在保存或批准。', 'Saving or approving.'); const saved = dirty(previous) ? actionsOf(previous) : previous.previousDraft; const next = make(id); next.previousDraft = saved; next.revision = previous.revision + 1; host.onChanged?.(id, 'reloaded'); return next; }
@@ -268,17 +288,37 @@
     return { draft, refresh, edit, decideField, toggle, move, save, capture, assertCurrent, recheck, reload, reportError, cleanup, fieldReview: id => compiled(draft(id)), dirty: id => dirty(draft(id)), actions: id => actionsOf(draft(id)), anyBusy: () => [...drafts.values()].some(d => d.busy), isEditing: () => [...drafts.values()].some(d => host.getRun(d.runId)?.status === 'awaiting-approval' && dirty(d)), forget: id => { if (!drafts.get(id)?.busy) drafts.delete(id); } };
   }
 
-  function describe(action, state, context, allActions) {
+  function describe(action, state, context, allActions, result) {
     const all = collections.flatMap(key => state[key] || []), find = id => all.find(item => item.id === id);
     let currentWorkspace = context.workspace || '日常'; const proposedProjects = [];
     for (const previous of allActions) { if (previous === action) break; if (previous.type === 'set_workspace') currentWorkspace = previous.workspace || currentWorkspace; if (previous.type === 'create_project') proposedProjects.push({ ...previous, workspace: previous.workspace || currentWorkspace }); }
     const assigning = action.type === 'assign_record';
-    const target = assigning ? (state[action.recordType==='task'?'tasks':'notes']||[]).find(item=>item.id===action.recordId) : find(action.taskId || action.noteId || action.attachmentId || action.sourceAttachmentId || action.targetId);
+    const target = action.type === 'delete_project' ? state.projects?.find(item => item.id === action.projectId) : assigning ? (state[action.recordType==='task'?'tasks':'notes']||[]).find(item=>item.id===action.recordId) : find(action.taskId || action.noteId || action.attachmentId || action.sourceAttachmentId || action.targetId);
     const projectRef = assigning ? action.targetProjectId : Object.hasOwn(action, 'projectId') ? action.projectId : action.project || action.projectName || target?.projectId || context.projectId;
-    const p = action.type === 'create_project' ? { ...action, workspace: action.workspace || currentWorkspace } : state.projects?.find(p => p.id === projectRef || p.name === projectRef) || proposedProjects.find(a => [a.id, a.ref, a.name].includes(projectRef));
+    const p = action.type === 'delete_project' ? target : action.type === 'create_project' ? { ...action, workspace: action.workspace || currentWorkspace } : state.projects?.find(p => p.id === projectRef || p.name === projectRef) || proposedProjects.find(a => [a.id, a.ref, a.name].includes(projectRef));
     const deletion = action.type.startsWith('delete_');
     const sourceIds = action.sourceAttachmentIds || [];
     const changes = [];
+    let deletionImpact;
+    if (action.type === 'delete_project') {
+      // The real Core preview already ran for retained steps. Reuse its exact
+      // effects; an excluded step can still be inspected with the same helper.
+      if (result?.actionType === 'delete_project' && (result.projectId || result.id) === action.projectId && result.counts) deletionImpact = result.projectDeletionSummary || result;
+      else if (target) { try { deletionImpact = projectLifecycle()?.preview(state, action.projectId, context); } catch (_) { /* Core validation reports an unavailable target. */ } }
+      if (deletionImpact?.counts) {
+        const projectCount = deletionImpact.projectIds?.length || 1;
+        const total = projectCount > 1 ? t(`本次 ${projectCount} 个项目合计 · `,`Across ${projectCount} projects · `) : '';
+        for (const [key, zh, en] of [['tasks','关联任务','Linked tasks'],['notes','笔记','Notes'],['imports','资料','Materials'],['papers','论文分析','Paper analyses'],['conversations','对话','Conversations']]) {
+          const count = deletionImpact.counts[key];
+          if (Number.isSafeInteger(count) && count >= 0) changes.push({ label: t(zh,en), after: total + t(`${count} 项移入回收站`,`${count} moved to trash`) });
+        }
+        const shared = deletionImpact.sharedImportsRetained;
+        if (Number.isSafeInteger(shared) && shared >= 0) changes.push({ label:t('共享原件','Shared originals'), after:total + t(`${shared} 项保留在待归类`,`${shared} kept in unassigned materials`) });
+        const agenda = deletionImpact.agendaMirrorsRetained;
+        if (Number.isSafeInteger(agenda) && agenda > 0) changes.push({ label:t('独立日程','Standalone schedule'), after:total + t(`${agenda} 项保留；不修改或删除真实日程`,`${agenda} kept; calendar events stay unchanged`) });
+      }
+      changes.push({ label:t('本机目录','Local folder'), after:t('保留目录及其中的文件','Keeps the folder and its files') });
+    }
     if(assigning){
       const old=state.projects?.find(project=>project.id===target?.projectId),standalone=t('独立内容','Standalone');
       changes.push({label:t('归属项目','Project'),before:old?.name||target?.project||standalone,after:p?.name||(projectRef?String(projectRef):standalone)});
@@ -294,9 +334,9 @@
     if (Object.hasOwn(action,'status') && action.type === 'update_task') changes.push({label:fieldName('status'),before:short(target?.status),after:short(action.status)});
     const excerpt = action.type === 'append_note' ? action.content : action.description || action.content || action.body || '';
     const endpoint = id => find(id)?.title || find(id)?.name || allActions.find(a => a.id === id)?.title || allActions.find(a => a.id === id)?.name || id;
-    return { label: names[action.type] ? t(...names[action.type]) : action.type, title: ['create_link','link_items'].includes(action.type) ? endpoint(action.sourceId) + ' → ' + endpoint(action.targetId) : action.name || action.title || action.patch?.title || target?.title || target?.name || action.newName || t('工作区操作', 'Workspace action'), project: p?.name || p?.title || (projectRef ? String(projectRef) : t('独立内容', 'Standalone')), workspace: action.workspace || p?.workspace || target?.workspace || currentWorkspace, targetId: target?.id || '', sources: sourceIds.map(id => find(id)?.name || find(id)?.title || id), danger: deletion,
+    return { label: names[action.type] ? t(...names[action.type]) : action.type, title: action.type === 'delete_project' ? target?.name || action.projectId || t('不可用项目','Unavailable project') : ['create_link','link_items'].includes(action.type) ? endpoint(action.sourceId) + ' → ' + endpoint(action.targetId) : action.name || action.title || action.patch?.title || target?.title || target?.name || action.newName || t('工作区操作', 'Workspace action'), project: p?.name || p?.title || (projectRef ? String(projectRef) : t('独立内容', 'Standalone')), workspace: action.type === 'delete_project' ? target?.workspace || t('未知空间','Unknown space') : action.workspace || p?.workspace || target?.workspace || currentWorkspace, targetId: target?.id || '', sources: sourceIds.map(id => find(id)?.name || find(id)?.title || id), danger: deletion,
       changes, excerpt: excerpt.length > 240 ? excerpt.slice(0,237) + '…' : excerpt,
-      consequence: assigning ? t('仅修改此记录归属；原 ID、正文、来源、草稿与修订历史保持不变。解除项目归属时保留原空间。','Changes only ownership. Keeps the original ID, content, sources, draft and revisions; detaching keeps the original space.') : deletion ? t('移入回收站，并移除关联。可从回收站恢复。', 'Moves the object to trash and removes its links. Restore it from Trash.') : ['update_note','append_note','upsert_wiki','upsert_paper'].includes(action.type) ? t('保留人工正文；需要时生成待合并草稿。', 'Preserves human edits and creates a proposal when required.') : action.type === 'link_local_project' ? t('保存目录关联；此步骤不会执行终端命令。', 'Saves the folder link. This step does not run terminal commands.') : ['create_link','link_items'].includes(action.type) ? t('保存两个对象之间的关联。', 'Saves a link between the two objects.') : t('将按下方字段更新本机工作区，结果遵循现有同步设置。', 'Updates the local workspace using the fields below and follows existing sync settings.') };
+      consequence: action.type === 'delete_project' ? t('项目及其专属内容移入回收站，可恢复。被其他项目引用的原件保留到待归类；本机目录与文件保留。当前指令对话保留。','Moves the project and its exclusive content to Trash for recovery. Originals referenced elsewhere stay in unassigned materials. Keeps local folders, files and this command conversation.') : assigning ? t('仅修改此记录归属；原 ID、正文、来源、草稿与修订历史保持不变。解除项目归属时保留原空间。','Changes only ownership. Keeps the original ID, content, sources, draft and revisions; detaching keeps the original space.') : deletion ? t('移入回收站，并移除关联。可从回收站恢复。', 'Moves the object to trash and removes its links. Restore it from Trash.') : ['update_note','append_note','upsert_wiki','upsert_paper'].includes(action.type) ? t('保留人工正文；需要时生成待合并草稿。', 'Preserves human edits and creates a proposal when required.') : action.type === 'link_local_project' ? t('保存目录关联；此步骤不会执行终端命令。', 'Saves the folder link. This step does not run terminal commands.') : ['create_link','link_items'].includes(action.type) ? t('保存两个对象之间的关联。', 'Saves a link between the two objects.') : t('将按下方字段更新本机工作区，结果遵循现有同步设置。', 'Updates the local workspace using the fields below and follows existing sync settings.') };
   }
   function fieldsFor(action, state, context, allActions) {
     const current = [...(state.tasks || []), ...(state.notes || [])].find(item => item.id === (action.taskId || action.noteId));
@@ -333,7 +373,7 @@
     if (!element.isConnected) { mounts.delete(element); return; }
     let d; try { d = controller.refresh(id); } catch (_) { root.HalaskaUI?.unmount(element); mounts.delete(element); element.replaceChildren(); return; }
     const state = hooks.getState(), allActions = d.rows.map(row => row.action), retainedActions = d.rows.filter(row => row.included).map(row => row.action), review=controller.fieldReview(id);
-    root.HalaskaUI.mount(element, 'PlanReviewSurface', { runId: id, draft: { ...d, busy: d.busy || !!hooks.isBusy?.(id), dirty: controller.dirty(id) }, rows: d.rows.map(row => { const actions = row.included ? retainedActions : allActions; return { ...row, ...describe(row.action, state, d.context, actions), fields: fieldsFor(row.action, state, d.context, actions), fieldReview:review.reviews.get(row.key) }; }),
+    root.HalaskaUI.mount(element, 'PlanReviewSurface', { runId: id, draft: { ...d, busy: d.busy || !!hooks.isBusy?.(id), dirty: controller.dirty(id) }, rows: d.rows.map(row => { const actions = row.included ? retainedActions : allActions; const result = row.included && d.validation.ok ? d.validation.results?.find(item => item.actionType === 'delete_project' && (item.projectId || item.id) === row.action.projectId) : undefined; return { ...row, ...describe(row.action, state, d.context, actions, result), fields: fieldsFor(row.action, state, d.context, actions), fieldReview:review.reviews.get(row.key) }; }),
       canSessionApprove: !!hooks.canSessionApprove?.(hooks.getRun(id)), canReview: !!hooks.review,
       onEdit: (key, field, value) => { try { controller.edit(id, key, field, value); } catch (error) { controller.reportError(id, error); } }, onToggle: (key, included) => { try { controller.toggle(id, key, included); } catch (error) { controller.reportError(id, error); } }, onMove: (key, offset) => { try { controller.move(id, key, offset); } catch (error) { controller.reportError(id, error); } },
       onDecideField:(key,path,accept)=>{try{controller.decideField(id,key,path,accept);}catch(error){controller.reportError(id,error);}},

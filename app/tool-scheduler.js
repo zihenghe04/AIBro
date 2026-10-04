@@ -1,11 +1,11 @@
 /* One durable ledger for read tools, provider tools and controlled commands. */
 (function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;else root.ToolScheduler=api;})(globalThis,root=>{
   'use strict';
-  const reads=new Set(['agenda_list','agenda_read','task_list','list','search','neighbors','read','read_page','read_file','wiki_list','memory_read','delegate','capabilities','history_search','history_read','library_overview','evidence_log']);
+  const reads=new Set(['agenda_list','agenda_read','project_list','task_list','list','search','neighbors','read','read_page','read_file','wiki_list','memory_read','delegate','capabilities','history_search','history_read','library_overview','evidence_log']);
   const pending=new Set(['queued','running','awaiting-approval']);
   const clone=x=>JSON.parse(JSON.stringify(x));
   const cancelled=()=>Object.assign(Error('已停止工具执行'),{code:'CANCELLED'});
-  const label=type=>({agenda_list:'查询日程',agenda_read:'读取日程',quick_panel_open:'打开灵动岛',evidence_log:'读取账本',library_overview:'资料概览',capabilities:'操作说明',history_search:'搜索对话',history_read:'读取对话',task_list:'任务目录',list:'资料目录',search:'检索',neighbors:'相邻证据',read:'读取正文',read_page:'读取原件',read_file:'工作区文件',wiki_list:'Wiki 目录',memory_read:'项目记忆',delegate:'子代理',terminal:'终端',web_read:'网页读取',web_search:'网页搜索'})[type]||type;
+  const label=type=>({agenda_list:'查询日程',agenda_read:'读取日程',quick_panel_open:'打开灵动岛',evidence_log:'读取账本',library_overview:'资料概览',capabilities:'操作说明',history_search:'搜索对话',history_read:'读取对话',project_list:'\u9879\u76ee\u76ee\u5f55',task_list:'任务目录',list:'资料目录',search:'检索',neighbors:'相邻证据',read:'读取正文',read_page:'读取原件',read_file:'工作区文件',wiki_list:'Wiki 目录',memory_read:'项目记忆',delegate:'子代理',terminal:'终端',web_read:'网页读取',web_search:'网页搜索'})[type]||type;
   function safeRequest(request){
     if(['agenda_list','agenda_read'].includes(request.type)){
       const allowed=request.type==='agenda_list'?['type','query','from','to','limit','offset']:['type','eventId','expectedVersion'];
