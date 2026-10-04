@@ -1012,7 +1012,7 @@ struct MainView: View {
                     Button { model.openWorkspaceSettings() } label: { Label(nativeUI("设置", "Settings"),systemImage:"gearshape") }.buttonStyle(LiftStyle()).disabled(!model.ready || model.snapshot?.modalOpen == true)
                     Spacer()
                     Button { quickEntry.showPanel(screenIntent: .pointerSummon) } label: { Image(systemName:"rectangle.trailinghalf.inset.filled") }
-                        .buttonStyle(LiftStyle()).help(nativeUI("快捷入口", "Quick entry")).accessibilityLabel(nativeUI("快捷入口", "Quick entry"))
+                        .buttonStyle(LiftStyle()).help(nativeUI("灵动岛与快捷入口", "Island & quick entry")).accessibilityLabel(nativeUI("灵动岛与快捷入口", "Island & quick entry"))
                 }.padding(20)
             }.navigationSplitViewColumnWidth(min:220,ideal:250,max:330)
         } detail: {
@@ -1510,6 +1510,20 @@ struct NativeDraftQuitGate {
         quickEntry.onClipboardPasteSessionBegan = {[weak self] in self?.quickClipboardPasteBack.beginSession()}
         quickEntry.onClipboardPasteSessionEnded = {[weak self] in self?.quickClipboardPasteBack.endSession()}
         guard let model else{return}
+        model.desktop?.quickEntrySettings = {[weak self,weak model] request in
+            guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return ["status":"error","reason":"unavailable"]}
+            switch request {
+            case .state: break
+            case .enabled(let enabled): self.quickEntry.setEnabled(enabled)
+            case .mode(let value):
+                guard let mode=NativeQuickEntryCoordinator.Mode(rawValue:value),mode != .off else{return ["status":"error","reason":"invalid_request"]}
+                self.quickEntry.mode=mode
+            case .open:
+                self.quickEntry.showPanel(section:.settings)
+                guard self.quickEntry.isShowing(.settings) else{return ["status":"error","reason":"unavailable"]}
+            }
+            return ["status":"ok","mode":self.quickEntry.mode.rawValue,"isEnabled":self.quickEntry.isEnabled,"preferredEnabledMode":self.quickEntry.preferredEnabledMode.rawValue]
+        }
         model.desktop?.openQuickPanel = {[weak self,weak model] request,verify in
             guard let self,let model,self.model === model,model.ready,self.draftQuit.phase == .idle else{return .deferred(reason:"workspace_unavailable")}
             guard model.snapshot?.privateMode == false else{return .denied(reason:"private_workspace")}
@@ -1702,7 +1716,11 @@ struct NativeDraftQuitGate {
         // Disabling the last background entry must never strand a hidden workspace.
         quickEntry.$mode.dropFirst().removeDuplicates().sink{[weak self] mode in
             if mode == .off {self?.restoreWorkspaceWindow()}
-            DispatchQueue.main.async{[weak self] in self?.acceptQuickNotificationSnapshot()}
+            DispatchQueue.main.async{[weak self] in
+                self?.acceptQuickNotificationSnapshot()
+                // Read after @Published willSet has committed the coordinator value.
+                self?.model?.web.evaluateJavaScript("window.dispatchEvent(new Event('aibro-quick-entry-change'))",completionHandler:nil)
+            }
         }.store(in:&quickEntrySubscriptions)
     }
     func invokeVoiceCommand(){voiceCommand?.invoke()}
@@ -2175,7 +2193,7 @@ struct NativeDraftQuitGate {
     @ObservedObject private var nativeLanguage = NativeL10n.shared
     @NSApplicationDelegateAdaptor(Delegate.self) var delegate
     @StateObject private var model=Workspace()
-    var body:some Scene {WindowGroup("AI Bro"){MainView(model:model,quickEntry:delegate.quickEntry).background(NativeDraftQuitWindow(delegate:delegate)).frame(minWidth:950,minHeight:650).onAppear{delegate.model=model}}.defaultSize(width:1280,height:850).windowToolbarStyle(.unified).commands{CommandGroup(replacing:.appTermination){Button(nativeUI("退出 AI Bro", "Quit AI Bro")){delegate.requestQuit()}.keyboardShortcut("q",modifiers:.command)};CommandGroup(replacing:.appSettings){Button(nativeUI("设置…", "Settings…")){model.openWorkspaceSettings()}.keyboardShortcut(",",modifiers:.command).disabled(!model.ready || model.snapshot?.modalOpen == true);Button(nativeUI("快捷入口…", "Quick entry…")){delegate.quickEntry.showPanel(screenIntent: .pointerSummon)};Button(nativeUI("语音指令…", "Voice command…")){delegate.invokeVoiceCommand()}};CommandGroup(replacing:.newItem){Button(nativeUI("新对话", "New chat")){model.command("new")}.keyboardShortcut("n").disabled(!model.ready)};CommandGroup(after:.textEditing){Button(nativeUI("搜索与命令", "Search and commands")){model.command("search")}.keyboardShortcut("k",modifiers:.command).disabled(!model.ready)}}
+    var body:some Scene {WindowGroup("AI Bro"){MainView(model:model,quickEntry:delegate.quickEntry).background(NativeDraftQuitWindow(delegate:delegate)).frame(minWidth:950,minHeight:650).onAppear{delegate.model=model}}.defaultSize(width:1280,height:850).windowToolbarStyle(.unified).commands{CommandGroup(replacing:.appTermination){Button(nativeUI("退出 AI Bro", "Quit AI Bro")){delegate.requestQuit()}.keyboardShortcut("q",modifiers:.command)};CommandGroup(replacing:.appSettings){Button(nativeUI("设置…", "Settings…")){model.openWorkspaceSettings()}.keyboardShortcut(",",modifiers:.command).disabled(!model.ready || model.snapshot?.modalOpen == true);Button(nativeUI("打开灵动岛 / 快捷工作台…", "Open island / quick panel…")){delegate.quickEntry.showPanel(screenIntent: .pointerSummon)};Button(nativeUI("灵动岛设置…", "Island settings…")){delegate.quickEntry.showPanel(section:.settings,screenIntent: .pointerSummon)};Button(nativeUI("语音指令…", "Voice command…")){delegate.invokeVoiceCommand()}};CommandGroup(replacing:.newItem){Button(nativeUI("新对话", "New chat")){model.command("new")}.keyboardShortcut("n").disabled(!model.ready)};CommandGroup(after:.textEditing){Button(nativeUI("搜索与命令", "Search and commands")){model.command("search")}.keyboardShortcut("k",modifiers:.command).disabled(!model.ready)}}
     }
 
 }

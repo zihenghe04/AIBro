@@ -68,23 +68,12 @@ struct NativeQuickVoiceStatus: Equatable {
 
 @MainActor
 final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
-    enum Mode: String, CaseIterable, Identifiable {
-        case off, menuBar, edge, island
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .off: return nativeUI("关闭常驻入口", "Off")
-            case .menuBar: return nativeUI("菜单栏", "Menu bar")
-            case .edge: return nativeUI("屏幕侧边", "Screen edge")
-            case .island: return nativeUI("顶部灵动岛", "Top island")
-            }
-        }
-    }
+    typealias Mode = NativeQuickEntryMode
 
     @Published var mode: Mode {
         didSet {
             guard oldValue != mode else { return }
-            preferences.set(mode.rawValue, forKey: Self.modeKey)
+            entryPreferences.save(mode)
             if configured { reconcileEntry() }
         }
     }
@@ -128,9 +117,11 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
     @Published private(set) var geometry = NativeQuickGeometry.resolve(screen: CGRect(x: 0, y: 0, width: 1440, height: 900), visible: CGRect(x: 0, y: 0, width: 1440, height: 876), safeTop: 0, placement: .island)
     private var motionTask: Task<Void, Never>?
     var keepRunning: Bool { mode != .off }
+    var isEnabled: Bool { mode != .off }
+    var preferredEnabledMode: Mode { mode == .off ? entryPreferences.preferredEnabledMode : mode }
+    func setEnabled(_ enabled: Bool) { mode = enabled ? preferredEnabledMode : .off }
 
-    private static let modeKey = "ai-bro-native-quick-entry-mode"
-    private let preferences: UserDefaults
+    private let entryPreferences: NativeQuickEntryPreferences
     private var configured = false
     private var onAction: ((NativeQuickAction) -> Void)?
     private var onQuit: (() -> Void)?
@@ -152,10 +143,11 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
     private var shortcutSubscription: AnyCancellable?
 
     init(preferences: UserDefaults = .standard) {
-        self.preferences = preferences
+        let entryPreferences = NativeQuickEntryPreferences(defaults: preferences)
+        self.entryPreferences = entryPreferences
         self.panelPreferences = NativeQuickPanelPreferences(defaults: preferences)
         self.shortcutStore = NativeQuickShortcutStore(preferences: preferences)
-        self.mode = preferences.string(forKey: Self.modeKey).flatMap(Mode.init(rawValue:)) ?? .off
+        self.mode = entryPreferences.mode
         super.init()
         shortcutStore.onInvoke = { [weak self] in self?.togglePanel() }
         shortcutSubscription = shortcutStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }

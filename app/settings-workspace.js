@@ -6,6 +6,80 @@
   let record = null;
   let hooks = {};
   const language = () => /^en(?:-|$)/i.test(root.document.documentElement.lang);
+  function quickEntryCard(panel) {
+    const api = root.workstationDesktop?.quickEntry;
+    if (!api) return null;
+    const doc = root.document, card = doc.createElement('article');
+    card.id = 'quickEntrySettingsCard'; card.className = 'card';
+    card.innerHTML = '<h2></h2><p class="muted"></p><div class="permission-row"><div><b></b><small></small></div><label class="sound-toggle"><input id="quickEntryEnabled" type="checkbox"/></label></div><div class="permission-row"><label for="quickEntryMode"></label><select id="quickEntryMode"><option value="island"></option><option value="edge"></option><option value="menuBar"></option></select></div><div class="setting-actions"></div><p class="setting-help" role="status" aria-live="polite"></p>';
+    panel.prepend(card);
+    const enabled = card.querySelector('input'), mode = card.querySelector('select');
+    const status = card.querySelector('[role="status"]'), detailHost = card.querySelector('.setting-actions');
+    let confirmed = null, busy = false, revision = 0, failure = false, refreshPending = false;
+    const t = (zh, en) => language() ? en : zh;
+    const detail = root.HalaskaUI.mount(detailHost, 'Button', {
+      id: 'quickEntryDetails', variant: 'secondary', size: 'sm',
+      onClick: event => perform('open', undefined, event),
+    });
+    function render() {
+      card.querySelector('h2').textContent = t('灵动岛与快捷入口', 'Island & quick entry');
+      card.querySelector('.muted').textContent = t('随 AI Bro 启动；登录时自动启动可在详细设置中配置。', 'Runs with AI Bro. Configure launch at login in detailed settings.');
+      card.querySelector('b').textContent = t('启用快捷入口', 'Enable quick entry');
+      card.querySelector('small').textContent = t('关闭后仍可从主窗口打开快捷工作台。', 'You can still open the quick panel from the main window when disabled.');
+      enabled.setAttribute('aria-label', t('启用灵动岛与快捷入口', 'Enable island and quick entry'));
+      card.querySelector('label[for="quickEntryMode"]').textContent = t('显示位置', 'Placement');
+      for (const [value, zh, en] of [['island', '顶部灵动岛', 'Top island'], ['edge', '屏幕侧边', 'Screen edge'], ['menuBar', '菜单栏', 'Menu bar']]) {
+        mode.querySelector(`option[value="${value}"]`).textContent = t(zh, en);
+      }
+      enabled.checked = confirmed?.isEnabled === true;
+      enabled.disabled = busy || !confirmed;
+      mode.value = confirmed?.preferredEnabledMode || '';
+      mode.disabled = busy || !confirmed?.isEnabled;
+      card.setAttribute('aria-busy', String(busy));
+      detail.update({ children: t('详细设置…', 'Detailed settings…'), disabled: busy });
+      status.textContent = failure ? t('未能读取或更新快捷入口，请重新打开此设置重试。', 'Could not read or update quick entry. Reopen these settings to try again.')
+        : busy ? t('正在更新…', 'Updating…') : !confirmed ? t('正在读取本机状态…', 'Reading local status…') : '';
+      status.hidden = !status.textContent;
+    }
+    const valid = value => value?.status === 'ok' && ['off', 'island', 'edge', 'menuBar'].includes(value.mode)
+      && typeof value.isEnabled === 'boolean' && value.isEnabled === (value.mode !== 'off')
+      && ['island', 'edge', 'menuBar'].includes(value.preferredEnabledMode)
+      && (!value.isEnabled || value.preferredEnabledMode === value.mode);
+    async function perform(action, value, event) {
+      if (busy) return;
+      const token = ++revision;
+      busy = action !== 'state'; failure = false;
+      try {
+        // Invoke within the originating event; never defer or fabricate a gesture.
+        const pending = action === 'enabled' ? api.setEnabled(value, event) : action === 'mode' ? api.setMode(value, event)
+          : action === 'open' ? api.openSettings(event) : api.state();
+        render();
+        const result = await pending;
+        if (token !== revision) return;
+        if (!valid(result)) throw new Error('quick_entry_unavailable');
+        confirmed = result;
+      } catch (_) { if (token === revision) failure = true; }
+      finally {
+        if (token === revision) {
+          busy = false; render();
+          if (refreshPending) { refreshPending = false; perform('state'); }
+        }
+      }
+    }
+    enabled.addEventListener('change', event => perform('enabled', enabled.checked, event));
+    mode.addEventListener('change', event => perform('mode', mode.value, event));
+    const refresh = () => {
+      if (record?.selected !== 'appearance') return;
+      if (busy) { refreshPending = true; return; }
+      return perform('state');
+    };
+    root.addEventListener('focus', refresh);
+    root.addEventListener('aibro-quick-entry-change', refresh);
+    doc.addEventListener('visibilitychange', () => { if (doc.visibilityState === 'visible') refresh(); });
+    doc.addEventListener('workstation-language-change', render);
+    render(); perform('state');
+    return { refresh };
+  }
   function groupCards() {
     if (!record) return;
     const { page, panels } = record;
@@ -48,6 +122,7 @@
     record = { page, nav, island, panels, selected, help, touched: false };
     page.classList.add('settings-sectioned');
     groupCards();
+    record.quickEntry = quickEntryCard(panels.appearance);
     function updateLanguage() {
       help.textContent = language()
         ? 'Save API settings, permissions and usage prices here. Connection type, account model and workspace models apply immediately.'
@@ -80,6 +155,7 @@
     const panel = panels[section];
     if (panel.parentElement.firstElementChild !== panel) panel.parentElement.prepend(panel);
     island.update({ selected: section });
+    if (section === 'appearance') record.quickEntry?.refresh();
     try { root.localStorage.setItem(KEY, section); } catch (_) {}
     if (!options.restore) {
       record.touched = true;

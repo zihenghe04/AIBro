@@ -7,6 +7,8 @@ import WebKit
     var openQuickPanel:((NativeQuickPanelOpenRequest,@escaping () async -> Bool) async -> NativeQuickPanelOpenResult)?
     var speechDictation:NativeSpeechDictation?
     var openSpeechSettings:(() async -> Bool)?
+    enum QuickEntrySettingsRequest { case state, enabled(Bool), mode(String), open }
+    var quickEntrySettings:((QuickEntrySettingsRequest)->[String:Any])?
     private let credentialQueue=DispatchQueue(label:"app.aibro.credentials")
     private let vectorQueue=DispatchQueue(label:"app.aibro.vector-index",qos:.utility)
     let vectors:NativeVectorStore
@@ -32,6 +34,24 @@ import WebKit
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage,replyHandler:@escaping(Any?,String?)->Void) {
         guard let origin=workspace?.origin, message.frameInfo.isMainFrame,let url=message.frameInfo.request.url,url.scheme=="http",url.host==origin.host,url.port==origin.port,let body=message.body as? [String:Any],let command=body["command"] as? String else{replyHandler(nil,"拒绝非工作区请求");return}
         do {
+            if command == "quick-entry-settings" {
+                guard let workspace, message.webView === workspace.web,
+                      let action = body["action"] as? String else { replyHandler(["status":"error","reason":"invalid_request"],nil);return }
+                let request:QuickEntrySettingsRequest
+                switch action {
+                case "state" where Set(body.keys) == Set(["command","action"]): request = .state
+                case "enabled" where Set(body.keys) == Set(["command","action","enabled"]):
+                    guard let value = body["enabled"] as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    request = .enabled(value.boolValue)
+                case "mode" where Set(body.keys) == Set(["command","action","mode"]):
+                    guard let mode = body["mode"] as? String, ["island","edge","menuBar"].contains(mode) else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    request = .mode(mode)
+                case "open" where Set(body.keys) == Set(["command","action"]): request = .open
+                default: replyHandler(["status":"error","reason":"invalid_request"],nil);return
+                }
+                guard action == "state" || (workspace.ready && workspace.selection == "settings") else {replyHandler(["status":"error","reason":"settings_not_visible"],nil);return}
+                replyHandler(quickEntrySettings?(request) ?? ["status":"error","reason":"unavailable"],nil);return
+            }
             if ["agenda-query", "agenda-read", "agenda-mutation", "agenda-mutation-status"].contains(command) {
                 guard let workspace, message.webView === workspace.web,
                       Set(body.keys).isSubset(of: ["command", "request", "proposal", "requestId", "context"]),

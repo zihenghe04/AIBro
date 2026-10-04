@@ -13,6 +13,7 @@
 #settings .settings-section[hidden] { display: none !important; }
 #settings .settings-section > * { min-width: 0; max-width: 100%; }
 #settings .settings-section > .card { margin: 0; }
+#settings #quickEntrySettingsCard { grid-column: 1 / -1; }
 #settings .settings-section .setting-actions { flex-wrap: wrap; }
 #settings .settings-section .setting-actions > * { max-width: 100%; }
 #settings .settings-section .setting-actions button { white-space: normal; }

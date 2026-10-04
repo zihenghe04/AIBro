@@ -14,6 +14,21 @@
  window.workstationDesktop.agendaMutationStatus=(requestId,context,proposal)=>rpc({command:'agenda-mutation-status',requestId,context,proposal});
  window.workstationDesktop.navigateWorkspace=destination=>rpc({command:'navigate-workspace',destination});
  window.workstationDesktop.nativeWorkspacePersistence=true;
+ // Settings changes require a real gesture in the retained settings card.
+ // Agent quick-panel navigation has a separate, read-only presentation bridge.
+ const quickEntryGesture=event=>{
+  const nativeEvent=event?.nativeEvent||event;
+  return typeof window.Event==='function'&&nativeEvent instanceof window.Event&&nativeEvent.isTrusted===true
+   &&event.currentTarget?.isConnected===true&&!!event.currentTarget.closest('#quickEntrySettingsCard');
+ };
+ const quickEntryChange=(event,body)=>quickEntryGesture(event)
+  ?rpc({command:'quick-entry-settings',...body}):Promise.resolve({status:'error',reason:'user_gesture_required'});
+ window.workstationDesktop.quickEntry=Object.freeze({
+  state:()=>rpc({command:'quick-entry-settings',action:'state'}),
+  setEnabled:(enabled,event)=>typeof enabled==='boolean'?quickEntryChange(event,{action:'enabled',enabled}):Promise.resolve({status:'error',reason:'invalid_request'}),
+  setMode:(mode,event)=>['island','edge','menuBar'].includes(mode)?quickEntryChange(event,{action:'mode',mode}):Promise.resolve({status:'error',reason:'invalid_request'}),
+  openSettings:event=>quickEntryChange(event,{action:'open'})
+ });
  // A composer-owned nonce grants recording, never message submission. The
  // separate native quick-voice panel has no RPC path through this controller.
  let dictationVerifier=null;

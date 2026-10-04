@@ -349,14 +349,21 @@ struct NativeQuickPanelSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 11) {
-                    heading(nativeUI("打开方式", "Opening"))
+                    heading(nativeUI("灵动岛与快捷入口", "Dynamic Island & quick entry"))
+                    Toggle(nativeUI("启用常驻入口", "Enable persistent entry"), isOn: Binding(
+                        get: { coordinator.isEnabled }, set: { coordinator.setEnabled($0) }
+                    )).toggleStyle(.switch).controlSize(.small)
+                    Text(nativeUI("随 AI Bro 启动；关闭主窗口后仍可使用，退出 App 后关闭。", "Starts with AI Bro. Stays available when the main window closes; quits with the app."))
+                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Picker(nativeUI("入口位置", "Entry location"), selection: Binding(
+                        get: { coordinator.preferredEnabledMode }, set: { coordinator.mode = $0 }
+                    )) {
+                        ForEach(NativeQuickEntryCoordinator.Mode.allCases.filter { $0 != .off }) { Text($0.title).tag($0) }
+                    }.pickerStyle(.menu).disabled(!coordinator.isEnabled)
                     Picker(nativeUI("默认展开页", "Default page"), selection: Binding(get: {
                         preferences.defaultSection(available: coordinator.availableSections)
                     }, set: { preferences.setDefault($0, available: coordinator.availableSections) })) {
                         ForEach(coordinator.visibleSections) { Text($0.title).tag($0) }
-                    }.pickerStyle(.menu)
-                    Picker(nativeUI("入口位置", "Entry location"), selection: $coordinator.mode) {
-                        ForEach(NativeQuickEntryCoordinator.Mode.allCases) { Text($0.title).tag($0) }
                     }.pickerStyle(.menu)
                     NativeQuickShortcutView(store: coordinator.shortcutStore)
                 }

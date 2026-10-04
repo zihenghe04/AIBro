@@ -2,7 +2,7 @@
 
 A bilingual static product website for the Mac App. The design retains the earlier site's immersive dark hero, large product imagery and alternating workflow chapters. A 42-second product film on a warm-white and mint player stage is the first showcase after the hero; actual interface walkthroughs remain available below it. Product images come from the actual **AI Bro 0.8.0 native App**, captured in an isolated workspace containing only fictional materials.
 
-Chinese is the default; `?lang=en` selects English. The canonical site is [zihenghe04.github.io/AIBro](https://zihenghe04.github.io/AIBro/), and download links target [v0.9.0](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.0). Website changes do not rebuild or replace the App.
+Chinese is the default; `?lang=en` selects English. The canonical site is [zihenghe04.github.io/AIBro](https://zihenghe04.github.io/AIBro/), and download links target [v0.9.1](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.1). Website changes do not rebuild or replace the App.
 
 ## Local preview
 
