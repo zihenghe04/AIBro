@@ -9,7 +9,13 @@
   const Provenance = typeof module === 'object' && module.exports ? require('./artifact-provenance.js') : globalThis.ArtifactProvenance;
   const Dependencies=typeof module==='object'&&module.exports?require('./task-dependencies'):globalThis.TaskDependencies;
   const Assignment=typeof module==='object'&&module.exports?require('./record-assignment'):globalThis.RecordAssignment;
-  const ProjectLifecycle = typeof module === 'object' && module.exports ? require('./project-lifecycle.js') : globalThis.ProjectLifecycle;
+  // Resolve when the operation runs. Browser script loading must not freeze an
+  // absent dependency into Core forever if an older shell loads Core first.
+  function projectLifecycle() {
+    const api = typeof module === 'object' && module.exports ? require('./project-lifecycle.js') : globalThis.ProjectLifecycle;
+    if (!api || typeof api.snapshot !== 'function' || typeof api.remove !== 'function') throw new Error('项目管理模块尚未加载，请重启应用。');
+    return api;
+  }
   const taskWorkflow = () => typeof module === 'object' && module.exports ? require('./task-workflow.js') : globalThis.TaskWorkflow;
   const spaces = ['日常', '课程', '科研'];
   const norm = value => String(value || '').trim().toLowerCase().replace(/[\s·_-]+/g, '');
@@ -189,6 +195,7 @@
     }).map(item=>[item.id,contentStamp(JSON.stringify(item))]));
   }
   function projectSnapshots(state, scope = {}) {
+    const ProjectLifecycle = projectLifecycle();
     const ids = Array.isArray(scope.projectIds) ? scope.projectIds : (state.projects || []).map(project => project.id);
     return Object.fromEntries(ids.map(id => [id, ProjectLifecycle.snapshot(state, id)]));
   }
@@ -196,7 +203,7 @@
     if (!Array.isArray(actions) || actions.length > 80) throw new Error('单次最多执行 80 个动作，请分批整理');
     const projectDeletes = actions.filter(action => action?.type === 'delete_project');
     if (projectDeletes.length) {
-      if (!ProjectLifecycle) throw new Error('项目管理模块尚未加载，请重启应用。');
+      const ProjectLifecycle = projectLifecycle();
       if (projectDeletes.length !== actions.length) throw new Error('项目删除不能和创建、编辑或其他删除动作混在同一计划中，请分批执行。');
       const ids = projectDeletes.map(action => action.projectId);
       if (new Set(ids).size !== ids.length) throw new Error('同一计划不能重复删除同一个项目。');
