@@ -49,7 +49,7 @@ test('agenda sheets hand termination to the draft gate and keep the editor mount
  const agenda=fs.readFileSync(path.join(root,'native/Sources/AIBro/AgendaView.swift'),'utf8');
  const editor=agenda.slice(agenda.indexOf('struct AgendaEditor:View'),agenda.indexOf('struct AgendaDetail:View'));
  assert.match(editor,/\.background\(NativeDraftQuitSheet\(\)\)/);
- assert.match(editor,/\.interactiveDismissDisabled\(dirty\)/);
+ assert.match(editor,/\.interactiveDismissDisabled\(dirty \|\| saving\)/);
  assert.match(editor,/store\.setEditorDraft\(session,dirty:dirty\)/);
  const sheet=native.slice(native.indexOf('@MainActor struct NativeDraftQuitSheet'),native.indexOf('@MainActor final class Delegate:'));
  const lifecycle=sheet.slice(sheet.indexOf('override func viewDidMoveToWindow'),sheet.indexOf('static func allowApprovedTermination'));

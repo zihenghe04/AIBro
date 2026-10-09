@@ -86,6 +86,10 @@ final class TestApplication: NSApplication {
         }
         settle()
         guard let editor = findEditor(host) else { fatalError("Missing hosted production editor") }
+        // The fixture is never ordered on screen, so arrange its responder explicitly.
+        // Menu dispatch, validation and native undo remain production behavior.
+        check(panel.makeFirstResponder(editor), "Hidden fixture accepts the production editor")
+        edit.update()
         check(NSApp.keyWindow === panel, "The hidden panel must be the application action-routing fixture")
         check(panel.firstResponder === editor, "Production editor must be the actual first responder")
         check(!undo.isEnabled && !redo.isEnabled, "A fresh editor has no menu history")
