@@ -1622,9 +1622,18 @@ struct NativeDraftQuitGate {
         quickMedia.recordings.configureRealtime(owner:model.dataDirectory,access:NativeQuickASRCredentialAdapter.access(
             directory:Self.quickLocalDirectory.appendingPathComponent("ASR",isDirectory:true),
             service:(Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio") + ".quick-asr"))
-        quickMedia.recordings.configureSpeech(owner:model.dataDirectory,access:NativeSpeechCredentialAdapter.access(
-            directory:Self.quickLocalDirectory.appendingPathComponent("Speech",isDirectory:true),
-            service:(Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio") + ".speech"))
+        let speechDirectory=(ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] == nil ? Self.quickLocalDirectory:model.dataDirectory.appendingPathComponent("qa-quick-tools",isDirectory:true)).appendingPathComponent("Speech",isDirectory:true)
+        // The isolated QA workspace needs the same existing, private parent as
+        // production QuickTools before the no-follow credential store is opened.
+        if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] != nil {
+            try? FileManager.default.createDirectory(at:speechDirectory.deletingLastPathComponent(),withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
+        }
+        let speechService=(Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio") + ".speech"
+        quickMedia.recordings.configureSpeech(owner:model.dataDirectory,access:NativeSpeechCredentialAdapter.access(directory:speechDirectory,service:speechService))
+        model.desktop?.speechCredentials=NativeCredentials(folder:speechDirectory,legacy:nil,service:speechService)
+        quickMedia.recordings.speechSettings.didSave={ [weak model] in
+            model?.web.evaluateJavaScript("window.dispatchEvent(new Event('aibro-speech-credentials-saved'))",completionHandler:nil)
+        }
         configureSpeechEntry(model)
         quickVault.configure(directory:Self.quickLocalDirectory.appendingPathComponent("Vault",isDirectory:true),
             identity:(Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio") + ".quick-vault")

@@ -3,7 +3,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   let hooks = {}, status = null, busy = false, timer = null, loading = null, modelsLoaded = false, lifecycleVersion = 0;
-  const provider = () => $('provider')?.value === 'openai-auth' ? 'openai-auth' : 'api';
+  const provider = () => ['openai-auth','claude-auth'].includes($('provider')?.value) ? $('provider').value : 'api';
   const model = () => modelsLoaded && $('openaiModel') ? $('openaiModel').value : (localStorage.getItem('workstation-openai-model') || '');
   async function request(path, body) {
     const controller = new AbortController();
@@ -23,8 +23,9 @@
   }
   function paint() {
     const enabled = provider() === 'openai-auth';
-    if ($('apiCredentials')) $('apiCredentials').hidden = enabled;
+    if ($('apiCredentials')) $('apiCredentials').hidden = provider() !== 'api';
     if ($('openaiAuthPanel')) $('openaiAuthPanel').hidden = !enabled;
+    root.ClaudeAuth?.render();
     if (!$('openaiSignIn')) return;
     const authenticated = !!status?.authenticated;
     const pending = !!(status?.login?.pending || status?.pending);
@@ -124,8 +125,8 @@
     hooks = options;
     if (!$('provider')) return;
     const saved = localStorage.getItem('workstation-provider') || hooks.getState?.().settings?.provider;
-    $('provider').value = saved === 'openai-auth' ? 'openai-auth' : 'api';
-    $('provider').addEventListener('change', () => { persist(); hooks.save?.(); hooks.onChange?.(); if (provider() === 'openai-auth') refresh().catch(() => {}); else clearTimeout(timer); });
+    $('provider').value = ['openai-auth','claude-auth'].includes(saved) ? saved : 'api';
+    $('provider').addEventListener('change', () => { persist(); hooks.save?.(); hooks.onChange?.(); if (provider() === 'openai-auth') refresh().catch(() => {}); else clearTimeout(timer); root.ClaudeAuth?.providerChanged(); });
     $('openaiModel')?.addEventListener('change', () => { persist(); hooks.save?.(); hooks.onChange?.(); });
     $('openaiSignIn')?.addEventListener('click', signIn);
     $('openaiCancelLogin')?.addEventListener('click', () => mutate('/__auth/cancel'));

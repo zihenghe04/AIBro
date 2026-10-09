@@ -1,0 +1,91 @@
+{
+  "retrievedOn": "2026-10-08",
+  "artifacts": [
+    {
+      "coordinate": "com.tom-roush:pdfbox-android:2.0.27.0",
+      "pom": "pdfbox-android-2.0.27.0/pdfbox-android-2.0.27.0.pom",
+      "source": "https://repo.maven.apache.org/maven2/com/tom-roush/pdfbox-android/2.0.27.0/pdfbox-android-2.0.27.0.pom",
+      "sha256": "92438da87a07bc5e1acf4de9e27c2fb3f4015a61e13c493975c7e1d5bb2060b6",
+      "declaredLicenses": [
+        {
+          "name": "The Apache Software License, Version 2.0",
+          "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+        }
+      ]
+    },
+    {
+      "coordinate": "com.squareup.okhttp3:okhttp:4.12.0",
+      "pom": "okhttp-4.12.0/okhttp-4.12.0.pom",
+      "source": "https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0.pom",
+      "sha256": "7c737040a9419522e7c50cc027416a70fe7c7629e52b219935ade6b4119c7d38",
+      "declaredLicenses": [
+        {
+          "name": "The Apache Software License, Version 2.0",
+          "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+        }
+      ]
+    },
+    {
+      "coordinate": "com.google.mlkit:text-recognition-chinese:16.0.1",
+      "pom": "text-recognition-chinese-16.0.1/text-recognition-chinese-16.0.1.pom",
+      "source": "https://dl.google.com/dl/android/maven2/com/google/mlkit/text-recognition-chinese/16.0.1/text-recognition-chinese-16.0.1.pom",
+      "sha256": "8b1d0ef4c9a114e8a2913f0acfc0ded142a3edcbf95a6b4e5d347ceb1698936a",
+      "declaredLicenses": [
+        {
+          "name": "ML Kit Terms of Service",
+          "url": "https://developers.google.com/ml-kit/terms"
+        }
+      ]
+    },
+    {
+      "coordinate": "androidx.exifinterface:exifinterface:1.4.1",
+      "pom": "exifinterface-1.4.1/exifinterface-1.4.1.pom",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/exifinterface/exifinterface/1.4.1/exifinterface-1.4.1.pom",
+      "sha256": "944e867584e20748613cc7610bd5fa10a968cc98cb59fdfdb863e9f0201df289",
+      "declaredLicenses": [
+        {
+          "name": "The Apache Software License, Version 2.0",
+          "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+        }
+      ]
+    }
+  ],
+  "retainedNotices": [
+    {
+      "file": "pdfbox-android-2.0.27.0/LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/TomRoush/PdfBox-Android/v2.0.27.0/LICENSE.txt",
+      "archiveMember": null,
+      "sha256": "8ceed6051cbd7f6d5d56bad8ca5e73f0414fb13cbe0c4170f7c4c9beaa1a7679"
+    },
+    {
+      "file": "pdfbox-android-2.0.27.0/NOTICE.txt",
+      "source": "https://raw.githubusercontent.com/TomRoush/PdfBox-Android/v2.0.27.0/NOTICE.txt",
+      "archiveMember": null,
+      "sha256": "8191c60848b9e5666a1ee50a65a7f6eab7339dc1ea20b52092f3eac5ef10d0cd"
+    },
+    {
+      "file": "okhttp-4.12.0/LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/square/okhttp/parent-4.12.0/LICENSE.txt",
+      "archiveMember": null,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "okhttp-4.12.0/publicsuffix-NOTICE.txt",
+      "source": "https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0.jar",
+      "archiveMember": "okhttp3/internal/publicsuffix/NOTICE",
+      "sha256": "8a9c58fbded5ea3474315e4a9824ca8b1486098a1a03e897e0b19419d5e1876a"
+    },
+    {
+      "file": "text-recognition-chinese-16.0.1/third_party_licenses.json",
+      "source": "https://dl.google.com/dl/android/maven2/com/google/mlkit/text-recognition-chinese/16.0.1/text-recognition-chinese-16.0.1.aar",
+      "archiveMember": "third_party_licenses.json",
+      "sha256": "02919d2466f2a05d0f1c4822ccad7dd105010211e918672d40fea34d2c3bf793"
+    },
+    {
+      "file": "text-recognition-chinese-16.0.1/third_party_licenses.txt",
+      "source": "https://dl.google.com/dl/android/maven2/com/google/mlkit/text-recognition-chinese/16.0.1/text-recognition-chinese-16.0.1.aar",
+      "archiveMember": "third_party_licenses.txt",
+      "sha256": "b7d81734e6144858be69ba7538c0f4fcb9cc6a904437af90d6186abfe2a9627c"
+    }
+  ]
+}

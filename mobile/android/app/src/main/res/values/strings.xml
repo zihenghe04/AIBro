@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AI Bro</string>
+    <string name="title_activity_main">AI Bro</string>
+    <string name="package_name">app.aibro.mobile</string>
+    <string name="custom_url_scheme">app.aibro.mobile</string>
+    <string name="voice_shortcut_label">AI Bro 三击音量减</string>
+    <string name="voice_shortcut_description">仅在你主动启用后监听音量减按键：1.5 秒内连续短按三次，打开 AI Bro 语音新对话。音量仍会正常降低。本服务不读取屏幕、文字、通知或其他应用内容，不代替你点击屏幕，也不在后台或锁屏时录音。系统或其他按键服务可能影响快捷键，可随时关闭并使用首页语音按钮。</string>
+</resources>

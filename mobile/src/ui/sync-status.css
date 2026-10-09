@@ -1,0 +1,49 @@
+/* Map the shared, patched Kit palette only within this mobile-owned island. */
+.mobile-sync-root {
+  --text: var(--ink);
+  --bg: var(--surface);
+  --panel: var(--surface);
+  --panel-raised: var(--surface);
+  --panel-hover: var(--soft);
+  --line-strong: var(--line);
+  --faint: var(--muted);
+  --accent-soft: var(--soft);
+  --green: var(--accent);
+  --orange: #a66b18;
+  --red: #bd493f;
+  min-width: 0;
+  color: var(--ink);
+  font-family: "AI Bro Mobile Geist", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif !important;
+}
+.mobile-sync-root *, .mobile-sync-root button > span { font-family: inherit !important; }
+.mobile-sync-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.mobile-sync-status__summary { display: flex; align-items: flex-start; gap: 9px; min-width: 150px; flex: 1 1 180px; }
+.mobile-sync-status__copy { min-width: 0; overflow-wrap: anywhere; }
+.mobile-sync-status__dot { flex: 0 0 7px; height: 7px; border-radius: 50%; margin-top: 7px; background: var(--muted); }
+[data-sync-state="synced"] .mobile-sync-status__dot, [data-sync-state="syncing"] .mobile-sync-status__dot { background: var(--accent); }
+[data-sync-state="pending"] .mobile-sync-status__dot, [data-sync-state="conflict"] .mobile-sync-status__dot { background: var(--orange); }
+[data-sync-state="error"] .mobile-sync-status__dot, [data-sync-state="auth-expired"] .mobile-sync-status__dot { background: var(--red); }
+.mobile-sync-status__detail { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.mobile-sync-status__actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.mobile-sync-status__error { flex-basis: 100%; margin: 0; color: var(--red); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.mobile-sync-status--compact { display: block; width: max-content; min-width: max-content; padding: 0; border: 0; }
+.mobile-sync-status--compact button > span { flex: 0 0 auto; }
+.mobile-sync-status__compact-label { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.mobile-sync-status__compact-label .mobile-sync-status__dot { margin: 0; }
+.mobile-sync-status__short-title { flex: 0 0 auto; white-space: nowrap; }
+.mobile-sync-root button:disabled { cursor: default; }
+@media (prefers-color-scheme: dark) {
+  .mobile-sync-root { --orange: #e8b76c; --red: #f39788; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mobile-sync-root *, .mobile-sync-root *::before, .mobile-sync-root *::after { animation: none !important; transition: none !important; }
+}

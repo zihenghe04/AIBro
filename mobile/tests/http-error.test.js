@@ -19,3 +19,18 @@ test("unknown, malformed and sensitive response bodies are not surfaced", () => 
     assert.equal(error.code, undefined);
   }
 });
+
+test("model HTTP errors point to model settings, not cloud login, without leaking bodies", async () => {
+  const { modelHttpError, modelTransportError } = await import("../src/http-error.js");
+  for (const [status, hint] of [[400, /工具调用/], [401, /模型 API Key/], [403, /模型权限/], [404, /接口或模型不存在/], [429, /额度/], [503, /暂时不可用/]]) {
+    const error = modelHttpError(status, '{"error":"private-token-fixture"}');
+    assert.equal(error.status, status); assert.match(error.message, hint);
+    assert.doesNotMatch(error.message, /private-token|重新登录/);
+  }
+  assert.equal(modelHttpError(403, { code: "model_origin_denied" }).code, "model_origin_denied");
+  assert.match(modelTransportError("服务未返回 SSE 流式内容，请检查模型接口").message, /未返回流式响应/);
+  assert.match(modelTransportError("连接超时；提交结果请刷新核对。（网络错误 -1001）").message, /模型响应超时/);
+  assert.match(modelTransportError("HTTPS 安全连接失败，请检查证书或代理配置。").message, /HTTPS/);
+  for (const unsafe of ["secret-token", "服务未返回 SSE 流式内容，请检查模型接口 secret-token", null, {error:"private"}])
+    assert.equal(modelTransportError(unsafe).message, "模型连接中断，请检查网络后重试");
+});

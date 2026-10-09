@@ -72,7 +72,8 @@ async function buildNativeRelease({output,cache=path.join(os.tmpdir(),'ai-bro-re
     const binary=path.join(app,'Contents/MacOS/AIBroNative');
     if(command('/usr/bin/lipo',['-archs',binary]).trim()!=='arm64')throw Error('Native release must be arm64.');
     const plist=JSON.parse(command('/usr/bin/plutil',['-convert','json','-o','-',path.join(app,'Contents/Info.plist')]));
-    if(plist.CFBundleShortVersionString!==pkg.version||plist.LSMinimumSystemVersion!=='14.0'||plist.CFBundleExecutable!=='AIBroNative')throw Error('Native bundle metadata mismatch.');
+    const buildNumber=Object.hasOwn(pkg,'nativeBuild')?pkg.nativeBuild:pkg.version.split('.').reduce((sum,n,i)=>sum+Number(n)*[10000,100,1][i],0);
+    if(!Number.isSafeInteger(buildNumber)||buildNumber<1||plist.CFBundleVersion!==String(buildNumber)||plist.CFBundleShortVersionString!==pkg.version||plist.LSMinimumSystemVersion!=='14.0'||plist.CFBundleExecutable!=='AIBroNative')throw Error('Native bundle metadata mismatch.');
     command('/usr/bin/codesign',['--force','--sign','-','--preserve-metadata=entitlements,identifier,requirements,flags,runtime',app]);command('/usr/bin/codesign',['--verify','--deep','--strict',app]);
     if(runtime.treeSha256!==treeHash(path.join(resources,'python')))throw Error('Bundled runtime changed after signing.');
     const verification=await verifyPackagedApp(app);
@@ -81,7 +82,7 @@ async function buildNativeRelease({output,cache=path.join(os.tmpdir(),'ai-bro-re
     fs.copyFileSync(path.join(root,'LICENSE'),path.join(product,'LICENSE'));
     fs.writeFileSync(path.join(product,'THIRD-PARTY-NOTICES.txt'),notices());
     fs.copyFileSync(path.join(root,'scripts/release-runtime-lock.json'),path.join(product,'release-runtime-lock.json'));
-    const manifest={schemaVersion:2,product:'AI Bro',version:pkg.version,platform:'darwin',arch:'arm64',shell:'SwiftUI + AppKit + WKWebView',minimumMacOS:'14.0',nativeGlassMinimumMacOS:'26.0',signature:'ad-hoc-preview',notarized:false,source,assetFingerprint:fingerprint(assets),appTreeSha256:treeHash(app),runtime,verification};
+    const manifest={schemaVersion:2,product:'AI Bro',version:pkg.version,build:String(buildNumber),platform:'darwin',arch:'arm64',shell:'SwiftUI + AppKit + WKWebView',minimumMacOS:'14.0',nativeGlassMinimumMacOS:'26.0',signature:'ad-hoc-preview',notarized:false,source,assetFingerprint:fingerprint(assets),appTreeSha256:treeHash(app),runtime,verification};
     fs.writeFileSync(path.join(product,'release-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
     const zip=`AI-Bro-${pkg.version}-macos-arm64-preview.zip`,dmg=`AI-Bro-${pkg.version}-macos-arm64-preview.dmg`;
     command('/usr/bin/ditto',['-c','-k','--sequesterRsrc','--keepParent',app,path.join(product,zip)]);

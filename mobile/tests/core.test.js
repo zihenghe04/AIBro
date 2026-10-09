@@ -7,6 +7,7 @@ import {
   messageWireID,
   addMessage,
   clone,
+  conflictReview,
 } from "../src/store.js";
 import { Sync, serverURL } from "../src/sync.js";
 import { parseICS, eventsFor, agendaNote } from "../src/agenda.js";
@@ -136,6 +137,13 @@ test("edit during network request is sent as a second operation", async () => {
 test("remote deletion conflicts with local edits, explicit remote choice deletes", async () => {
   const { store, v } = await bound();
   await store.put("notes", note());
+  // This fixture has already observed versions/sequences 1..3. Real v1 pull
+  // does not jump from cursor zero directly to sequence four.
+  await store.tx(state => {
+    state.cursor = 3;
+    state.records["notes:n1"].version = 3;
+    state.records["notes:n1"].remote = note();
+  });
   const remote = { version: 4, deleted: true, data: null };
   await new Sync(
     store,
@@ -159,7 +167,7 @@ test("remote deletion conflicts with local edits, explicit remote choice deletes
     {},
   ).run();
   assert.equal(store.get("notes", "n1").title, "Before");
-  await store.resolve("notes:n1", "remote");
+  await store.resolve("notes:n1", "remote", conflictReview(store.state.records["notes:n1"]));
   assert.equal(store.get("notes", "n1"), null);
   assert.equal(store.state.cursor, 4);
 });

@@ -8,7 +8,7 @@
   },
   "plugins": {
     "Keyboard": {
-      "resize": "body"
+      "resize": "native"
     }
   },
   "loggingBehavior": "none"

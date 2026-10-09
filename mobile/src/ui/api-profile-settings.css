@@ -1,0 +1,7 @@
+.api-profile-controls { margin: 8px 0 14px; min-width: 0; }
+.api-profile-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.api-profile-controls select { width: 100%; min-width: 0; }
+.api-profile-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.api-profile-actions > button { max-width: 100%; }
+.api-profile-test { margin-top: 10px; }
+.api-profile-message { color: var(--text); font-size: 13px; overflow-wrap: anywhere; }

@@ -232,7 +232,15 @@
  function sourceEntries(message,run){
   const sources=list(run?.evidenceSources).filter(s=>s?.sourceId&&s.provided===true);
   const refs=[];const add=(value)=>{if(!value.type||(!value.id&&!value.url))return;if(sources.some(s=>s.type===value.type&&(s.id===value.id&&s.page===value.page||s.url&&s.url===value.url)))return;const key=JSON.stringify([value.type,value.id,value.page,value.offset,value.url]);if(refs.some(s=>s.key===key))return;refs.push({...value,key,sourceId:`legacy${hash(key)}`,runId:run?.id||null,provided:false,excerpt:null,number:null});};
-  for(const row of list(message?.retrievedSources))add({type:row.type,id:row.id,title:row.title,page:row.page||null,offset:row.offset??null,origin:'legacy_retrieval'});
+  const aliases={notes:'note',imports:'import',tasks:'task',papers:'paper',agenda:'note'};
+  for(const row of list(message?.retrievedSources)){
+   if(!row||typeof row!=='object')continue;
+   const fromKind=aliases[row.kind],type=row.type||fromKind;
+   // Mobile saves collection names while desktop saves singular source types.
+   // Preserve identity and range only; neither form contains request excerpts.
+   if(!Object.hasOwn(keys,type)||row.type&&row.kind&&type!==fromKind)continue;
+   add({type,id:row.id,title:row.title,page:row.page||null,offset:row.offset??null,end:row.end??null,origin:'legacy_retrieval'});
+  }
   for(const row of list(run?.knowledgeReads))if(!row.error&&['read','read_page','neighbors'].includes(row.type))add({type:row.recordType||'import',id:row.id,title:row.title,page:row.page||null,offset:row.offset??null,origin:'legacy_read'});
   for(const row of list(message?.webSources||run?.webSources)){const url=safeURL(row.url);if(url)add({type:'web',url,title:row.title||url,origin:'provider_reference'});}
   return [...sources,...refs];

@@ -210,6 +210,11 @@
     }
   }
   async function requestOnce({ provider = 'api', base, model, effort = '', token, input, webSearch = false, protocol, requirePlanProtocol = false, onDelta, onPhase, onActivity, onAttempt, onSources, onUsage, onReception, signal }) {
+    if (provider === 'claude-auth') {
+      const transport = root.ClaudeTransport || (typeof require === 'function' ? require('./claude-transport.js') : null);
+      if (!transport?.request) throw Object.assign(new Error('Claude 文本连接组件未加载，请重新打开应用。'), { code: 'INVALID_RESPONSE' });
+      return transport.request({ provider, model, effort, input, webSearch, requirePlanProtocol, onDelta, onPhase, onActivity, onAttempt, onUsage, onReception, signal }, { protocolError, inspectProtocolOutput });
+    }
     const controller = new AbortController();
     const reception = typeof onReception === 'function' ? Reception?.createEmitter(onReception) : null;
     let receptionOutcome = 'failed';

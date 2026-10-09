@@ -1,0 +1,20 @@
+.mobile-plan-root{--text:var(--ink);--bg:var(--surface);--panel:var(--surface);--panel-raised:var(--surface);--panel-hover:var(--soft);--line-strong:var(--line);--faint:var(--muted);--accent-soft:var(--soft);--green:var(--accent);--orange:#a66b18;--red:#bd493f;font-family:"AI Bro Mobile Geist",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif!important;min-width:0}
+.mobile-plan-root *{font-family:inherit!important}
+.mobile-plan-review__intro{font-size:14px;color:var(--muted);margin:5px 0 2px}
+.mobile-plan-review__item{padding:22px 0;border-bottom:1px solid var(--line);min-width:0}
+.mobile-plan-review__label{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted)}
+.mobile-plan-review__label>span:first-child{color:var(--accent);font-weight:600}
+.mobile-plan-review__fields{display:grid;grid-template-columns:3.2em minmax(0,1fr);gap:10px 12px;font-size:14px;margin:0;line-height:1.6}
+.mobile-plan-review__fields dt{color:var(--muted)}
+.mobile-plan-review__fields dd{margin:0;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.mobile-plan-review__fields dd>span{display:block;max-height:12em;overflow:auto;overscroll-behavior:contain}
+.mobile-plan-review__fields del{display:block;color:var(--muted);font-size:12px;text-decoration-thickness:1px;max-height:6em;overflow:auto;overscroll-behavior:contain}
+.mobile-plan-review__notice,.mobile-plan-review__restored{font-size:14px;line-height:1.65;margin:8px 0;color:var(--muted);overflow-wrap:anywhere}
+.mobile-plan-review__data{font-size:13px;margin:14px 0 0}
+.mobile-plan-review__data summary{padding:10px 0;min-height:44px;cursor:pointer;color:var(--muted)}
+.mobile-plan-review__data .diff{max-height:300px;overflow:auto;overscroll-behavior:contain}
+.mobile-plan-review__data pre{font-family:ui-monospace,monospace!important;font-size:12px;white-space:pre-wrap;word-break:break-word}
+.mobile-plan-review__actions{display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;padding:16px 0 4px;background:var(--surface);z-index:1}
+.mobile-plan-review__error{color:var(--red);font-size:14px;line-height:1.6;overflow-wrap:anywhere;margin:12px 0}
+@media(prefers-color-scheme:dark){.mobile-plan-root{--red:#f39788;--orange:#e8b76c}}
+@media(prefers-reduced-motion:reduce){.mobile-plan-root *{transition:none!important;animation:none!important}}

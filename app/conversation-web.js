@@ -42,6 +42,7 @@
   }
   function searchSupported(provider, base, goal) {
     if (declinesWeb(goal)) return false;
+    if (provider === 'claude-auth') return false;
     if (provider === 'openai-auth') return true;
     try { const url = new URL(base); return url.protocol === 'https:' && url.hostname === 'api.openai.com'; } catch (_) { return false; }
   }

@@ -1,4 +1,5 @@
 import { clone, equal, keyOf, id } from "./store.js";
+import { groupLocks, queuedGroupIds, prepareGroupSend, acknowledgeGroup, applyPullPage, refreshGroupHeads, syncGroupSummaries } from "./sync-groups.js";
 export function serverURL(raw) {
   const u = new URL(raw);
   if (
@@ -31,13 +32,17 @@ export class Sync {
       method: "POST",
       body: { username, password, deviceName: this.deviceName },
     });
-    if (!session.accessToken || !session.account?.id)
+    const validId = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
+    if (typeof session.accessToken !== 'string' || !session.accessToken || /[\s\u0000-\u001f\u007f]/.test(session.accessToken)
+      || !validId(session.account?.id) || !validId(session.device?.id)
+      || typeof session.account?.username !== 'string' || !session.account.username
+      || /[\s\u0000-\u001f\u007f/\\:]/.test(session.account.username))
       throw Error("登录响应不完整");
     if (old && old.accountID !== session.account.id)
       throw Error("账号标识变化，已停止合并");
     await this.vault.set(
       "sync",
-      JSON.stringify({ base, token: session.accessToken }),
+      JSON.stringify({ base, token: session.accessToken, accountId: session.account.id, sessionId: session.device.id }),
     );
     await this.store.tx((s) => {
       s.binding = {
@@ -51,18 +56,17 @@ export class Sync {
   }
   async logout() {
     const saved = await this.vault.get("sync");
-    try {
-      if (saved) {
-        const v = JSON.parse(saved);
-        await this.http(v.base + "/v1/auth/logout", {
-          method: "POST",
-          headers: { Authorization: "Bearer " + v.token },
-          body: {},
-        });
-      }
-    } finally {
-      await this.vault.remove("sync");
-      this.status = "已断开，内容保留";
+    // Invalidate the native session fence before any network wait. A delayed
+    // logout response must never remove a newer login's credentials.
+    await this.vault.remove("sync");
+    this.status = "已断开，内容保留";
+    if (saved) {
+      const v = JSON.parse(saved);
+      await this.http(v.base + "/v1/auth/logout", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + v.token },
+        body: {},
+      });
     }
   }
   run() {
@@ -87,12 +91,30 @@ export class Sync {
       });
     this.status = "同步中";
     try {
+      let grouped = false;
+      try {
+        const capabilities = await call("/v1/sync/capabilities");
+        grouped = capabilities?.atomicOperationGroups?.version === 1 && capabilities?.atomicGroupPull?.version === 1;
+      } catch (error) {
+        if (![404, 405, 501].includes(error.status)) throw error;
+      }
+      // Groups are frozen at approval, not assembled from the current dirty
+      // records. They run first so unrelated local writes cannot invalidate a
+      // lifecycle group's frozen account cursor.
+      if (grouped) for (const groupId of queuedGroupIds(this.store.state)) {
+        const payload = await this.store.tx(state => prepareGroupSend(state, groupId));
+        if (!payload) continue;
+        await this.uploadOriginals(payload.operations, call);
+        const result = await call("/v1/sync/push-group", { method: "POST", body: payload });
+        await this.store.tx(state => acknowledgeGroup(state, groupId, result));
+      }
       // Store exact immutable operations BEFORE sending, so a dropped response can be replayed after restart.
       for (let round = 0; round < 20; round++) {
         const ops = await this.store.tx((s) => {
           const result = [];
+          const locked = groupLocks(s);
           for (const [key, r] of Object.entries(s.records)) {
-            if (!r.dirty || r.conflict) continue;
+            if (!r.dirty || r.conflict || locked.has(key)) continue;
             if (!r.flight) {
               const split = key.indexOf(":");
               r.flight = {
@@ -110,19 +132,7 @@ export class Sync {
           return result;
         });
         if (!ops.length) break;
-        for (const op of ops) {
-          if (op.entityType === "imports" && op.data?.blobHash) {
-            const hash = op.data.blobHash;
-            const blob = this.store.state.blobs[hash];
-            if (blob && !blob.uploaded) {
-              const data = await this.files.read(hash);
-              await call("/v1/blobs/" + hash, { method: "PUT", bytes: data });
-              await this.store.tx((s) => {
-                if (s.blobs[hash]) s.blobs[hash].uploaded = true;
-              });
-            }
-          }
-        }
+        await this.uploadOriginals(ops, call);
         const result = await call("/v1/sync/push", {
           method: "POST",
           body: { operations: ops },
@@ -135,6 +145,7 @@ export class Sync {
         if (ops.some((x) => !handled.has(x.opId)))
           throw Error("服务器未确认全部操作，保留重试队列");
         await this.store.tx((s) => {
+          if (result.accepted.length) { s.settings.syncNeedsPull = true; s.settings.syncLegacyPushAhead = true; }
           for (const ack of result.accepted) {
             const r = s.records[keyOf(ack.entityType, ack.entityId)];
             if (!r?.flight || r.flight.opId !== ack.opId) continue;
@@ -157,41 +168,27 @@ export class Sync {
       }
       for (let page = 0; page < 1000; page++) {
         const result = await call(
-          "/v1/sync/pull?cursor=" + this.store.state.cursor + "&limit=100",
+          `/v1/sync/${grouped ? "pull-group" : "pull"}?cursor=${this.store.state.cursor}&limit=100`,
         );
-        if (
-          !Array.isArray(result.changes) ||
-          !Number.isSafeInteger(result.cursor) ||
-          result.cursor < this.store.state.cursor
-        )
-          throw Error("同步游标异常");
-        if (result.hasMore && result.cursor === this.store.state.cursor)
-          throw Error("同步分页未前进");
-        await this.store.tx((s) => {
-          for (const c of result.changes) {
-            const key = keyOf(c.entityType, c.entityId),
-              r = s.records[key];
-            if (r && c.version <= r.version) continue;
-            if (r?.dirty || r?.flight) {
-              r.conflict = {
-                version: c.version,
-                deleted: !!c.deleted,
-                data: clone(c.data),
-              };
-            } else
-              s.records[key] = {
-                data: clone(c.data),
-                deleted: !!c.deleted,
-                version: c.version,
-                remote: clone(c.data),
-                remoteDeleted: !!c.deleted,
-                dirty: false,
-              };
-          }
-          s.cursor = result.cursor;
-        });
+        await this.store.tx(state => applyPullPage(state, result, { grouped }));
         if (!result.hasMore) break;
         if (page === 999) throw Error("资料较多，请继续同步");
+      }
+      if (Object.values(this.store.state.syncGroups || {}).some(group => group.status === "blocked" && !group.remoteReady)) {
+        // The conflict response deliberately carries no remote content. Replay
+        // cloud history into comparison heads only, so even an old collision
+        // below our normal cursor gets an accurate whole-group review.
+        let cursor = Math.min(...Object.values(this.store.state.syncGroups).filter(group => group.status === "blocked" && !group.remoteReady)
+          .map(group => group.remoteCursor || 0));
+        for (let page = 0; page < 1000; page++) {
+          const result = await call(`/v1/sync/${grouped ? "pull-group" : "pull"}?cursor=${cursor}&limit=100`);
+          if (!Number.isSafeInteger(result.cursor) || result.cursor < cursor || result.hasMore && result.cursor === cursor)
+            throw Error("整组云端比较分页未前进");
+          await this.store.tx(state => refreshGroupHeads(state, result, { grouped, fromCursor: cursor }));
+          cursor = result.cursor;
+          if (!result.hasMore) break;
+          if (page === 999) throw Error("整组云端比较尚未读取完整，请继续同步");
+        }
       }
       const conflicts = Object.values(this.store.state.records).filter(
         (r) => r.conflict,
@@ -199,7 +196,10 @@ export class Sync {
       const pending = Object.values(this.store.state.records).filter(
         (r) => r.dirty && !r.conflict,
       ).length;
-      this.status = conflicts
+      const groups = syncGroupSummaries(this.store.state), blocked = groups.filter(group => group.status === "blocked").length;
+      this.status = blocked ? `${blocked} 个操作组需要整组比较`
+        : groups.length && !grouped ? `服务器尚不支持整组同步，${groups.length} 个操作组保留在本机`
+        : conflicts
         ? `${conflicts} 项内容需要合并`
         : pending
           ? `${pending} 项待同步`
@@ -211,6 +211,25 @@ export class Sync {
           ? "登录已失效，请重新连接"
           : "同步未完成，离线内容已保留";
       throw e;
+    }
+  }
+  async uploadOriginals(operations, call) {
+    for (const op of operations) if (op.entityType === "imports" && op.data?.blobHash) {
+      const hash = op.data.blobHash, blob = this.store.state.blobs[hash];
+      if (!blob?.uploaded && (blob || op.baseVersion === 0)) {
+        let data;
+        try { data = await this.files.read(hash); }
+        catch {
+          try { await call("/v1/blobs/" + hash, { method: "HEAD", raw: true }); }
+          catch (remoteError) {
+            if (remoteError.status === 404) throw Error("附件原件不在本机或当前同步账号中，请恢复完整备份后重试");
+            throw remoteError;
+          }
+        }
+        if (data) await call("/v1/blobs/" + hash, { method: "PUT", bytes: data });
+        await this.store.tx(state => { state.blobs[hash] = { name: op.data.originalName || op.data.name || op.data.title || hash,
+          size: data?.length ?? op.data.size ?? null, ...state.blobs[hash], uploaded: true }; });
+      }
     }
   }
 }

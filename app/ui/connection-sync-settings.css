@@ -1,0 +1,29 @@
+.connection-settings { display:grid; gap:18px; min-width:0; }
+.connection-settings h2,.connection-settings h3,.connection-settings p { margin:0; }
+.connection-settings h3 { font-size:14px; font-weight:600; }
+.connection-settings p { color:var(--muted); font-size:13px; line-height:1.65; }
+.connection-row { display:flex; gap:16px; justify-content:space-between; align-items:center; }
+.connection-row > div { min-width:0; display:grid; gap:6px; }
+.connection-section { display:grid; justify-items:start; gap:12px; border-top:1px solid var(--line); padding-top:18px; }
+.connection-settings code { display:block; max-width:100%; overflow-wrap:anywhere; color:var(--text); font:12px/1.7 var(--font-mono, monospace); user-select:text; }
+.connection-settings details { width:100%; font-size:12px; color:var(--muted); }
+.connection-settings summary { cursor:pointer; padding:7px 0; }
+.connection-settings details > :not(summary) { margin-top:10px; }
+.connection-settings textarea { width:100%; box-sizing:border-box; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); color:var(--text); resize:vertical; font:12px/1.5 var(--font-mono, monospace); }
+.connection-devices,.connection-profiles { margin:0; padding:0; list-style:none; width:100%; }
+.connection-device { display:grid; gap:12px; padding:16px 0; border-top:1px solid var(--line); justify-items:start; }
+.connection-device > .connection-row { width:100%; }
+.connection-device.revoked { opacity:.65; }
+.connection-profiles li,.connection-preview { display:grid; gap:6px; padding:12px 0; min-width:0; overflow-wrap:anywhere; }
+.connection-profiles li > span,.connection-preview > span { color:var(--muted); font-size:12px; }
+.connection-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.connection-feedback { font-size:13px; line-height:1.6; color:var(--muted); }
+.connection-feedback:empty { display:none; }
+.connection-feedback[role=alert] { color:var(--red); }
+.connection-settings footer { border-top:1px solid var(--line); padding-top:14px; }
+@media(max-width:520px) { .connection-row { flex-wrap:wrap; align-items:flex-start; } }
+
+.connection-purpose-options { display:grid; gap:14px; width:100%; min-width:0; }
+.connection-purpose { display:grid; gap:6px; min-width:0; }
+.connection-preview-batch { display:grid; gap:10px; min-width:0; max-width:100%; }
+.connection-preview-batch .connection-preview + .connection-preview { border-top:1px solid var(--line); }

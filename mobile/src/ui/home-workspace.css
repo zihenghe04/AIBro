@@ -1,0 +1,23 @@
+main[data-route=today] .page-title { margin-bottom: 18px; }
+main[data-route=today] .page-title h1 { font-size: 29px; line-height: 1.25; }
+.home-conversation { padding: 0; margin-bottom: 28px; }
+.home-conversation #home-chat-form { margin: 0 0 9px; border-radius: 22px; padding: 16px; box-shadow: 0 4px 18px #153d2507; }
+.home-conversation #home-chat-text { min-height: 86px; font-size: 16px; }
+.home-conversation .home-compose-actions { margin-top: 10px; gap: 6px; }
+.home-conversation .home-compose-actions .primary { font-size: 14px; border-radius: 14px; padding-inline: 13px; }
+.home-conversation>small { font-size: 11px; display: block; padding-inline: 4px; }
+.home-recent-section { margin-bottom: 28px; }
+.home-recent-section .section-heading { margin: 0 0 8px; }
+.home-recent-section h2,.home-projects h2 { font-size: 18px; }
+.home-recent { gap: 0; margin: 0; }
+.home-recent .home-recent-item { border: 0; border-radius: 12px; padding: 12px 2px; gap: 11px; width: 100%; min-width: 0; }
+.home-recent-icon { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border-radius: 11px; background: var(--soft); color: var(--accent); }
+.home-recent-icon .ui-icon { width: 18px; height: 18px; }
+.home-recent-copy { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.home-recent-copy strong { font-size: 14px; font-weight: 500; line-height: 1.45; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--ink); }
+.home-recent-copy small { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#home-planner-root { min-height: 190px; }
+.home-projects { margin-top: 30px; padding-top: 4px; border-top: 1px solid var(--line); }
+.home-projects .section-heading { margin-top: 16px; }
+.home-project-empty { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.home-project-empty button { padding-inline: 0; color: var(--accent); }

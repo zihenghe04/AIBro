@@ -1,0 +1,30 @@
+#task-form { min-width: 0; }
+#task-form .task-title { margin-top: 8px; }
+#task-form .task-title input { font-size: 18px; font-weight: 600; color: var(--ink); }
+#task-form textarea { min-height: 92px; max-height: 35dvh; font-size: 16px; color: var(--ink); }
+#task-form .task-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 12px; }
+#task-form .task-fields label { min-width: 0; }
+#task-form select { color: var(--ink); min-width: 0; }
+.task-checklist { border: 0; padding: 0; margin: 24px 0 20px; min-width: 0; }
+.task-checklist legend { font-size: 14px; font-weight: 600; padding: 0; }
+.task-checklist-row { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); padding: 4px 0; }
+.task-checklist-row label { min-height: 44px; display: grid; place-items: center; margin: 0; }
+.task-checklist-row input[type=text] { border: 0; background: transparent; padding-inline: 3px; min-width: 0; color: var(--ink); font-size: 16px; }
+.task-checklist-row:has(input[type=checkbox]:checked) input[type=text] { text-decoration: line-through; color: var(--muted); }
+.task-checklist-row button { padding: 0; min-height: 44px; border: 0; background: transparent; color: var(--muted); font-size: 22px; }
+.task-checklist-add { margin-top: 8px; font-size: 14px; padding-inline: 0; }
+.task-properties { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 8px; }
+.task-properties summary { cursor: pointer; min-height: 44px; align-content: center; font-size: 14px; color: var(--muted); }
+.task-properties label { min-width: 0; }
+.task-actions-root { --text: var(--ink); --bg: var(--surface); --panel: var(--surface); --panel-raised: var(--surface); --panel-hover: var(--soft); --line-strong: var(--line); --faint: var(--muted); --accent-soft: var(--soft); font-family: "AI Bro Mobile Geist", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif !important; position: sticky; bottom: calc(-26px - env(safe-area-inset-bottom)); margin: 24px -4px 0; padding: 12px 4px calc(12px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); z-index: 1; }
+.task-actions-root * { font-family: inherit !important; }
+/* A keyboard leaves too little room for a second sticky surface. Keep actions
+   in the form's normal scroll flow while the user is typing. */
+.keyboard-open .task-actions-root { position: static; bottom: auto; }
+.task-save-actions { display: flex; gap: 10px; }
+.task-save-actions > button { flex: 1; }
+.task-manage { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.task-manage .danger { border: 0; background: transparent; padding-inline: 0; font-size: 14px; }
+@media(max-width:359px) { #task-form .task-fields { gap: 0 8px; } }
+@media(max-height:500px) { .task-actions-root { position: static; bottom: auto; } }
+@media(prefers-reduced-motion:reduce) { .task-actions-root * { animation: none !important; transition: none !important; } }

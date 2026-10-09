@@ -1,4 +1,5 @@
 // Durable mobile workspace. Every mutation, cursor and in-flight operation is one transaction.
+import { validateSyncGroups, groupLocks, resolveSyncGroup } from "./sync-groups.js";
 export const id = () => crypto.randomUUID().replaceAll("-", "");
 export const clone = (value) => structuredClone(value);
 export const keyOf = (kind, key) => `${kind}:${key}`;
@@ -24,6 +25,8 @@ export const empty = () => ({
   settings: {},
   drafts: {},
   blobs: {},
+  syncGroups: {},
+  syncIncomingGroups: {},
 });
 export function validateState(s) {
   if (
@@ -71,6 +74,7 @@ export function validateState(s) {
     )
       throw Error("工作区记录标识不一致");
   }
+  validateSyncGroups(s);
   return s;
 }
 export class MemoryAdapter {
@@ -163,10 +167,15 @@ export class Store extends EventTarget {
       }
     });
   }
-  async resolve(key, choice) {
+  async resolve(key, choice, expectedReview) {
+    if (!["local", "remote"].includes(choice)) throw Error("请选择本机或云端内容");
+    if (!expectedReview) throw Error("请重新打开冲突比较后再选择");
+    const reviewed = clone(expectedReview);
     return this.tx((s) => {
+      if (groupLocks(s).has(key)) throw Error("这条内容属于未完成的整组同步，请比较并处理整个操作组，不能逐条选择");
       const r = s.records[key];
-      if (!r?.conflict) throw Error("冲突已变化");
+      if (!r?.conflict || !equal(conflictReview(r), reviewed))
+        throw Error("冲突版本已变化，请重新查看两边内容后再选择");
       const remote = r.conflict;
       r.version = remote.version;
       r.remote = clone(remote.data);
@@ -180,6 +189,17 @@ export class Store extends EventTarget {
       } else r.dirty = true;
     });
   }
+  async resolveGroup(groupId, choice, expectedReview) {
+    const review = clone(expectedReview);
+    return this.tx(state => resolveSyncGroup(state, groupId, choice, review));
+  }
+}
+export function conflictReview(record) {
+  if (!record?.conflict) return null;
+  return {
+    local: { data: clone(record.data), deleted: !!record.deleted },
+    remote: clone(record.conflict),
+  };
 }
 export function putRecord(s, kind, data, expected) {
   if (

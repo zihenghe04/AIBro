@@ -6,6 +6,7 @@
  const privateItem=v=>!!(v?.private||v?.ephemeral||v?.incognito);
  const Analysis=()=>root.AttachmentAnalysis||(typeof require==='function'?require('./attachment-analysis.js'):null);
  const Evidence=()=>root.CitationEvidence||(typeof require==='function'?require('./citation-evidence.js'):null);
+ const Files=()=>root.FileContext||(typeof require==='function'?require('./file-context.js'):null);
  const unique=(values,id)=>{const matches=list(values).filter(value=>value?.id===id);return matches.length===1?matches[0]:null;};
  function access(state,type,id){
   const evidence=Evidence();if(evidence?.access)return evidence.access(state,{type,id});
@@ -68,7 +69,8 @@
  function collect(state,conversation){
   const messages=list(conversation?.messages).filter(m=>m.role==='user'&&active(m)&&!privateItem(m));
   const sentIds=[...new Set(messages.flatMap(m=>[...list(m.attachmentIds),...list(m.attachments).map(a=>a.id)]))];
-  const excluded=new Set(list(conversation?.excludedFileReferenceKeys).flatMap(value=>{try{const pair=JSON.parse(value);return pair[0]==='import'?[pair[1]]:[];}catch{return [];}}));
+  const selected=conversation?.mobileContext===undefined?null:new Set((Files()?.sourceRefs(conversation.mobileContext)||[]).filter(ref=>ref.type==='import').map(ref=>ref.id));
+  const excluded=selected?new Set(sentIds.filter(id=>!selected.has(id))):new Set(list(conversation?.excludedFileReferenceKeys).flatMap(value=>{try{const pair=JSON.parse(value);return pair[0]==='import'?[pair[1]]:[];}catch{return [];}}));
   for(const m of messages)if(Array.isArray(m.retryAttachmentIds))for(const id of list(m.attachmentIds))if(!m.retryAttachmentIds.includes(id))excluded.add(id);
   const hidden=privateItem(conversation)||privateItem(unique(state.projects,conversation?.projectId));
   if(hidden)return {messages:[],ledger:[],pendingIds:[]};

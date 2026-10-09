@@ -14,8 +14,9 @@
   function normalized(value) {
     if (!value || typeof value !== 'object') return null;
     const model = String(value.model || '').trim();
-    if (!model) return null;                                  // 只有模型名才算"配置过"
-    const provider = value.provider === 'openai-auth' ? 'openai-auth' : 'api';
+    const account = ['openai-auth', 'claude-auth'].includes(value.provider);
+    if (!model && !account) return null; // Explicit account provider may use its official default.
+    const provider = account ? value.provider : 'api';
     const effort = value.effort && value.effort !== 'auto' ? String(value.effort) : '';
     return { provider, model, effort };
   }

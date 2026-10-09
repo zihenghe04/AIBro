@@ -158,6 +158,9 @@ struct NativeSpeechSettingsDraft: Equatable {
     let id = UUID()
     var configuration: NativeSpeechConfiguration
     var key: String
+    var catalogRevision: Int? = nil
+    var schemeID: String = NativeSpeechScheme.legacyID
+    var name: String = nativeUI("默认方案", "Default")
 }
 
 @MainActor final class NativeQuickRecordingStore: NSObject, ObservableObject, AVAudioRecorderDelegate {
@@ -561,17 +564,33 @@ struct NativeSpeechSettingsDraft: Equatable {
     }
     func beginSpeechSettings() {
         guard available,visible,phase == .idle,transcribingID == nil,realtimeSettingsDraft == nil,!speechSettings.busy else{return}
-        if speechSettingsDraft == nil {speechSettingsDraft = .init(configuration:speechSettings.configuration,key:"")}
+        if speechSettingsDraft == nil {
+            let selected=speechSettings.schemes.first{$0.id==speechSettings.selectedID}
+            speechSettingsDraft = .init(configuration:speechSettings.configuration,key:"",catalogRevision:speechSettings.catalogRevision,schemeID:selected?.id ?? UUID().uuidString,name:selected?.name ?? nativeUI("默认方案","Default"))
+        }
     }
     func updateSpeechSettings(_ draft:NativeSpeechSettingsDraft) {
         guard available,speechSettingsDraft?.id == draft.id,phase == .idle else{return};speechSettingsDraft=draft
     }
-    func cancelSpeechSettings() {guard speechSettingsOperation == nil else{return};speechSettingsDraft=nil}
+    func cancelSpeechSettings() {guard speechSettingsOperation == nil else{return};speechSettings.clearTestResult();speechSettingsDraft=nil}
+    func newSpeechSchemeDraft() {
+        guard available,visible,phase == .idle,speechSettingsOperation == nil,!speechSettings.busy else{return}
+        speechSettings.clearTestResult()
+        speechSettingsDraft = .init(configuration:.init(),key:"",catalogRevision:speechSettings.catalogRevision,schemeID:UUID().uuidString,name:nativeUI("新方案","New scheme"))
+    }
+    @discardableResult func selectSpeechScheme(_ id:String)async->Bool {
+        guard available,visible,phase == .idle,speechSettingsOperation == nil,let draft=speechSettingsDraft else{return false}
+        let operation=UUID(),owner=archive?.directory,epoch=generation;speechSettingsOperation=operation
+        defer{if speechSettingsOperation==operation{speechSettingsOperation=nil}}
+        guard await speechSettings.selectScheme(id),available,visible,generation==epoch,archive?.directory==owner,speechSettingsDraft==draft else{return false}
+        let selected=speechSettings.schemes.first{$0.id==speechSettings.selectedID}
+        speechSettingsDraft = .init(configuration:speechSettings.configuration,key:"",catalogRevision:speechSettings.catalogRevision,schemeID:selected?.id ?? UUID().uuidString,name:selected?.name ?? nativeUI("默认方案","Default"));return true
+    }
     @discardableResult func saveSpeechSettings() async -> Bool {
         guard available,visible,phase == .idle,speechSettingsOperation == nil,let draft=speechSettingsDraft else{return false}
         let operation=UUID(),owner=archive?.directory,epoch=generation;speechSettingsOperation=operation
         defer{if speechSettingsOperation==operation{speechSettingsOperation=nil}}
-        let saved=await speechSettings.save(draft.configuration,key:draft.key)
+        let saved=await speechSettings.saveScheme(id:draft.schemeID,name:draft.name,configuration:draft.configuration,key:draft.key,expectedRevision:draft.catalogRevision)
         guard saved,available,visible,generation==epoch,archive?.directory==owner,speechSettingsDraft==draft else{return false}
         speechSettingsDraft=nil;return true
     }
@@ -579,7 +598,7 @@ struct NativeSpeechSettingsDraft: Equatable {
         guard available,visible,phase == .idle,speechSettingsOperation == nil,let draft=speechSettingsDraft else{return false}
         let operation=UUID(),owner=archive?.directory,epoch=generation;speechSettingsOperation=operation
         defer{if speechSettingsOperation==operation{speechSettingsOperation=nil}}
-        let removed=await speechSettings.remove()
+        let removed=await speechSettings.removeScheme(draft.schemeID,expectedRevision:draft.catalogRevision)
         guard removed,available,visible,generation==epoch,archive?.directory==owner,speechSettingsDraft==draft else{return false}
         speechSettingsDraft=nil;return true
     }
@@ -637,12 +656,12 @@ struct NativeSpeechSettingsDraft: Equatable {
     }
     func beginRealtimeSettings() {
         guard available,phase == .idle,transcribingID == nil,speechSettingsDraft == nil else{return}
-        if realtimeSettingsDraft == nil {realtimeSettingsDraft = .init(configuration:realtimeSettings.configuration,key:"")}
+        if realtimeSettingsDraft == nil {realtimeSettingsDraft = realtimeSettings.draft()}
     }
     func updateRealtimeSettings(_ draft:NativeQuickASRSettingsDraft) {guard available,realtimeSettingsDraft != nil,phase == .idle else{return};realtimeSettingsDraft=draft}
-    func cancelRealtimeSettings(){realtimeSettingsDraft=nil}
+    func cancelRealtimeSettings(){realtimeSettings.cancelTest();realtimeSettingsDraft=nil}
     @discardableResult func saveRealtimeSettings()->Bool {
-        guard available,phase == .idle,let draft=realtimeSettingsDraft,realtimeSettings.save(draft.configuration,key:draft.key) else{return false}
+        guard available,phase == .idle,let draft=realtimeSettingsDraft,realtimeSettings.save(draft) else{return false}
         realtimeSettingsDraft=nil;return true
     }
     @discardableResult func removeRealtimeSettings()->Bool {
@@ -676,7 +695,14 @@ struct NativeSpeechSettingsDraft: Equatable {
             // Save provider-completed utterances, not every partial token.
             // The remaining partial is captured again when local audio closes.
             if !snapshot.finalized.isEmpty,snapshot.finalized != self.lastRealtimeSaved {
-                do {try self.archive?.update(id:id,authorize:{self.available && self.realtimeID==token && self.recordingID==id && self.archive?.directory==owner}){$0.transcript=snapshot.finalized;$0.transcriptionState="partial"};self.lastRealtimeSaved=snapshot.finalized;self.refresh()}
+                do {
+                    // authorize reads the live archive owner before each commit.
+                    // Mutate a separate value so those reads never overlap an
+                    // exclusive inout access to self.archive.
+                    guard var candidate=self.archive else{throw NativeQuickRecordingBatchError.unavailable}
+                    try candidate.update(id:id,authorize:{self.available && self.realtimeID==token && self.recordingID==id && self.archive?.directory==owner}){$0.transcript=snapshot.finalized;$0.transcriptionState="partial"}
+                    self.archive=candidate;self.lastRealtimeSaved=snapshot.finalized;self.refresh()
+                }
                 catch{self.transcriptDrafts[id]=snapshot.finalized}
             }
         }
@@ -723,11 +749,15 @@ struct NativeSpeechSettingsDraft: Equatable {
             let result=self.available ? final:self.realtime
             do {
                 guard audioReceipt.bytes>0 else{throw CocoaError(.fileWriteUnknown)}
-                try self.archive?.update(id:id,authorize:{self.realtimeID==token && self.recordingID==id && self.archive?.directory==owner}){item in
+                // Keep the live owner/token checks while committing a separate
+                // archive value, as in manual edits and batch transactions.
+                guard var candidate=self.archive else{throw NativeQuickRecordingBatchError.unavailable}
+                try candidate.update(id:id,authorize:{self.realtimeID==token && self.recordingID==id && self.archive?.directory==owner}){item in
                     item.duration=audioReceipt.duration;item.state=success && !audioReceipt.interrupted ? "ready":"interrupted"
                     item.transcript=result.text
                     item.transcriptionState=result.phase == .completed && !result.hasGap && !audioReceipt.streamInterrupted ? "realtime":"partial"
                 }
+                self.archive=candidate
                 self.transcriptDrafts.removeValue(forKey:id)
                 if self.available {self.receipt=nativeUI("录音与已收到的文字保存在本机", "Audio and received text saved on this Mac")}
             }catch{

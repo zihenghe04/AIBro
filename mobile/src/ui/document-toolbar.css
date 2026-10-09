@@ -1,0 +1,48 @@
+.document-controls-root {
+  --text: var(--ink); --bg: var(--surface); --panel: var(--surface);
+  --panel-raised: var(--surface); --panel-hover: var(--soft); --line-strong: var(--line);
+  --faint: var(--muted); --accent-soft: var(--soft);
+  min-width: 0;
+  font-family: "AI Bro Mobile Geist", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif !important;
+}
+.document-controls-root * { font-family: inherit !important; }
+.document-toolbar { min-width: 0; }
+.document-toolbar__main { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; padding: 4px 0 10px; }
+.document-toolbar__modes { display: flex; flex: 0 0 auto; gap: 2px; border-radius: 12px; background: var(--soft); padding: 2px; }
+.document-toolbar__control { display: inline-flex; min-width: 0; }
+.document-toolbar__modes button[aria-pressed=true] { background: var(--surface) !important; color: var(--ink) !important; box-shadow: 0 1px 3px #0000000a !important; }
+.document-toolbar__modes button[aria-pressed=false] { color: var(--muted) !important; }
+.document-toolbar__primary { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.document-toolbar__primary [data-document-control=discuss] { color: var(--accent) !important; white-space: nowrap; }
+.document-toolbar__menu { display: grid; gap: 2px; margin: 0 0 10px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.document-toolbar__menu .document-toolbar__control { display: flex; }
+.document-toolbar__danger { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+.document-toolbar__danger button { color: #b94249 !important; }
+.document-toolbar__formats { display: flex; width: 100%; max-width: 100%; min-width: 0; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; padding: 5px 1px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.document-toolbar__format-group { display: flex; flex: 0 0 auto; gap: 1px; align-items: center; }
+.document-toolbar__format-group + .document-toolbar__format-group { border-left: 1px solid var(--line); padding-left: 6px; }
+.document-toolbar__format--bold button { font-weight: 750 !important; }
+.document-toolbar__format--italic button { font-family: Georgia, serif !important; font-style: italic; font-size: 18px !important; }
+.document-toolbar__format--strike button { text-decoration: line-through; }
+.document-toolbar__format--quote button { font-family: Georgia, serif !important; font-size: 24px !important; }
+.document-toolbar__error { margin: 8px 0 0; color: #b94249; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.document-savebar { border-top: 1px solid var(--line); padding: 12px 0; background: var(--surface); min-width: 0; }
+.document-savebar__row { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.document-savebar__status { flex: 1; min-width: 0; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.document-savebar__row > .document-toolbar__control { flex-shrink: 0; }
+.document-origin { min-width: 0; }
+.document-origin__row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.document-origin__source { flex: 1; min-width: 0; }
+.document-origin__source > button { overflow: hidden; }
+.document-origin__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 359px) {
+  .document-toolbar__main { gap: 2px; }
+  .document-toolbar__modes button { padding-inline: 8px !important; }
+  .document-toolbar__primary [data-document-control=discuss] { padding-inline: 5px !important; font-size: 12px !important; }
+}
+@media (prefers-color-scheme: dark) {
+  .document-toolbar__danger button, .document-toolbar__error { color: #f58c94 !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .document-controls-root *, .document-controls-root *::before, .document-controls-root *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

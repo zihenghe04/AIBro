@@ -1,0 +1,11 @@
+.conversation-results-root{--text:var(--ink);--bg:var(--surface);--panel:var(--surface);--panel-raised:var(--surface);--panel-hover:var(--soft);--line-strong:var(--line);--faint:var(--muted);--accent-soft:var(--soft);font-family:"AI Bro Mobile Geist",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif!important;min-width:0}
+.conversation-results-root *{font-family:inherit!important;min-width:0}
+.conversation-results{margin:18px 0 10px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--surface);overflow-wrap:anywhere}
+.conversation-results[data-result-state="applied"]>strong{color:var(--accent)}
+.conversation-results__detail{color:var(--muted);font-size:12px;line-height:1.6;white-space:pre-wrap;margin:5px 0 0}
+.conversation-results__item{border-top:1px solid var(--line);padding-top:14px;margin-top:14px}
+.conversation-results__operation{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}
+.conversation-results__title{display:block;font-size:14px;line-height:1.6;white-space:pre-wrap}
+.conversation-results__item button{margin-top:10px}
+.conversation-results__error{color:var(--danger,#bd493f);font-size:13px;line-height:1.6;margin:10px 0 0}
+@media(prefers-reduced-motion:reduce){.conversation-results-root *{transition:none!important;animation:none!important}}

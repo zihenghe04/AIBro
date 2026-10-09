@@ -89,7 +89,7 @@ export function eventsFor(store, from, to) {
               )
           )
             continue;
-          if (end > from)
+          if (end > from && !(e.excluded || []).includes(start))
             events.push({ ...e, start, end, occurrenceID: e.id + "@" + start });
         }
       } catch {}

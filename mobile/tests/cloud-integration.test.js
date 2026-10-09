@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { Store, MemoryAdapter, addMessage } from "../src/store.js";
+import { Store, MemoryAdapter, addMessage, conflictReview } from "../src/store.js";
 import { Sync } from "../src/sync.js";
 import { agendaNote } from "../src/agenda.js";
 const vault = () => {
@@ -114,7 +114,7 @@ test("real protocol: two mobile devices exchange records, messages, blobs, confl
     await sb.run();
     assert.ok(b.state.records["notes:note1"].conflict);
     assert.equal(b.get("notes", "note1").content, "B 修改");
-    await b.resolve("notes:note1", "remote");
+    await b.resolve("notes:note1", "remote", conflictReview(b.state.records["notes:note1"]));
     assert.equal(b.get("notes", "note1").content, "A 修改");
     await a.remove("notes", "note1");
     await sa.run();

@@ -1,0 +1,14 @@
+[data-conversation-activity] { min-width: 0; }
+[data-conversation-activity][hidden] { display: none; }
+.activity-status { display: flex; align-items: center; gap: 7px; min-height: 30px; }
+.activity-spinner { display: inline-flex; flex: none; }
+.activity-traces { min-width: 0; }
+.activity-traces details { min-width: 0; }
+.activity-traces summary { display: flex; align-items: center; gap: 8px; list-style: none; }
+.activity-traces summary::before { content: '›'; flex: none; width: 12px; }
+.activity-traces details[open] > summary::before { content: '⌄'; }
+.activity-traces summary > span { overflow-wrap: anywhere; min-width: 0; flex: 1; }
+.activity-traces summary > small { flex: none; white-space: nowrap; }
+.activity-traces pre, .activity-traces .markdown { max-width: 100%; min-width: 0; }
+.message-body { min-width: 0; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .activity-spinner * { animation: none !important; } }

@@ -23,7 +23,7 @@ test("mobile expands exact recurrence fixtures from the real Mac engine and pres
       binary,
     ]);
     const { stdout } = await run(binary, [file]);
-    assert.match(stdout, /PASS 14/);
+    assert.match(stdout, /PASS 20 agenda bridge checks; 8 native recurrence fixtures/);
     const fixtures = JSON.parse(await readFile(file, "utf8"));
     for (const fixture of fixtures) {
       const store = await new Store(new MemoryAdapter()).load();

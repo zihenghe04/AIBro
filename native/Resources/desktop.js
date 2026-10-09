@@ -1,13 +1,24 @@
 (()=>{
  const rpc=body=>window.webkit.messageHandlers.desktop.postMessage(body);
  const keys=new Set(['workstation-api-base','workstation-api-model','workstation-api-protocol','workstation-api-protocol-learned','workstation-openai-model','workstation-provider','aibro-embedding-settings-v1','ai-bro-language','workstation-ui']);
- for(const [key,value] of Object.entries(window.__nativePreferences||{}))if(keys.has(key))localStorage.setItem(key,value);
+ for(const [key,value] of Object.entries(window.__nativePreferences||{}))if(keys.has(key)||key==='aibro-connection-export-v1')localStorage.setItem(key,value);
  delete window.__nativePreferences;
  const originalSet=Storage.prototype.setItem,originalRemove=Storage.prototype.removeItem;
  Storage.prototype.setItem=function(key,value){originalSet.call(this,key,value);if(this===localStorage&&keys.has(key))rpc({command:'preferences',key,value:String(value)}).catch(()=>{});};
  Storage.prototype.removeItem=function(key){originalRemove.call(this,key);if(this===localStorage&&keys.has(key))rpc({command:'preferences',key}).catch(()=>{});};
- const credentials=channel=>({storageBackend:'encrypted-file',...Object.fromEntries(['status','read','unlock','save','authorizeSave','remove','authorizeRemove'].map(action=>[action,async options=>{try{return await rpc({command:'credentials',channel,action,options:options||{}});}catch(error){const match=String(error?.message||error).match(/^\[((?:KEYCHAIN|CREDENTIAL)_[A-Z_]+)\]\s*(.*)$/s);if(!match)throw error;const failure=new Error(match[2]);failure.code=match[1];throw failure;}}]))});
+ const credentials=channel=>({storageBackend:'encrypted-file',...Object.fromEntries(Object.entries({status:'status',read:'read',unlock:'unlock',save:'save',authorizeSave:'authorizeSave',remove:'remove',authorizeRemove:'authorizeRemove',profiles:'profile-list',saveProfile:'profile-save',selectProfile:'profile-select',removeProfile:'profile-remove',readProfile:'profile-read'}).map(([method,action])=>[method,async options=>{try{return await rpc({command:'credentials',channel,action,options:options||{}});}catch(error){const match=String(error?.message||error).match(/^\[((?:KEYCHAIN|CREDENTIAL|PROFILE)_[A-Z_]+)\]\s*(.*)$/s);if(!match)throw error;const failure=new Error(match[2]);failure.code=match[1];throw failure;}}]))});
  window.workstationDesktop={isDesktop:true,platform:'darwin',agendaProposal:proposal=>rpc({command:'agenda-proposal',proposal}),agendaDraft:id=>rpc({command:'agenda-draft',id}),agendaOpen:id=>rpc({command:'agenda-open',id}),agendaRelated:options=>rpc({command:'agenda-related',...(options?.includeCancelled===true?{includeCancelled:true}:{})}),agendaNotifications:enable=>rpc({command:'agenda-notifications',enable:enable===true}),apiCredentials:credentials('api'),embeddingCredentials:credentials('embedding'),setLanguage:value=>rpc({command:'language',value}),setAppearance:value=>rpc({command:'appearance',value}),openAuthURL:url=>rpc({command:'auth',url})};
+ // Explicit ACK for the sharing preference. WK uses an ephemeral data store;
+ // fire-and-forget localStorage mirroring could resurrect a revoked follow.
+ window.workstationDesktop.connectionFollowing=Object.freeze({
+  getItem:key=>key==='aibro-connection-export-v1'?localStorage.getItem(key):null,
+  async setItem(key,value){if(key!=='aibro-connection-export-v1')throw Error('invalid preference');await rpc({command:'connection-following',value:JSON.parse(value)});originalSet.call(localStorage,key,value);},
+  async removeItem(key){if(key!=='aibro-connection-export-v1')throw Error('invalid preference');await rpc({command:'connection-following',value:null});originalRemove.call(localStorage,key);}
+ });
+ window.workstationDesktop.connections=Object.freeze(Object.fromEntries(['sessionSnapshot','read','compareAndSwap','exportSavedAPI','verifySavedAPI','exportSavedSpeech','verifySavedSpeech'].map(action=>[action,async(options={})=>{
+  try{return await rpc({command:'connections',action,options});}
+  catch(error){const match=String(error?.message||error).match(/^\[(CONNECTION_[A-Z_]+)\]\s*(.*)$/s);const failure=new Error(match?.[2]||'连接配置未完成，已有配置已保留。');failure.code=match?.[1]||'CONNECTION_STORAGE_ERROR';throw failure;}
+ }])));
  window.workstationDesktop.agendaCreateBatch=(proposals,runId,automatic=false)=>rpc({command:'agenda-create-batch',proposals,runId,automatic});
  window.workstationDesktop.agendaQuery=(request,context)=>rpc({command:'agenda-query',request,context});
  window.workstationDesktop.agendaRead=(request,context)=>rpc({command:'agenda-read',request,context});

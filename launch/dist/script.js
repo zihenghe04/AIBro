@@ -34,7 +34,7 @@ const EN={
   "nav2": "How it works",
   "nav3": "Your choices",
   "get": "Get AI Bro",
-  "release": "0.9.3 · Mac preview",
+  "release": "0.9.4 · Mac preview",
   "download": "Download for Mac",
   "tabRead": "Read sources",
   "tabReview": "Edit notes",
@@ -65,7 +65,7 @@ const EN={
   "syncText": "Push and pull supported workspace content through a self-hosted service. SSH provides the connection, not remote file management.",
   "faqTitle": "Common questions",
   "faq1": "Which devices are supported?",
-  "faq1A": "The 0.9.3 preview is for Apple Silicon Macs on macOS 14 or later. Python and PDF runtimes are included. This is an ad-hoc signed preview, not Apple-notarized. Read the release instructions before installing.",
+  "faq1A": "The 0.9.4 preview is for Apple Silicon Macs on macOS 14 or later. Python and PDF runtimes are included. This is an ad-hoc signed preview, not Apple-notarized. Read the release instructions before installing.",
   "faq3": "Can I build it or host sync myself?",
   "faq3A": "Yes. AI Bro is open source under AGPL-3.0, with build and self-hosted sync guides. Sync supports personal push and pull, and is not end-to-end encrypted. Model credentials and local directory permissions are not synced.",
   "guide": "Read the guide ↗",
@@ -110,7 +110,7 @@ const EN={
   "clipNote": "Choreographed from actual App screenshots",
   "openSource": "View the source and build guide",
   "faqNative": "Are these actual App screens?",
-  "faqNativeA": "Yes. The film uses actual AI Bro screens with fictional course materials, papers and projects. Actions and waits are edited for length, not shown at real model speed. Some features are in development preview; the current public download is 0.9.3. App screens are in Chinese in both films.",
+  "faqNativeA": "Yes. The film uses actual AI Bro screens with fictional course materials, papers and projects. Actions and waits are edited for length, not shown at real model speed. Some features are in development preview; the current public download is 0.9.4. App screens are in Chinese in both films.",
   "buildSource": "Build from source ↗",
   "footerNative": "Actual isolated App interface · Fictional materials throughout · AGPL-3.0"
 };

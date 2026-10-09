@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Loopback service for the workstation's durable store, files and AI requests."""
-import base64, errno, fcntl, hashlib, html, http.client, ipaddress, json, math, mimetypes, os, re, secrets, select, shutil, socket, ssl, stat, subprocess, tempfile, threading, time, unicodedata, urllib.parse, urllib.request
+import base64, errno, fcntl, hashlib, html, http.client, ipaddress, json, math, mimetypes, os, queue, re, secrets, select, shutil, socket, ssl, stat, subprocess, tempfile, threading, time, unicodedata, urllib.parse, urllib.request
 from contextlib import contextmanager
 from collections import OrderedDict
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
@@ -10,6 +10,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 from codex_bridge import BridgeError, CodexBridge
+from claude_bridge import ClaudeBridge, BridgeError as ClaudeBridgeError, MAX_LINE as CLAUDE_MAX_PROMPT
 from local_projects import LocalProjectError, LocalProjects
 from local_file_edits import LocalFileEdits
 from local_commands import LocalCommands
@@ -1027,6 +1028,60 @@ COMPARISON_DRAFTS = ComparisonDraftStore(DATA_DIR, STORE.load)
 NOTE_DRAFTS = NoteDraftStore(DATA_DIR, STORE.load)
 PROJECT_JOBS = ProjectJobs(STORE, SERVICE_INSTANCE)
 CODEX_BRIDGE = CodexBridge(DATA_DIR)
+_CLAUDE = None
+_CLAUDE_DIRECTORY = None
+_CLAUDE_LOCK = threading.Lock()
+def claude_service():
+    # Lazy, app-owned empty cwd; no CLI/auth process during server startup.
+    global _CLAUDE, _CLAUDE_DIRECTORY
+    with _CLAUDE_LOCK:
+        if _CLAUDE is None:
+            DATA_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+            _CLAUDE_DIRECTORY = tempfile.TemporaryDirectory(prefix='claude-runtime-', dir=DATA_DIR)
+            _CLAUDE = ClaudeBridge(_CLAUDE_DIRECTORY.name)
+        return _CLAUDE
+
+def close_claude_service():
+    with _CLAUDE_LOCK:
+        if _CLAUDE is not None:
+            _CLAUDE.close()
+        if _CLAUDE_DIRECTORY is not None:
+            _CLAUDE_DIRECTORY.cleanup()
+
+CLAUDE_ERRORS = {
+    'cli_unavailable': (503, '请先安装官方 Claude Code CLI，再重新检测。'),
+    'unsupported_cli': (409, '当前 Claude Code CLI 缺少必需的隔离或流式选项，请更新官方 CLI。'),
+    'subscription_login_required': (401, '请先在本机官方 Claude Code 完成 Claude 账号登录。'),
+    'busy': (409, 'Claude Code 操作尚未结束，请稍后重试。'),
+    'duplicate_request': (409, '该 Claude 请求编号已经使用，请使用新请求编号。'),
+    'request_limit': (409, '本次运行的 Claude 请求数量已达上限，请重启 AI Bro。'),
+    'unknown_request': (404, '找不到此 Claude 本机请求。'),
+    'login_failed': (503, 'Claude Code 登录未完成，请在官方 CLI 重试。'),
+    'logout_failed': (503, '无法确认 Claude Code 已退出，请刷新状态。'),
+    'auth_status_failed': (503, '无法确认 Claude Code 登录状态，请刷新后重试。'),
+    'cancelled': (409, '已停止 Claude Code 操作。'),
+    'timeout': (504, 'Claude Code 操作超时，已停止自有进程。'),
+    'permission_denied': (403, 'Claude Code 拒绝了需要额外权限的操作。'),
+    'output_limit': (503, 'Claude Code 输出超出本地限制。'),
+    'incomplete_stream': (503, 'Claude Code 未返回完整结束事件，本次未确认完成。'),
+    'cli_failed': (503, 'Claude Code 进程未成功退出，本次未确认完成。'),
+    'model_error': (503, 'Claude Code 模型请求未成功完成。'),
+    'callback_failed': (503, 'Claude Code 事件接收失败，已停止。'),
+    'unsupported_protocol': (503, 'Claude Code 返回了未支持或不完整的协议。'),
+    'unsafe_runtime': (503, 'Claude Code 未按无工具限制启动，已停止。'),
+    'unexpected_mcp': (503, '当前 Claude 连接不加载 MCP 服务，已停止。'),
+    'unexpected_tool': (503, '当前 Claude 连接不执行 CLI 工具，已停止。'),
+    'unsupported_dynamic_tools': (400, '当前 Claude 连接尚未接入动态工具。'),
+    'unsupported_subagent': (503, '当前 Claude 连接尚不支持子代理协议。'),
+    'unsupported_tool_result': (503, '当前 Claude 连接尚不支持此工具结果格式。'),
+    'invalid_request': (400, 'Claude 请求格式无效。'),
+    'adapter_failed': (503, 'Claude Code 本机调用未完成，请重试。'),
+}
+def claude_error(error):
+    code = getattr(error, 'code', 'adapter_failed')
+    if code not in CLAUDE_ERRORS: code = 'adapter_failed'
+    status, message = CLAUDE_ERRORS[code]
+    return status, {'code': code, 'message': message}
 LOCAL_PROJECTS = LocalProjects(DATA_DIR)
 LOCAL_DOCUMENT_DRAFTS = LocalDocumentDraftStore(DATA_DIR, STORE.load, LOCAL_PROJECTS)
 DOCUMENT_MEDIA = DocumentMedia(STORE)
@@ -1089,6 +1144,25 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({'error':'仅允许当前工作站管理云同步。'},403); return
         try:
             service = cloud_service()
+            if path.startswith('/__cloud/connections/'):
+                if path not in ('/__cloud/connections/capabilities', '/__cloud/connections/transport'):
+                    self.send_json({'error':'找不到连接配置接口。','code':'NOT_FOUND'},404); return
+                if self.command != 'POST' or '?' in self.path or self.headers.get('Content-Type','').split(';',1)[0].strip().lower() != 'application/json':
+                    self.send_json({'error':'连接配置请求必须使用 JSON POST。','code':'INVALID_REQUEST'},400); return
+                lengths = self.headers.get_all('Content-Length', [])
+                if self.headers.get('Transfer-Encoding') is not None or len(lengths) != 1 or not re.fullmatch(r'[0-9]+', lengths[0]):
+                    self.send_json({'error':'连接配置请求长度无效。','code':'INVALID_REQUEST'},400); return
+                def strict_pairs(items):
+                    result = {}
+                    for key, value in items:
+                        if key in result: raise ValueError('duplicate key')
+                        result[key] = value
+                    return result
+                def invalid_constant(_): raise ValueError('invalid constant')
+                payload = json.loads(self.read_body(2 * 1024 * 1024 + 8192) or b'{}', object_pairs_hook=strict_pairs, parse_constant=invalid_constant)
+                if not isinstance(payload,dict): raise ValueError('invalid request')
+                result = service.connections_capabilities(payload) if path.endswith('/capabilities') else service.connections_transport(payload)
+                self.send_json(result); return
             if self.command == 'GET':
                 if path == '/__cloud/status': result = service.status()
                 elif path == '/__cloud/devices': result = service.devices()
@@ -1115,7 +1189,7 @@ class Handler(SimpleHTTPRequestHandler):
                 else: self.send_error(404); return
             self.send_json(result)
         except CloudSyncError as error: self.send_json({'error':str(error),'code':error.code},error.status)
-        except (ValueError,TypeError,KeyError): self.send_json({'error':'云同步请求或本地数据无效，请检查配置。'},400)
+        except (ValueError,TypeError,KeyError,RecursionError): self.send_json({'error':'云同步请求或本地数据无效，请检查配置。'},400)
         except Exception: self.send_json({'error':'云同步暂时不可用，本机数据已保留。'},503)
     def do_auth(self, action):
         if not self.valid_auth_origin(mutation=self.command == 'POST'):
@@ -1132,6 +1206,143 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({'error': {'message': str(error), 'code': error.code}}, error.status)
         except Exception:
             self.send_json({'error': {'message': '账号连接暂时不可用，请重试。'}}, 503)
+    def do_claude(self, path):
+        # Browser same-origin GET does not normally carry Origin. Its exact
+        # workspace Referer is the read-only alternative; POST requires Origin.
+        trusted = self.valid_auth_origin(mutation=self.command == 'POST')
+        if len(self.headers.get_all('Origin', [])) > 1 or len(self.headers.get_all('Host', [])) != 1:
+            trusted = False
+        if self.command == 'GET' and self.headers.get('Origin') is None:
+            refs = self.headers.get_all('Referer', [])
+            try:
+                ref = urllib.parse.urlsplit(refs[0]) if len(refs) == 1 else None
+                hosts = {f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}', f'[::1]:{self.server.server_port}'}
+                trusted = trusted and ref is not None and ref.scheme == 'http' and ref.netloc in hosts and not ref.username and not ref.password
+            except ValueError: trusted = False
+        if not trusted:
+            self.send_json({'error': {'code': 'origin_denied', 'message': '仅允许当前工作站使用 Claude 本机连接。'}}, 403); return
+        routes = {'/__claude/status': 'GET', '/__claude/operation': 'GET', '/__claude/login': 'POST',
+                  '/__claude/cancel': 'POST', '/__claude/logout': 'POST', '/__claude/respond': 'POST'}
+        if path not in routes:
+            self.send_json({'error': {'code': 'not_found', 'message': '找不到 Claude 本机接口。'}}, 404); return
+        if self.command != routes[path]:
+            self.send_json({'error': {'code': 'invalid_method', 'message': 'Claude 接口请求方法无效。'}}, 405); return
+        try:
+            def invalid(): raise ClaudeBridgeError('invalid_request')
+            def request_id(value):
+                if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}', value): invalid()
+                return value
+            if '#' in self.path: invalid()
+            query = urllib.parse.urlsplit(self.path).query
+            if path == '/__claude/operation':
+                values = urllib.parse.parse_qs(query, keep_blank_values=True, strict_parsing=True)
+                if set(values) != {'requestId'} or len(values['requestId']) != 1 or len(query) > 512: invalid()
+                payload = {'requestId': request_id(values['requestId'][0])}
+            elif '?' in self.path or '#' in self.path: invalid()
+            else: payload = {}
+            if self.command == 'POST':
+                if len(self.headers.get_all('Content-Type', [])) != 1 or self.headers.get('Content-Type', '').split(';', 1)[0].strip().lower() != 'application/json': invalid()
+                lengths = self.headers.get_all('Content-Length', [])
+                if self.headers.get('Transfer-Encoding') is not None or len(lengths) != 1 or not re.fullmatch(r'[0-9]{1,10}', lengths[0]): invalid()
+                length = int(lengths[0])
+                limit = CLAUDE_MAX_PROMPT + 16384 if path == '/__claude/respond' else 2048
+                if not 0 < length <= limit: invalid()
+                # A partial/slow body cannot occupy this route indefinitely.
+                self.connection.settimeout(10)
+                raw = self.rfile.read(length)
+                if len(raw) != length: invalid()
+                def pairs(items):
+                    result = {}
+                    for key, value in items:
+                        if key in result: invalid()
+                        result[key] = value
+                    return result
+                payload = json.loads(raw, object_pairs_hook=pairs, parse_constant=lambda _: invalid())
+                if not isinstance(payload, dict): invalid()
+                allowed = {'requestId', 'prompt', 'model'} if path.endswith('/respond') else {'confirmation'} if path.endswith('/logout') else {'requestId'}
+                required = allowed - {'model'} if path.endswith('/respond') else allowed
+                if not required <= set(payload) or set(payload) - allowed: invalid()
+                if 'requestId' in payload: request_id(payload['requestId'])
+                if path.endswith('/logout') and payload['confirmation'] is not True: invalid()
+                if path.endswith('/respond'):
+                    prompt, model = payload['prompt'], payload.get('model')
+                    if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode('utf-8')) > CLAUDE_MAX_PROMPT or '\x00' in prompt: invalid()
+                    if 'model' in payload and (not isinstance(model, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,160}', model)): invalid()
+            service = claude_service()
+            if path.endswith('/status'):
+                try: result = {'available': True, **service.status()}
+                except ClaudeBridgeError as error:
+                    if error.code != 'cli_unavailable': raise
+                    result = {'available': False, 'loggedIn': False, 'authMethod': 'none', 'localCLIOnly': True, 'dynamicTools': False}
+            elif path.endswith('/operation'): result = service.operation_status(payload['requestId'])
+            elif path.endswith('/login'): result = service.login_start(payload['requestId'])
+            elif path.endswith('/cancel'): result = {'requestId': payload['requestId'], 'cancelled': service.cancel(payload['requestId'])}
+            elif path.endswith('/logout'): result = service.logout()
+            else:
+                self.do_claude_respond(service, payload); return
+            # Operation errors are identifiers only, never arbitrary CLI data.
+            if 'code' in result: result['code'] = claude_error(ClaudeBridgeError(result['code']))[1]['code']
+            self.send_json(result)
+        except (ValueError, TypeError, UnicodeError, RecursionError, OverflowError, socket.timeout):
+            self.send_json({'error': claude_error(ClaudeBridgeError('invalid_request'))[1]}, 400)
+        except Exception as error:
+            status, failure = claude_error(error)
+            self.send_json({'error': failure}, status)
+
+    def do_claude_respond(self, service, payload):
+        request_id = payload['requestId']
+        cancel, finished, closed = threading.Event(), threading.Event(), threading.Event()
+        events = queue.Queue(maxsize=2)
+        terminal, delivery_lock = [False], threading.Lock()
+        def emit(event):
+            # The bridge only exposes this subset. Keep an explicit HTTP
+            # projection so future CLI fields cannot accidentally become public.
+            kind = event.get('type')
+            result = {'requestId': request_id, 'type': kind}
+            if kind == 'text': result['text'] = event['text']
+            elif kind == 'reasoning': result.update(status='observed', text='正在思考')
+            elif kind == 'retry': result['attempt'] = event['attempt']
+            elif kind == 'done': result['sessionId'] = event['sessionId']
+            elif kind in ('error', 'cancelled'): result.update(claude_error(ClaudeBridgeError(event.get('code')))[1])
+            elif kind != 'started': raise ClaudeBridgeError('unsupported_protocol')
+            with delivery_lock:
+                if closed.is_set() or terminal[0]: return
+                while not closed.is_set():
+                    try: events.put(result, timeout=.05); break
+                    except queue.Full:
+                        if cancel.is_set(): return
+                if kind in ('done', 'error', 'cancelled'): terminal[0] = True
+        def run():
+            try:
+                service.print_stream(request_id, payload['prompt'], emit, model=payload.get('model'), cancel=cancel)
+            except Exception as error:
+                _, failure = claude_error(error)
+                emit({'type': 'cancelled' if failure['code'] == 'cancelled' else 'error', **failure})
+            finally: finished.set()
+        worker = threading.Thread(target=run, daemon=True)
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Connection', 'close')
+        self.send_header('X-Accel-Buffering', 'no')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.end_headers(); self.close_connection = True
+        self.connection.settimeout(2)
+        worker.start()
+        try:
+            while not finished.is_set() or not events.empty():
+                # Also detect a disconnect while the CLI has not emitted data.
+                if select.select([self.connection], [], [], 0)[0] and not self.connection.recv(1, socket.MSG_PEEK): break
+                try: event = events.get(timeout=.1)
+                except queue.Empty: continue
+                self.wfile.write(('data: ' + json.dumps(event, ensure_ascii=False) + '\n\n').encode('utf-8'))
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError): pass
+        finally:
+            closed.set(); cancel.set()
+            # This per-call event cannot cancel another run, even if a duplicate
+            # request ID was rejected by the bridge before registering a job.
+            worker.join(timeout=4)
     def do_document_media(self, path):
         if not self.valid_auth_origin(mutation=self.command != 'GET'):
             self.send_json({'error': '仅允许当前工作站访问文档图片。', 'code': 'document_image_origin_denied'}, 403); return
@@ -1823,6 +2034,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/__document-images/') or path.startswith('/__local/document-images/'): self.do_document_media(path)
         elif path == '/__local-document-draft': self.do_local_document_draft()
         elif path.startswith('/__cloud/'): self.do_cloud(path)
+        elif path.startswith('/__claude/'): self.do_claude(path)
         elif path.startswith('/__local/'): self.do_local(path)
         elif path in ('/__auth/status', '/__auth/models'): self.do_auth(path.rsplit('/', 1)[1])
         elif path == '/__recovery': self.do_recovery_get()
@@ -1853,6 +2065,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if handle_external_notifications(self, EXTERNAL_NOTIFICATIONS): return
         auth_path = urllib.parse.urlsplit(self.path).path
+        if auth_path.startswith('/__claude/'):
+            self.do_claude(auth_path); return
         if auth_path == '/__comparison-draft': self.do_comparison_draft(); return
         if auth_path == '/__note-draft': self.do_note_draft(); return
         if auth_path.startswith('/__document-images/') or auth_path.startswith('/__local/document-images/'): self.do_document_media(auth_path); return
@@ -1948,4 +2162,5 @@ if __name__ == '__main__':
     try: http_server.serve_forever()
     finally:
         EXTERNAL_NOTIFICATIONS.close()
+        close_claude_service()
         http_server.server_close()

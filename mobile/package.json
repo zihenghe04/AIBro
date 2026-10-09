@@ -1,6 +1,6 @@
 {
   "name": "aibro-mobile",
-  "version": "0.1.3",
+  "version": "0.4.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,9 +10,15 @@
     "ios:sync": "npm run build && cap sync ios",
     "ios:open": "cap open ios",
     "build:web": "vite build --outDir web-dist && node scripts/build-web.mjs",
-    "preview:web": "vite preview --outDir web-dist --host 127.0.0.1 --port 8900"
+    "preview:web": "vite preview --outDir web-dist --host 127.0.0.1 --port 8900",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:build": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:test": "cd android && ./gradlew testDebugUnitTest",
+    "android:test:device": "cd android && ./gradlew connectedDebugAndroidTest"
   },
   "dependencies": {
+    "@capacitor/android": "8.5.2",
     "@capacitor/app": "^8.0.0",
     "@capacitor/core": "^8.0.0",
     "@capacitor/filesystem": "^8.0.0",

@@ -1,9 +1,14 @@
 import Foundation
 import AppKit
 import WebKit
+import Combine
 
 @MainActor final class NativeDesktop:NSObject,WKScriptMessageHandlerWithReply {
-    weak var workspace:Workspace?
+    weak var workspace:Workspace? { didSet { observeConnectionPage() } }
+    private let connectionGate=NativeConnectionAccess.Gate()
+    private var connectionPageObservers:[NSKeyValueObservation]=[]
+    private var connectionReadyObserver:AnyCancellable?
+    private let connectionSession:NativeConnectionSession
     var openQuickPanel:((NativeQuickPanelOpenRequest,@escaping () async -> Bool) async -> NativeQuickPanelOpenResult)?
     var speechDictation:NativeSpeechDictation?
     var openSpeechSettings:(() async -> Bool)?
@@ -13,10 +18,12 @@ import WebKit
     private let vectorQueue=DispatchQueue(label:"app.aibro.vector-index",qos:.utility)
     let vectors:NativeVectorStore
     let credentials:NativeCredentials
+    var speechCredentials:NativeCredentials?
     let prefsFile:URL
     var preferences:[String:String]
     static let preferenceKeys=Set(["workstation-api-base","workstation-api-model","workstation-api-protocol","workstation-api-protocol-learned","workstation-openai-model","workstation-provider","aibro-embedding-settings-v1","ai-bro-language","workstation-ui"])
     init(data:URL,production:Bool) {
+        connectionSession=NativeConnectionSession(dataDirectory:data)
         vectors=NativeVectorStore(folder:data)
         prefsFile=data.appendingPathComponent("native-preferences.json")
         preferences=(try? Data(contentsOf:prefsFile)).flatMap{try? JSONDecoder().decode([String:String].self,from:$0)} ?? [:]
@@ -24,6 +31,14 @@ import WebKit
         credentials=NativeCredentials(folder:data.appendingPathComponent("native-credentials"),legacy:old,service:production ? "app.ai-workstation.studio.native-credentials":"app.aibro.preview-credentials")
         super.init()
         NativeL10n.shared.setLanguage(preferences["ai-bro-language"] ?? "zh-CN")
+    }
+    private func observeConnectionPage() {
+        connectionGate.invalidate();connectionPageObservers=[];connectionReadyObserver=nil
+        guard let workspace else{return}
+        let gate=connectionGate
+        connectionPageObservers=[workspace.web.observe(\.url,options:[.new]){_,_ in gate.invalidate()},
+            workspace.web.observe(\.isLoading,options:[.new]){web,_ in if web.isLoading{gate.invalidate()}}]
+        connectionReadyObserver=workspace.$ready.sink{ready in if !ready{gate.invalidate()}}
     }
     func install(_ config:WKWebViewConfiguration,root:URL) {
         config.userContentController.addScriptMessageHandler(self,contentWorld:.page,name:"desktop")
@@ -34,6 +49,61 @@ import WebKit
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage,replyHandler:@escaping(Any?,String?)->Void) {
         guard let origin=workspace?.origin, message.frameInfo.isMainFrame,let url=message.frameInfo.request.url,url.scheme=="http",url.host==origin.host,url.port==origin.port,let body=message.body as? [String:Any],let command=body["command"] as? String else{replyHandler(nil,"拒绝非工作区请求");return}
         do {
+            if command == "connection-following" {
+                guard Set(body.keys) == Set(["command","value"]),let workspace,workspace.ready,
+                      message.webView === workspace.web,!workspace.web.isLoading,workspace.origin == origin else {throw NativeConnectionSession.changed()}
+                var next=preferences
+                if body["value"] is NSNull {next.removeValue(forKey:"aibro-connection-export-v1")}
+                else {
+                    guard let value=body["value"] as? [String:Any] else {throw NativeConnectionSession.invalid()}
+                    try NativeConnectionSession.fields(value,["serverOrigin","accountId"],optional:["apiFormat","speech"])
+                    guard let server=value["serverOrigin"] as? String,try NativeConnectionSession.url(server,originOnly:true)==server,
+                          NativeConnectionSession.isID(value["accountId"]) else {throw NativeConnectionSession.invalid()}
+                    if let format=value["apiFormat"] {guard let format=format as? String,["chat-completions","responses"].contains(format) else {throw NativeConnectionSession.invalid()}}
+                    if let speech=value["speech"] {guard let speech=speech as? NSNumber,CFGetTypeID(speech)==CFBooleanGetTypeID(),speech.boolValue else {throw NativeConnectionSession.invalid()}}
+                    guard value["apiFormat"] != nil || value["speech"] != nil else {throw NativeConnectionSession.invalid()}
+                    next["aibro-connection-export-v1"]=String(decoding:try JSONSerialization.data(withJSONObject:value,options:[.sortedKeys]),as:UTF8.self)
+                }
+                try JSONEncoder().encode(next).write(to:prefsFile,options:.atomic)
+                try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:prefsFile.path)
+                preferences=next;replyHandler(["saved":true],nil);return
+            }
+            if command == "connections" {
+                guard Set(body.keys) == Set(["command","action","options"]),let action=body["action"] as? String,
+                      ["sessionSnapshot","read","compareAndSwap","exportSavedAPI","verifySavedAPI","exportSavedSpeech","verifySavedSpeech"].contains(action),
+                      let options=body["options"] as? [String:Any],let workspace,workspace.ready,
+                      message.webView === workspace.web,!workspace.web.isLoading,workspace.origin == origin,
+                      let currentURL=workspace.web.url,currentURL.scheme==origin.scheme,currentURL.host==origin.host,currentURL.port==origin.port,
+                      workspace.dataDirectory.standardizedFileURL == credentials.folder.deletingLastPathComponent().standardizedFileURL else {
+                    replyHandler(nil,"[CONNECTION_SESSION_CHANGED] 当前工作区尚未就绪。");return
+                }
+                // The trusted workspace already reads this same saved API for
+                // model calls. Keep background export available after the user
+                // opts into following saved settings; identity/page leases and
+                // connection-session fences still guard the whole operation.
+                let store=credentials,speechStore=speechCredentials,session=connectionSession,access=connectionGate.capture(),web=workspace.web
+                credentialQueue.async {
+                    let result=Result<[String:Any],Error>{
+                        if action == "exportSavedAPI" || action == "verifySavedAPI" {return try store.exportSavedAPI(options,verify:action == "verifySavedAPI",access:access)}
+                        if action == "exportSavedSpeech" || action == "verifySavedSpeech" {
+                            guard let speechStore else {throw AgendaError.message("[CONNECTION_SOURCE_UNAVAILABLE] 请先保存独立语音配置。")}
+                            return try speechStore.exportSavedSpeech(options,verify:action == "verifySavedSpeech",access:access)
+                        }
+                        return try store.connectionCall(action,options,session:session,access:access)
+                    }
+                    DispatchQueue.main.async { [weak self,weak workspace,weak web] in
+                        guard let self,let workspace,let web,self.workspace === workspace,workspace.web === web,workspace.ready,
+                              !web.isLoading,workspace.origin == origin,let current=web.url,
+                              current.scheme==origin.scheme,current.host==origin.host,current.port==origin.port else {
+                            replyHandler(nil,"[CONNECTION_SESSION_CHANGED] 工作区已变化，未返回连接配置。");return
+                        }
+                        do {
+                            let value=try result.get()
+                            try NativeConnectionAccess.perform(access){replyHandler(value,nil)}
+                        }catch{replyHandler(nil,error.localizedDescription)}
+                    }
+                };return
+            }
             if command == "quick-entry-settings" {
                 guard let workspace, message.webView === workspace.web,
                       let action = body["action"] as? String else { replyHandler(["status":"error","reason":"invalid_request"],nil);return }

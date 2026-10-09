@@ -1,0 +1,22 @@
+.editor-recovery-root {
+  --text: var(--ink);
+  --bg: var(--surface);
+  --panel: var(--surface);
+  --panel-raised: var(--surface);
+  --panel-hover: var(--soft);
+  --line-strong: var(--line);
+  --faint: var(--muted);
+  --accent-soft: var(--soft);
+  min-inline-size: 0;
+  font-family: "AI Bro Mobile Geist", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif !important;
+}
+.editor-recovery-root * { font-family: inherit !important; }
+.editor-recovery { min-inline-size: 0; margin-block: 12px 20px; }
+.editor-recovery__message { margin: 0 0 12px; color: var(--muted); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.editor-recovery__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.editor-recovery__actions > button { min-inline-size: 0; min-block-size: 44px; white-space: normal; }
+.editor-recovery[data-editor-recovery="invalid"] .editor-recovery__actions { grid-template-columns: minmax(0, 1fr); }
+.editor-recovery__error { margin: 10px 0 0; color: var(--ink); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+  .editor-recovery-root * { animation: none !important; transition: none !important; }
+}

@@ -39,7 +39,7 @@
       const historicalAttachment = ref.type === 'import' && list(conversation.messages).some(message => !message.deletedAt && message.role === 'user' && (list(message.attachmentIds).includes(ref.id) || list(message.attachments).some(item => item.id === ref.id)));
       if (!command.action.startsWith('add-') && !original && !(ref.type === 'import' && (list(conversation.draftAttachmentIds).includes(ref.id) || historicalAttachment))) throw Error(t('这项资料已经不在下次发送中。', 'This material is no longer selected.'));
       busy = true; hooks.onChange?.();
-      let patches;
+      let patches, contextBefore, contextAfter, applied = false;
       try {
         if (['add-reference', 'add-attachment', 'refresh-reference'].includes(command.action)) {
           if (!hooks.access(hooks.getState(), ref).available) throw Error(t('来源已不可用，请重新选择。', 'The source is no longer available.'));
@@ -52,22 +52,26 @@
         }
         const fields = ['draftFileReferences', 'excludedFileReferenceKeys', ...(ref.type === 'import' && (command.action.startsWith('remove-') || command.action === 'add-attachment') ? ['draftAttachmentIds'] : []), ...(command.action === 'add-attachment' ? ['attachments'] : [])];
         patches = fields.map(field => ({ field, before: clone(conversation[field]) }));
+        contextBefore = F().contextSnapshot(conversation, ref);
         if (command.action.startsWith('remove-')) {
           F().remove(conversation, ref);
           if (ref.type === 'import') conversation.draftAttachmentIds = list(conversation.draftAttachmentIds).filter(value => value !== ref.id);
         } else if (command.action === 'add-attachment') {
+          // Validate the portable selection limit before changing any fields.
+          F().stage(conversation, ref);
           conversation.attachments = [...new Set([...list(conversation.attachments), ref.id])];
           conversation.draftAttachmentIds = [...new Set([...list(conversation.draftAttachmentIds), ref.id])];
-          conversation.excludedFileReferenceKeys = list(conversation.excludedFileReferenceKeys).filter(value => value !== key);
         } else F().stage(conversation, ref);
         patches.forEach(patch => { patch.after = clone(conversation[patch.field]); });
+        contextAfter = F().contextSnapshot(conversation, ref); applied = true;
         if ((await hooks.save()) === false) throw Error(t('上下文选择未保存，请重试。', 'The context selection was not saved. Try again.'));
         return true;
       } catch (error) {
         // Reconcile only this reference's entries. Draft text, other references,
         // queue entries and stream updates may have changed during the save.
         const live = find(id);
-        if (live && patches) for (const patch of patches) {
+        if (live && applied) F().rollbackContext(live, ref, contextBefore, contextAfter);
+        if (live && applied) for (const patch of patches) {
           const matches = value => patch.field === 'draftFileReferences' ? F().key(value) === key : patch.field === 'excludedFileReferenceKeys' ? value === key : value === ref.id;
           const current = list(live[patch.field]);
           if (equal(current.filter(matches), list(patch.after).filter(matches))) {
@@ -76,7 +80,7 @@
             else live[patch.field] = restored;
           }
         }
-        if (patches) hooks.onRollback?.();
+        if (applied) hooks.onRollback?.();
         throw error;
       } finally { busy = false; hooks.onChange?.(); }
     }

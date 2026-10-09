@@ -4,6 +4,11 @@ Passwords are used only by the login request. Sessions are never included in
 workspace snapshots, model context, exported data, or returned status objects.
 """
 import hashlib
+import base64
+import hmac
+import secrets
+from contextlib import contextmanager
+from cloud_session_file import SessionFile
 import ipaddress
 import json
 import os
@@ -21,12 +26,96 @@ MAX_BLOB = 64 * 1024 * 1024
 MAX_JSON = 16 * 1024 * 1024
 SAFE_ID = re.compile(r'[A-Za-z0-9_-]{1,160}')
 SHA256 = re.compile(r'[a-f0-9]{64}')
+CONNECTION_LIMIT = 2 * 1024 * 1024
+CONNECTION_OPERATIONS = frozenset(('initialize', 'register', 'status', 'read', 'owner_state', 'commit', 'approve', 'rotate_and_revoke', 'operation_result'))
+
+
+def _connection_b64(value):
+    if not isinstance(value, str) or not re.fullmatch('[A-Za-z0-9_-]{43}', value): return False
+    try: return base64.urlsafe_b64encode(base64.urlsafe_b64decode(value + '=')).decode().rstrip('=') == value
+    except ValueError: return False
+
+
+def _connection_origin(value):
+    normalized = server_url(value)
+    parsed = urllib.parse.urlsplit(normalized)
+    if parsed.path: raise CloudSyncError('连接配置公开地址必须为 origin。', 'INVALID_CONNECTION_ORIGIN')
+    host = parsed.hostname
+    host = '[' + host + ']' if ':' in host else host
+    port = parsed.port
+    if port is not None and (parsed.scheme, port) not in (('https', 443), ('http', 80)): host += ':' + str(port)
+    return parsed.scheme + '://' + host
 
 
 class CloudSyncError(ValueError):
     def __init__(self, message, code='SYNC_ERROR', status=400, retryable=False):
         super().__init__(message)
         self.code, self.status, self.retryable = code, status, retryable
+
+
+def grouped_pull_supported(capabilities):
+    if capabilities is False:  # A v1 server without the additive endpoint.
+        return False
+    if not isinstance(capabilities, dict) or type(capabilities.get('protocol')) is not int or capabilities['protocol'] != 1:
+        raise CloudSyncError('同步服务能力响应无效。', 'INVALID_RESPONSE')
+    feature = capabilities.get('atomicGroupPull')
+    if feature is None:
+        return False
+    if (not isinstance(feature, dict) or type(feature.get('version')) is not int or feature['version'] != 1
+            or type(feature.get('maxGroupBytes')) is not int or not 0 < feature['maxGroupBytes'] <= MAX_JSON):
+        raise CloudSyncError('云端整组同步协议不兼容，未拆分操作组。', 'PROTOCOL_MISMATCH')
+    return True
+
+
+def validate_pull_page(result, cursor, grouped=False):
+    """Validate a complete page before staging files or changing local state.
+
+    Group envelopes stay intact for SyncStore's conflict transaction. In
+    particular, a legacy cursor inside a group replays all its members.
+    """
+    changes, new_cursor = result.get('changes'), result.get('cursor')
+    if (not isinstance(changes, list) or len(changes) > 100 or type(new_cursor) is not int
+            or new_cursor < cursor or new_cursor > 9007199254740991 or type(result.get('hasMore')) is not bool
+            or result['hasMore'] and new_cursor <= cursor):
+        raise CloudSyncError('云端增量响应无效，未推进同步位置。', 'INVALID_RESPONSE')
+    if not grouped:
+        if any(isinstance(item, dict) and item.get('type') == 'atomic-group' for item in changes):
+            raise CloudSyncError('云端返回未协商的操作组，未推进同步位置。', 'INVALID_RESPONSE')
+        return changes, new_cursor
+    if type(result.get('version')) is not int or result['version'] != 1:
+        raise CloudSyncError('云端整组响应版本无效。', 'INVALID_RESPONSE')
+    previous, count = cursor, 0
+    def invalid():
+        raise CloudSyncError('云端操作组或顺序不完整，未推进同步位置。', 'INVALID_RESPONSE')
+    def check(change, seq):
+        if (not isinstance(change, dict) or type(change.get('seq')) is not int or change['seq'] != seq
+                or not isinstance(change.get('entityType'), str) or not re.fullmatch('[a-z]+', change['entityType'])
+                or not isinstance(change.get('entityId'), str) or not SAFE_ID.fullmatch(change['entityId'])
+                or type(change.get('version')) is not int or not 1 <= change['version'] <= 9007199254740991
+                or type(change.get('deleted')) is not bool
+                or (change['deleted'] and change.get('data') is not None)
+                or (not change['deleted'] and not isinstance(change.get('data'), dict))):
+            invalid()
+    for item in changes:
+        if isinstance(item, dict) and item.get('type') == 'atomic-group':
+            first, last, members = item.get('firstSeq'), item.get('lastSeq'), item.get('changes')
+            if (not isinstance(item.get('groupId'), str) or not re.fullmatch('[A-Za-z0-9_-]{1,200}', item['groupId'])
+                    or type(first) is not int or type(last) is not int or first < 1
+                    or not isinstance(members, list) or not 1 <= len(members) <= 100
+                    or last != first + len(members) - 1 or not first <= previous + 1 <= last):
+                invalid()
+            keys = set()
+            for index, member in enumerate(members):
+                check(member, first + index)
+                key = (member['entityType'], member['entityId'])
+                if key in keys: invalid()
+                keys.add(key)
+            previous = last; count += len(members)
+        else:
+            check(item, previous + 1); previous += 1; count += 1
+        if previous > new_cursor or count > 100: invalid()
+    if previous != new_cursor: invalid()
+    return changes, new_cursor
 
 
 def server_url(value):
@@ -64,10 +153,17 @@ class CloudClient:
         self.timeout = timeout
         self._opener = urllib.request.build_opener(_NoRedirect())
 
-    def request(self, method, path, payload=None, *, binary=None, limit=MAX_JSON, allow_missing=False):
+    def request(self, method, path, payload=None, *, binary=None, limit=MAX_JSON, allow_missing=False, connection_credentials=None):
         if not isinstance(path, str) or not path.startswith('/v1/') or '\\' in path or '#' in path:
             raise CloudSyncError('同步请求路径无效。', 'INVALID_REQUEST')
         headers = {'Accept': 'application/json'}
+        if connection_credentials is not None:
+            if method != 'POST' or path not in ('/v1/connections/' + op for op in CONNECTION_OPERATIONS):
+                raise CloudSyncError('连接配置操作无效。', 'INVALID_REQUEST')
+            device, secret = connection_credentials
+            if not _connection_b64(device) or not _connection_b64(secret):
+                raise CloudSyncError('连接设备凭据格式无效。', 'INVALID_REQUEST')
+            headers.update({'X-AIBro-Connection-Device': device, 'X-AIBro-Connection-Secret': secret})
         if self._token: headers['Authorization'] = 'Bearer ' + self._token
         if binary is not None:
             if not isinstance(binary, bytes) or len(binary) > MAX_BLOB: raise CloudSyncError('附件超过 64 MB 限制。', 'BLOB_LIMIT')
@@ -127,51 +223,39 @@ class CredentialStore:
     def __init__(self, directory):
         self.directory = Path(directory) / 'cloud-sync'
         if self.directory.is_symlink(): raise CloudSyncError('云端会话目录不能是符号链接。', 'UNSAFE_SESSION_PATH')
-        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True); self.directory.chmod(0o700)
+        self._file = SessionFile(self.directory, CloudSyncError)
         self.path = self.directory / 'cloud-session.json'
         self.service = 'AIWorkstation.CloudSync.' + hashlib.sha256(str(self.directory.resolve()).encode()).hexdigest()[:24]
         self._keyring = None
 
+    @contextmanager
+    def locked(self):
+        with self._file.locked(): yield
+
     def _write(self, value):
-        if self.directory.is_symlink() or self.path.is_symlink(): raise CloudSyncError('云端会话路径异常。', 'UNSAFE_SESSION_PATH')
-        fd, name = tempfile.mkstemp(prefix='.session-', dir=self.directory)
-        try:
-            os.fchmod(fd, 0o600)
-            with os.fdopen(fd, 'wb') as output:
-                output.write(json.dumps(value, ensure_ascii=False, allow_nan=False).encode()); output.flush(); os.fsync(output.fileno())
-            os.replace(name, self.path)
-        finally:
-            if os.path.exists(name): os.unlink(name)
+        self._file.write(value)
+
+    @staticmethod
+    def metadata(origin=None, usable=False):
+        return {'version': 1, 'generation': secrets.token_urlsafe(32), 'usable': usable, 'serverOrigin': origin}
 
     def save(self, session):
         data = dict(session)
-        token = data.pop('accessToken', None)
-        if not isinstance(token, str) or not token or len(token) > 32768 or any(ord(char) < 33 for char in token): raise CloudSyncError('云端登录响应无效。', 'INVALID_SESSION')
-        storage = 'protected-file'
-        data['accessToken'] = token
-        data['credentialStorage'] = storage
+        token = data.get('accessToken')
+        if not isinstance(token, str) or not token or len(token) > 32768 or any(ord(char) < 33 for char in token):
+            raise CloudSyncError('云端登录响应无效。', 'INVALID_SESSION')
+        data['credentialStorage'] = 'protected-file'
         self._write(data)
-        return storage
+        return 'protected-file'
 
     def load(self):
-        if not self.path.exists(): return None
-        if self.directory.is_symlink() or self.path.is_symlink(): raise CloudSyncError('云端会话路径异常。', 'UNSAFE_SESSION_PATH')
-        fd = os.open(self.path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
-        try:
-            metadata = os.fstat(fd)
-            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 65536 or metadata.st_uid != os.getuid(): raise CloudSyncError('云端会话文件异常。', 'UNSAFE_SESSION_PATH')
-            os.fchmod(fd, 0o600)
-            with os.fdopen(fd, 'rb', closefd=False) as stream: value = json.load(stream)
-        except (ValueError, UnicodeError): raise CloudSyncError('云端会话无法读取，请重新登录。', 'INVALID_SESSION') from None
-        finally: os.close(fd)
-        if not isinstance(value, dict): raise CloudSyncError('云端会话无法读取，请重新登录。', 'INVALID_SESSION')
-        if value.get('credentialStorage') == 'macos-keychain' and not value.get('accessToken'):
+        value = self._file.read()
+        if value and value.get('credentialStorage') == 'macos-keychain' and not value.get('accessToken'):
             raise CloudSyncError('旧云会话保存在钥匙串中。请通过 SSH 重新授权本机，或重新登录云账号；不会再弹出钥匙串窗口。', 'SSH_REAUTH_REQUIRED')
         return value
 
     def clear(self):
-        if self.directory.is_symlink() or self.path.is_symlink(): raise CloudSyncError('云端会话路径异常。', 'UNSAFE_SESSION_PATH')
-        self.path.unlink(missing_ok=True)
+        self._file.clear()
 
 
 class CloudSync:
@@ -184,6 +268,7 @@ class CloudSync:
         self._requested, self._busy, self._epoch = False, False, 0
         self._last_sync, self._last_error, self._last_code = None, None, None
         self._session = None
+        self._adopting_session = None
         try: self._session = self.credentials.load()
         except CloudSyncError as error: self._last_error, self._last_code = str(error), error.code
         self._auto = bool(self._session and self._session.get('autoSync', True))
@@ -233,6 +318,21 @@ class CloudSync:
             if not self._session: raise CloudSyncError('请先连接云端账号。', 'NOT_CONNECTED', 401)
             return dict(self._session), self._epoch
 
+    @staticmethod
+    def _same_session(a, b):
+        if a is None or b is None: return a is b
+        if not isinstance(a, dict) or not isinstance(b, dict): return False
+        def identity(value):
+            return (value.get('serverUrl'), value.get('account', {}).get('id'), value.get('device', {}).get('id'),
+                    (value.get('connectionSession') or {}).get('generation'))
+        return identity(a) == identity(b) and hmac.compare_digest(str(a.get('accessToken', '')).encode(), str(b.get('accessToken', '')).encode())
+
+    def _persisted_session(self, expected):
+        current = self.credentials.load()
+        if not self._same_session(expected, current):
+            raise CloudSyncError('云端登录状态已变化，请重新读取连接。', 'CONNECTION_SESSION_CHANGED', 409)
+        return current
+
     def _check_epoch(self, epoch):
         if self._closed.is_set() or epoch != self._epoch:
             raise CloudSyncError('云端连接已更改，本次同步已取消。', 'CANCELLED')
@@ -274,13 +374,18 @@ class CloudSync:
 
     def _adopt_ssh_session(self, session, epoch):
         """Commit a verified session while the sync and operation locks are held."""
-        with self._lock:
+        with self._lock, self.credentials.locked():
             self._check_epoch(epoch)
             target = {'serverUrl': session['serverUrl'], 'accountId': session['account']['id']}
             old_target = self.store.status().get('target')
             if old_target and old_target != target:
                 raise CloudSyncError('工作区绑定已变化，未采用本次 SSH 授权。', 'TARGET_MISMATCH', 409)
             previous = dict(self._session) if self._session else None
+            self._persisted_session(previous)
+            same_target = previous and previous.get('serverUrl') == session['serverUrl'] and previous.get('account', {}).get('id') == session['account']['id']
+            origin = (previous.get('connectionSession') or {}).get('serverOrigin') if same_target else None
+            session['connectionSession'] = self.credentials.metadata(origin)
+            self._adopting_session = session
             try:
                 session['credentialStorage'] = self.credentials.save(session)
                 # Re-check even with a reentrant lock: injected persistence hooks
@@ -288,19 +393,27 @@ class CloudSync:
                 self._check_epoch(epoch)
                 with self.workspace.lock(): self.store.bind_target(target)
             except Exception:
-                if epoch == self._epoch:
-                    if previous: self.credentials.save(previous)
+                current = self.credentials.load()
+                if epoch == self._epoch and (self._same_session(current, session) or self._same_session(current, previous)):
+                    if previous:
+                        previous['connectionSession'] = self.credentials.metadata((previous.get('connectionSession') or {}).get('serverOrigin'))
+                        self.credentials.save(previous); self._session = previous
                     else: self.credentials.clear()
-                else: self.credentials.clear()
+                    self._epoch += 1
+                elif self._same_session(current, session):
+                    self.credentials.clear()
                 raise
+            finally:
+                self._adopting_session = None
             self._session = session; self._auto = session['autoSync']; self._epoch += 1
             self._last_error = self._last_code = None
 
     def _set_auto(self, enabled):
         """Internal preference write; caller owns the necessary operation locks."""
-        with self._lock:
+        with self._lock, self.credentials.locked():
             if enabled: self._check_epoch(self._epoch)
             if self._session:
+                self._persisted_session(self._session)
                 session = dict(self._session); session['autoSync'] = enabled
                 session['credentialStorage'] = self.credentials.save(session); self._session = session
             self._auto = enabled
@@ -334,8 +447,14 @@ class CloudSync:
         self._wake.set(); return self.status()
 
     def disconnect(self):
-        with self._lock:
+        with self._lock, self.credentials.locked():
             session = self._session
+            current = self.credentials.load()
+            expected = self._adopting_session if self._adopting_session and self._same_session(current, self._adopting_session) else session
+            self._persisted_session(expected)
+            if current:
+                invalidated = {**current, 'connectionSession': self.credentials.metadata((current.get('connectionSession') or {}).get('serverOrigin'))}
+                self.credentials._write(invalidated)
             self._epoch += 1; self._session = None; self._auto = False; self._requested = False
             self.credentials.clear()
         if session:
@@ -343,9 +462,132 @@ class CloudSync:
             except CloudSyncError: pass
         return self.status()
 
+    @staticmethod
+    def _connection_view(session):
+        metadata = session.get('connectionSession')
+        if (not isinstance(metadata, dict) or set(metadata) != {'version', 'generation', 'usable', 'serverOrigin'}
+                or type(metadata['version']) is not int or metadata['version'] != 1
+                or not _connection_b64(metadata['generation']) or type(metadata['usable']) is not bool):
+            raise CloudSyncError('连接配置会话尚未准备，请重新读取能力。', 'CONNECTION_SESSION_CHANGED', 409)
+        if metadata['serverOrigin'] is not None and _connection_origin(metadata['serverOrigin']) != metadata['serverOrigin']:
+            raise CloudSyncError('连接配置会话地址无效。', 'CONNECTION_SESSION_CHANGED', 409)
+        return {'serverUrl': session['serverUrl'], 'accountId': session['account']['id'],
+                'sessionId': session['device']['id'], 'sessionGeneration': metadata['generation']}
+
+    def _connection_capture(self, expected=None, usable=False):
+        with self._lock, self.credentials.locked():
+            session, epoch = self._session_copy()
+            self._check_epoch(epoch)
+            session = self._persisted_session(session)
+            if 'connectionSession' not in session:
+                session = {**session, 'connectionSession': self.credentials.metadata()}
+                self.credentials.save(session); self._session = session
+            view = self._connection_view(session)
+            if expected is not None and expected != view:
+                raise CloudSyncError('云端登录状态已变化，未执行连接配置请求。', 'CONNECTION_SESSION_CHANGED', 409)
+            if usable and (not session['connectionSession']['usable'] or not session['connectionSession']['serverOrigin']):
+                raise CloudSyncError('请先核对并启用连接配置服务。', 'CONNECTION_NOT_READY', 409)
+            return dict(session), epoch
+
+    def _connection_check(self, session, epoch):
+        with self._lock, self.credentials.locked():
+            self._check_epoch(epoch)
+            self._persisted_session(session)
+
+    def _connection_unauthorized(self, session, epoch):
+        with self._lock, self.credentials.locked():
+            self._check_epoch(epoch)
+            self._persisted_session(session)
+            invalidated = {**session, 'connectionSession': self.credentials.metadata((session.get('connectionSession') or {}).get('serverOrigin'))}
+            self.credentials.save(invalidated); self._session = invalidated; self._epoch += 1
+            self._last_code, self._last_error = 'HTTP_401', '云端登录已失效，请重新登录。'
+
+    def _authenticated_client(self, session, epoch):
+        client, owner = self._client_factory(session['serverUrl'], session['accessToken']), self
+        class Client:
+            def __getattr__(self, name):
+                original = getattr(client, name)
+                if not callable(original): return original
+                def call(*args, **kwargs):
+                    try: return original(*args, **kwargs)
+                    except CloudSyncError as error:
+                        if error.status == 401: owner._connection_unauthorized(session, epoch)
+                        raise
+                return call
+        return Client()
+
+    def connections_capabilities(self, payload):
+        if (type(payload) is not dict or set(payload) - {'confirmedOrigin', 'session'}
+                or ('confirmedOrigin' in payload) != ('session' in payload)):
+            raise CloudSyncError('连接配置能力请求无效。', 'INVALID_REQUEST')
+        expected = payload.get('session')
+        if 'session' in payload and (type(expected) is not dict or set(expected) != {'serverUrl', 'accountId', 'sessionId', 'sessionGeneration'}
+                or type(payload['confirmedOrigin']) is not str):
+            raise CloudSyncError('连接配置会话快照无效。', 'INVALID_REQUEST')
+        session, epoch = self._connection_capture(expected)
+        client = self._client_factory(session['serverUrl'], session['accessToken'])
+        try: capabilities = client.request('GET', '/v1/sync/capabilities', allow_missing=True)
+        except CloudSyncError as error:
+            if error.status == 401: self._connection_unauthorized(session, epoch)
+            else: self._connection_check(session, epoch)
+            raise
+        self._connection_check(session, epoch)
+        feature = capabilities.get('encryptedConnectionProfiles') if isinstance(capabilities, dict) else None
+        supported = feature is not None and type(capabilities.get('protocol')) is int and capabilities['protocol'] == 1
+        if supported:
+            if (type(feature) is not dict or type(feature.get('version')) is not int or feature['version'] != 1
+                    or type(feature.get('maxProfiles')) is not int or not 1 <= feature['maxProfiles'] <= 32
+                    or type(feature.get('maxDevices')) is not int or not 1 <= feature['maxDevices'] <= 16
+                    or type(feature.get('maxBytes')) is not int or not 0 < feature['maxBytes'] <= CONNECTION_LIMIT):
+                raise CloudSyncError('连接配置协议不兼容。', 'CONNECTION_UNSUPPORTED', 409)
+            origin = _connection_origin(feature.get('origin'))
+        else: origin = None
+        with self._lock, self.credentials.locked():
+            self._check_epoch(epoch); self._persisted_session(session)
+            current = session['connectionSession']
+            confirmed = payload.get('confirmedOrigin')
+            if confirmed is not None and (not supported or confirmed != origin):
+                raise CloudSyncError('公开服务地址已变化，请重新核对。', 'CONNECTION_ORIGIN_CHANGED', 409)
+            trusted = supported and (confirmed == origin or current['serverOrigin'] == origin)
+            # Never silently replace the pinned public origin, including after
+            # a server capability change or a downgrade to an old server.
+            chosen = origin if confirmed is not None else current['serverOrigin']
+            if current['usable'] != trusted or current['serverOrigin'] != chosen:
+                session = {**session, 'connectionSession': self.credentials.metadata(chosen, trusted)}
+                self.credentials.save(session); self._session = session
+            return {'supported': supported, 'origin': origin, 'requiresConfirmation': bool(supported and not trusted),
+                    'usable': trusted, 'session': self._connection_view(session)}
+
+    def connections_transport(self, payload):
+        if (type(payload) is not dict or set(payload) != {'session', 'operation', 'deviceId', 'deviceSecret', 'payload'}
+                or type(payload.get('operation')) is not str or payload['operation'] not in CONNECTION_OPERATIONS or type(payload.get('payload')) is not dict
+                or not _connection_b64(payload.get('deviceId')) or not _connection_b64(payload.get('deviceSecret'))):
+            raise CloudSyncError('连接配置请求格式无效。', 'INVALID_REQUEST')
+        expected = payload['session']
+        if type(expected) is not dict or set(expected) != {'serverOrigin', 'serverUrl', 'accountId', 'sessionId', 'sessionGeneration'}:
+            raise CloudSyncError('连接配置会话快照无效。', 'INVALID_REQUEST')
+        try:
+            if len(json.dumps(payload['payload'], ensure_ascii=False, allow_nan=False).encode()) > CONNECTION_LIMIT:
+                raise ValueError()
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+            raise CloudSyncError('连接配置请求超过限制或格式无效。', 'INVALID_REQUEST') from None
+        session, epoch = self._connection_capture({k: v for k, v in expected.items() if k != 'serverOrigin'}, usable=True)
+        if session['connectionSession']['serverOrigin'] != expected['serverOrigin']:
+            raise CloudSyncError('连接配置服务身份已变化。', 'CONNECTION_SESSION_CHANGED', 409)
+        client = self._client_factory(session['serverUrl'], session['accessToken'])
+        try:
+            result = client.request('POST', '/v1/connections/' + payload['operation'], payload['payload'],
+                                    limit=CONNECTION_LIMIT, connection_credentials=(payload['deviceId'], payload['deviceSecret']))
+        except CloudSyncError as error:
+            if error.status == 401: self._connection_unauthorized(session, epoch)
+            else: self._connection_check(session, epoch)
+            return {'status': error.status, 'body': {}}
+        self._connection_check(session, epoch)
+        return {'status': 200, 'body': result}
+
     def devices(self):
         session, epoch = self._session_copy()
-        result = self._client_factory(session['serverUrl'], session['accessToken']).request('GET', '/v1/devices')
+        result = self._authenticated_client(session, epoch).request('GET', '/v1/devices')
         self._check_epoch(epoch)
         if not isinstance(result.get('devices'), list) or len(result['devices']) > 1000:
             raise CloudSyncError('云端设备列表无效。', 'INVALID_RESPONSE')
@@ -362,7 +604,7 @@ class CloudSync:
     def revoke(self, device_id):
         if not isinstance(device_id, str) or not SAFE_ID.fullmatch(device_id): raise CloudSyncError('设备 ID 无效。', 'INVALID_DEVICE')
         session, epoch = self._session_copy()
-        self._client_factory(session['serverUrl'], session['accessToken']).request('DELETE', '/v1/devices/' + device_id)
+        self._authenticated_client(session, epoch).request('DELETE', '/v1/devices/' + device_id)
         self._check_epoch(epoch)
         if session['device']['id'] == device_id: return self.disconnect()
         return self.devices()
@@ -484,7 +726,9 @@ class CloudSync:
             self._check_epoch(epoch)
             target = {'serverUrl': session['serverUrl'], 'accountId': session['account']['id']}
             if self.store.status().get('target') != target: raise CloudSyncError('同步账号与本地绑定不一致，已停止。', 'TARGET_MISMATCH', 409)
-            client = self._client_factory(session['serverUrl'], session['accessToken'])
+            client = self._authenticated_client(session, epoch)
+            grouped = grouped_pull_supported(client.request('GET', '/v1/sync/capabilities', allow_missing=True))
+            self._check_epoch(epoch)
             with self.workspace.lock(): operations, manifest = self.store.pending(limit=100), self.store.blob_manifest()
             bounded = []
             size = 32
@@ -509,11 +753,9 @@ class CloudSync:
             while pages < 100:
                 self._check_epoch(epoch)
                 cursor = self.store.status().get('cursor', 0)
-                result = client.request('GET', '/v1/sync/pull?' + urllib.parse.urlencode({'cursor': cursor, 'limit': 100}))
-                changes, new_cursor = result.get('changes'), result.get('cursor')
-                if not isinstance(changes, list) or len(changes) > 100 or type(new_cursor) is not int or new_cursor < cursor or type(result.get('hasMore')) is not bool:
-                    raise CloudSyncError('云端增量响应无效，未推进同步位置。', 'INVALID_RESPONSE')
-                if result['hasMore'] and new_cursor <= cursor: raise CloudSyncError('云端增量游标未前进。', 'INVALID_RESPONSE')
+                route = '/v1/sync/pull-group?' if grouped else '/v1/sync/pull?'
+                result = client.request('GET', route + urllib.parse.urlencode({'cursor': cursor, 'limit': 100}))
+                changes, new_cursor = validate_pull_page(result, cursor, grouped)
                 stage, blobs = self._stage_blobs(client, changes, epoch)
                 try:
                     self._check_epoch(epoch)
@@ -557,8 +799,9 @@ class CloudSync:
             try:
                 if choice == 'remote':
                     session, epoch = self._session_copy()
-                    client = self._client_factory(session['serverUrl'], session['accessToken'])
-                    stage, blobs = self._stage_blobs(client, conflict.get('remote'), epoch); self._check_epoch(epoch)
+                    client = self._authenticated_client(session, epoch)
+                    remote_content = [member.get('remote') for member in conflict['groupMembers']] if conflict.get('groupId') else conflict.get('remote')
+                    stage, blobs = self._stage_blobs(client, remote_content, epoch); self._check_epoch(epoch)
                 self.workspace.resolve_cloud_conflict(conflict_id, choice, revision=revision, blobs=blobs)
             finally:
                 if stage: self._clear_stage(stage, blobs)

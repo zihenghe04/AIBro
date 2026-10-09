@@ -35,12 +35,14 @@
   if(updated)assertAccess(updated,command.conversationId);
   const conversation=current(),fields=['draftFileReferences','excludedFileReferenceKeys','draftAttachmentIds'];
   const before=new Map(fields.map(k=>[k,{exists:Object.hasOwn(conversation,k),value:structuredClone(conversation[k])}]));
+  const reference=updated||command.ref||{type:'import',id:command.id},contextBefore=F.contextSnapshot(conversation,reference);
   if(command.action==='add-reference')F.stage(conversation,command.ref);
   else if(command.action==='refresh-reference')F.stage(conversation,updated);
   else {F.remove(conversation,command.ref||{type:'import',id:command.id});if(command.action==='remove-attachment')conversation.draftAttachmentIds=(conversation.draftAttachmentIds||[]).filter(id=>id!==command.id);}
   const applied=new Map(fields.map(k=>[k,JSON.stringify(conversation[k])]));
+  const contextAfter=F.contextSnapshot(conversation,reference);
   try{if(await hooks.save?.()===false)throw Error(t('未能保存修改，请重试。','Could not save changes. Try again.'));}
-  catch(error){for(const key of fields)if(JSON.stringify(conversation[key])===applied.get(key)){const old=before.get(key);if(old.exists)conversation[key]=old.value;else delete conversation[key];}throw error;}
+  catch(error){F.rollbackContext(conversation,reference,contextBefore,contextAfter);for(const key of fields)if(JSON.stringify(conversation[key])===applied.get(key)){const old=before.get(key);if(old.exists)conversation[key]=old.value;else delete conversation[key];}throw error;}
  }
 
  function close(){epoch++;aborter?.abort();if(panel){panel.hidden=true;results.replaceChildren();status.textContent='';filter.value='';rows=[];}button?.setAttribute('aria-expanded','false');doc.querySelector('#agentInput')?.removeAttribute('aria-activedescendant');trigger=null;}

@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AB0000000000000000000009 /* AppShortcuts.strings in Resources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000010; };
+		AB0000000000000000000007 /* VoiceAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000008; };
+		AB0000000000000000000005 /* VoiceShortcutInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000006; };
+		AB0000000000000000000003 /* NativeVoiceCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000004; };
+		AB0000000000000000000001 /* VoiceCaptureCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000002; };
+        AA0000000000000000000005 /* NativeRequestStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000006; };
+        AA0000000000000000000003 /* SharedInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000004; };
 		AA0000000000000000000001 = {isa = PBXBuildFile; fileRef = AA0000000000000000000002; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
@@ -28,6 +35,14 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AB0000000000000000000011 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/AppShortcuts.strings; sourceTree = "<group>"; };
+		AB0000000000000000000012 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/AppShortcuts.strings"; sourceTree = "<group>"; };
+		AB0000000000000000000008 /* VoiceAppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAppShortcuts.swift; sourceTree = "<group>"; };
+		AB0000000000000000000006 /* VoiceShortcutInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceShortcutInbox.swift; sourceTree = "<group>"; };
+		AB0000000000000000000004 /* NativeVoiceCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeVoiceCapture.swift; sourceTree = "<group>"; };
+		AB0000000000000000000002 /* VoiceCaptureCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCaptureCore.swift; sourceTree = "<group>"; };
+        AA0000000000000000000006 /* NativeRequestStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRequestStream.swift; sourceTree = "<group>"; };
+        AA0000000000000000000004 /* SharedInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedInbox.swift; sourceTree = "<group>"; };
 		AA0000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileBridge.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
@@ -110,6 +125,13 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				AA0000000000000000000002,
+				AA0000000000000000000006 /* NativeRequestStream.swift */,
+				AB0000000000000000000010 /* AppShortcuts.strings */,
+				AB0000000000000000000008 /* VoiceAppShortcuts.swift */,
+				AB0000000000000000000006 /* VoiceShortcutInbox.swift */,
+				AB0000000000000000000004 /* NativeVoiceCapture.swift */,
+				AB0000000000000000000002 /* VoiceCaptureCore.swift */,
+				AA0000000000000000000004 /* SharedInbox.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -220,6 +242,7 @@
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				"zh-Hans",
 				en,
 				Base,
 			);
@@ -245,6 +268,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
+				AB0000000000000000000009 /* AppShortcuts.strings in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
@@ -282,6 +306,12 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				AA0000000000000000000001,
+				AA0000000000000000000005 /* NativeRequestStream.swift in Sources */,
+				AB0000000000000000000007 /* VoiceAppShortcuts.swift in Sources */,
+				AB0000000000000000000005 /* VoiceShortcutInbox.swift in Sources */,
+				AB0000000000000000000003 /* NativeVoiceCapture.swift in Sources */,
+				AB0000000000000000000001 /* VoiceCaptureCore.swift in Sources */,
+				AA0000000000000000000003 /* SharedInbox.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				B81DE033C6384B3C8FA17E91 /* WorkspaceDatabase.swift in Sources */,
 			);
@@ -314,6 +344,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXVariantGroup section */
+		AB0000000000000000000010 /* AppShortcuts.strings */ = {isa = PBXVariantGroup; children = (AB0000000000000000000011 /* en */, AB0000000000000000000012 /* zh-Hans */,); name = AppShortcuts.strings; sourceTree = "<group>"; };
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
 			isa = PBXVariantGroup;
 			children = (
@@ -448,14 +479,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 49;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.3;
+				MARKETING_VERSION = 0.4.9;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = app.aibro.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -471,14 +502,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 49;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.3;
+				MARKETING_VERSION = 0.4.9;
 				PRODUCT_BUNDLE_IDENTIFIER = app.aibro.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -504,8 +535,8 @@
 				CODE_SIGN_ENTITLEMENTS = "ShareExtension/ShareExtension.entitlements";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				SWIFT_VERSION = 5.0;
-				CURRENT_PROJECT_VERSION = 3;
-				MARKETING_VERSION = 0.1.3;
+				CURRENT_PROJECT_VERSION = 49;
+				MARKETING_VERSION = 0.4.9;
 				CODE_SIGN_STYLE = Automatic;
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -523,8 +554,8 @@
 				CODE_SIGN_ENTITLEMENTS = "ShareExtension/ShareExtension.entitlements";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				SWIFT_VERSION = 5.0;
-				CURRENT_PROJECT_VERSION = 3;
-				MARKETING_VERSION = 0.1.3;
+				CURRENT_PROJECT_VERSION = 49;
+				MARKETING_VERSION = 0.4.9;
 				CODE_SIGN_STYLE = Automatic;
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -546,8 +577,8 @@
 				CODE_SIGN_ENTITLEMENTS = "TodayWidget/TodayWidget.entitlements";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				SWIFT_VERSION = 5.0;
-				CURRENT_PROJECT_VERSION = 3;
-				MARKETING_VERSION = 0.1.3;
+				CURRENT_PROJECT_VERSION = 49;
+				MARKETING_VERSION = 0.4.9;
 				CODE_SIGN_STYLE = Automatic;
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -565,8 +596,8 @@
 				CODE_SIGN_ENTITLEMENTS = "TodayWidget/TodayWidget.entitlements";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				SWIFT_VERSION = 5.0;
-				CURRENT_PROJECT_VERSION = 3;
-				MARKETING_VERSION = 0.1.3;
+				CURRENT_PROJECT_VERSION = 49;
+				MARKETING_VERSION = 0.4.9;
 				CODE_SIGN_STYLE = Automatic;
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";

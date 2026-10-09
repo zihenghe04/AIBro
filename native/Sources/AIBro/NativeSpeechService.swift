@@ -34,7 +34,7 @@ struct NativeSpeechConfiguration: Codable, Equatable, Sendable {
 }
 
 enum NativeSpeechError: LocalizedError, Equatable {
-    case configuration, configurationTooLong, unavailable, credential, changed, invalidAudio, tooLong, audioTooLarge, responseTooLarge, invalidResponse, noSpeech, redirect, timeout, network, http(Int)
+    case configuration, configurationTooLong, unavailable, credential, changed, schemeChanged, invalidAudio, tooLong, audioTooLarge, responseTooLarge, invalidResponse, noSpeech, redirect, timeout, network, http(Int)
     var errorDescription: String? {
         switch self {
         case .configuration:return nativeUI("语音服务地址或模型配置无效，请检查协议、HTTPS 地址和模型。", "Invalid speech service settings. Check the protocol, HTTPS URL and model.")
@@ -42,6 +42,7 @@ enum NativeSpeechError: LocalizedError, Equatable {
         case .unavailable:return nativeUI("语音服务暂不可用。", "Speech service is unavailable.")
         case .credential:return nativeUI("独立语音 Key 无法读取或保存。请为当前服务重新填写，原配置保留。", "The independent speech Key could not be read or saved. Enter a Key for this service; previous settings are retained.")
         case .changed:return nativeUI("语音配置或当前页面已变化，本次操作已停止。", "Speech settings or the current page changed. This operation was stopped.")
+        case .schemeChanged:return nativeUI("方案已在另一处更新，草稿未覆盖。请关闭后重新打开设置，再核对并保存。", "The scheme changed elsewhere; the draft did not overwrite it. Reopen settings, review and save again.")
         case .invalidAudio:return nativeUI("无法读取完整录音。原文件未改动。", "The complete recording could not be read. The original file is unchanged.")
         case .tooLong:return nativeUI("此阿里语音接口单次最多处理 5 分钟，请使用较短录音。未截断或发送音频。", "This Alibaba speech API accepts up to 5 minutes. Use a shorter recording; no truncated audio was sent.")
         case .audioTooLarge:return nativeUI("录音超出请求大小限制（阿里编码后 10MB，OpenAI WAV 25MB），未截断或发送。", "The recording exceeds the request limit (Alibaba: 10MB encoded; OpenAI: 25MB WAV). No truncated audio was sent.")
@@ -61,6 +62,38 @@ enum NativeSpeechService {
     typealias Transport = @Sendable (URLRequest) async throws -> Response
     static let responseLimit=2*1024*1024
     static let deadline:TimeInterval=120
+    /// This is an explicit, billable protocol check, not an ASR quality test.
+    /// It uses one second of generated silence; no file or microphone is read.
+    /// Official contracts checked 2026-10-09:
+    /// https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create
+    /// https://help.aliyun.com/en/model-studio/fun-asr-flash-recorded-speech-recognition-http-api
+    static func testConnection(configuration:NativeSpeechConfiguration,key:String,
+                               transport:@escaping Transport = {try await NativeSpeechHTTP.send($0,deadline:30)}) async throws {
+        try Task.checkCancellation()
+        var request=try Self.request(wav:connectionTestAudio(),configuration:configuration,key:key)
+        request.timeoutInterval=30
+        do {
+            let response=try await transport(request)
+            try Task.checkCancellation()
+            guard response.body.count<=responseLimit else{throw NativeSpeechError.responseTooLarge}
+            guard (200..<300).contains(response.status) else{throw NativeSpeechError.http(response.status)}
+            // Empty text is valid for silence. HTML, generic 200 JSON, errors,
+            // and another provider's response shape are not a successful check.
+            _ = try responseText(response.body,provider:configuration.provider)
+        } catch is CancellationError {throw CancellationError()}
+        catch let error as NativeSpeechError {throw error}
+        catch {if Task.isCancelled{throw CancellationError()};throw NativeSpeechError.network}
+    }
+    static func connectionTestAudio()->Data {
+        let sampleCount=16000
+        var wav=Data()
+        func ascii(_ value:String){wav.append(contentsOf:value.utf8)}
+        func u16(_ value:UInt16){var value=value.littleEndian;withUnsafeBytes(of:&value){wav.append(contentsOf:$0)}}
+        func u32(_ value:UInt32){var value=value.littleEndian;withUnsafeBytes(of:&value){wav.append(contentsOf:$0)}}
+        ascii("RIFF");u32(UInt32(sampleCount*2+36));ascii("WAVEfmt ");u32(16)
+        u16(1);u16(1);u32(16000);u32(32000);u16(2);u16(16);ascii("data");u32(UInt32(sampleCount*2))
+        wav.append(Data(repeating:0,count:sampleCount*2));return wav
+    }
     /// Full recording only. Neither this service nor its failure path edits the
     /// source, starts a microphone, falls back to another provider, or retries.
     static func transcribe(fileURL:URL,configuration:NativeSpeechConfiguration,key:String,
@@ -115,12 +148,16 @@ enum NativeSpeechService {
         }
         return r
     }
-    static func transcript(_ data:Data,provider:NativeSpeechConfiguration.Provider)throws->String {
+    private static func responseText(_ data:Data,provider:NativeSpeechConfiguration.Provider)throws->String {
         guard data.count<=responseLimit,let body=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],body["error"]==nil,body["code"]==nil else{throw NativeSpeechError.invalidResponse}
         let text:String?
         if provider == .aliyun {text=(body["output"] as? [String:Any])?["text"] as? String}
         else {text=body["text"] as? String}
         guard let text else{throw NativeSpeechError.invalidResponse}
+        return text
+    }
+    static func transcript(_ data:Data,provider:NativeSpeechConfiguration.Provider)throws->String {
+        let text=try responseText(data,provider:provider)
         guard !text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else{throw NativeSpeechError.noSpeech}
         return text
     }

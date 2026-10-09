@@ -17,6 +17,7 @@ import { KitChoicebox, KitCheckbox, KitSwitch, KitRadioGroup, KitSegmentedContro
 import { ReviewSummary, ReviewHeading, ReviewModeControl, ReviewDiffTools, ReviewActions, ReviewEmptyState, ReviewChangeCard } from './review-surfaces.jsx';
 import { LibraryToolbar, LibrarySelection, LibraryEmpty, ProjectSourceActions, ProjectMetrics } from './project-surfaces.jsx';
 import { CloudSyncOverview, CloudSSHConnection } from './cloud-surfaces.jsx';
+import { ConnectionSyncSettingsSurface } from './connection-sync-settings.jsx';
 import { CloudSSHStorage, CloudAccountConnection } from './cloud-maintenance-surfaces.jsx';
 import { CloudConflictReview } from './cloud-conflict-review.jsx';
 import { ConversationOrganizerView } from './conversation-organizer.jsx';
@@ -33,8 +34,10 @@ import { PDFReaderToolbar } from './pdf-reader-surfaces.jsx';
 import { ComposerEditor, ComposerAction, ComposerDictationStatus, PdfReadModeControl } from './composer-surfaces.jsx';
 import { MessageActionBar } from './message-actions.jsx';
 import { ModelPickerSurface } from './model-picker-surfaces.jsx';
+import { ClaudeAuthSurface } from './claude-auth-surface.jsx';
 import { BenchoAddMenu } from './bencho-add-menu.jsx';
 import { ResearchWikiHeader, ResearchWikiCards, ResearchWikiComposer } from './research-wiki-surfaces.jsx';
+import { APIProfileBar } from './api-profile-surfaces.jsx';
 import { ModelSettingsSurface } from './model-settings-surfaces.jsx';
 import { SettingsNavigation } from './settings-workspace-surfaces.jsx';
 import { ImportSurface } from './import-surfaces.jsx';
@@ -69,12 +72,12 @@ const components = new Map(Object.entries({
   AgentLifecycleSummary, AgentLifecycleActions, AgentReceipt, AgentActivitySummary, AgentProcessTabs,
   KitChoicebox, KitCheckbox, KitSwitch, KitRadioGroup, KitSegmentedControl, KitTabs, KitPermissionPicker, KitReadConfirmation, KitSearchInput, KitSelect,
   ProjectLibraryNavigation, ProjectLibraryBreadcrumb, LibraryDataTable, ProjectMemoryActions, ProjectOverview, TaskCreateForm, TaskDetailSurface, ProjectBoard: ProjectBoardPanel, ProjectScheduleSurface,
-  LibraryToolbar, LibrarySelection, LibraryEmpty, ProjectSourceActions, ProjectMetrics, CloudSyncOverview, CloudSSHConnection, CloudSSHStorage, CloudAccountConnection, CloudConflictReview, ConversationOrganizerView, CommandSearchResults, QueueSurface,
+  LibraryToolbar, LibrarySelection, LibraryEmpty, ProjectSourceActions, ProjectMetrics, CloudSyncOverview, CloudSSHConnection, CloudSSHStorage, CloudAccountConnection, CloudConflictReview, ConnectionSyncSettingsSurface, ConversationOrganizerView, CommandSearchResults, QueueSurface,
   FeedbackActions, FeedbackEditor,
-  MessageActionBar,
+  MessageActionBar, ClaudeAuthSurface,
   CitationPeek, CitationSourceList,
   CanvasEditSurface, ContextWorkbenchSurface, PDFReaderToolbar, ComposerEditor, ComposerAction, ComposerDictationStatus, PdfReadModeControl, ModelPickerSurface, BenchoAddMenu, ResearchWikiHeader, ResearchWikiCards, ResearchWikiComposer,
-  PlanReviewSurface, ActivityCenterSurface, ActivityCenterBadge, ComparisonPicker, SourceComparisonSurface, ModelSettingsSurface, SettingsNavigation, ImportSurface,
+  PlanReviewSurface, ActivityCenterSurface, ActivityCenterBadge, ComparisonPicker, SourceComparisonSurface, APIProfileBar, ModelSettingsSurface, SettingsNavigation, ImportSurface,
   ReviewSummary, ReviewHeading, ReviewModeControl, ReviewDiffTools, ReviewActions, ReviewEmptyState, ReviewChangeCard,
   RunHistoryToolbar, RunHistoryList, RunHistoryDetail, ConversationReadingMode, RunCheckpointCard, NoteDraftRecovery, ArtifactProvenanceSurface, DocumentToolbar, DocumentFiles, ProjectOutputs: ProjectOutputsPanel,
 }));

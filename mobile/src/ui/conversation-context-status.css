@@ -1,0 +1,5 @@
+.conversation-context-status { min-width: 0; padding: 8px 2px 2px; color: var(--muted); }
+.conversation-context-status__message, .conversation-context-status__error { margin: 0; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.conversation-context-status__actions { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 2px; }
+.conversation-context-status__actions > button { max-width: 100%; white-space: normal; }
+.conversation-context-status__error { color: var(--danger, #b33); margin-top: 4px; }

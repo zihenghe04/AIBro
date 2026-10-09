@@ -37,7 +37,7 @@ export async function browserRequest(url, options, vault, request = fetch) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + saved.token },
       body: JSON.stringify({ url, method: options.method || "GET", headers: options.headers, body: options.body }),
-      redirect: "error", credentials: "omit", signal: AbortSignal.timeout(120000),
+      redirect: "error", credentials: "omit", signal: options.signal || AbortSignal.timeout(120000),
     });
     return response;
   }

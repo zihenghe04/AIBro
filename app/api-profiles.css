@@ -1,0 +1,4 @@
+.api-profile-bar{padding:0 0 20px;margin:0 0 20px;border-bottom:1px solid var(--line);min-width:0}
+.api-profile-selection,.api-profile-edit{display:flex;align-items:center;gap:10px;min-width:0}.api-profile-selection{margin-bottom:10px}.api-profile-label{font-size:13px;color:var(--muted);white-space:nowrap}.api-profile-selection .kit-select-wrap,.api-profile-edit>div:first-child{flex:1;min-width:0}.api-profile-bar button{white-space:nowrap}.api-profile-bar input{font-size:14px!important}.api-profile-bar [role=status]{line-height:1.6}.api-profile-host{grid-column:1/-1;width:100%;min-width:0}.api-profile-host:empty{display:none}
+@media(max-width:580px){.api-profile-edit{flex-wrap:wrap}.api-profile-edit>div:first-child{flex-basis:100%}.api-profile-bar input{font-size:16px!important}}
+@media(prefers-reduced-motion:reduce){.api-profile-bar *{transition:none!important;animation:none!important}}

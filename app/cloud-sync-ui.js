@@ -313,13 +313,17 @@
         try {
           const result = await request('/__cloud/conflicts');
           if (!current() || version !== loadVersion) return;
-          entries = list(result.conflicts || result.data).map(item => ({
+          const preview = item => ({
             id: item.id, revision: item.revision, remoteVersion: item.remoteVersion,
+            groupId: item.groupId,
             title: text(item.title || item.local?.title || item.local?.name || item.remote?.title || item.remote?.name || item.entityId || '内容冲突'),
             localPreview: conflictPreview(item.local), remotePreview: conflictPreview(item.remote),
             localFields: conflictText(item.local), remoteFields: conflictText(item.remote),
             localDeleted: item.local == null || item.local?.deleted === true || item.local?.tombstone === true,
             remoteDeleted: item.remote == null || item.remote?.deleted === true || item.remote?.tombstone === true,
+          });
+          entries = list(result.conflicts || result.data).map(item => ({ ...preview(item),
+            groupMembers: item.groupId ? list(item.groupMembers).map(preview) : undefined,
           }));
         } catch (failure) {
           if (current() && version === loadVersion) error = { message: failure.message, staleId: '*' };
@@ -331,6 +335,7 @@
         if (!current() || working || !['local','remote'].includes(choice)) return;
         const shown = entries.find(item => item.id === id && item.revision === revision);
         if (!shown || typeof revision !== 'string' || !/^[a-f0-9]{64}$/.test(revision) || error?.staleId === '*' || error?.staleId === id) return;
+        if (shown.groupId && choice !== 'remote') return;
         if (hostBusy()) { error = { message: '请先结束当前编辑，再处理冲突。' }; paintConflicts(); return; }
         working = true; resolvingId = id; error = null; paintConflicts();
         let failure;

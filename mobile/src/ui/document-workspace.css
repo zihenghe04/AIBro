@@ -1,0 +1,29 @@
+/* One scroll surface for the document; fixed controls remain within the sheet. */
+.sheet-head { gap: 14px; }
+.sheet-head h2 { min-width: 0; overflow-wrap: anywhere; }
+.sheet-head > button { flex: 0 0 auto; white-space: nowrap; min-height: 44px; }
+#sheet.document-sheet { width: min(100%, 800px); height: var(--document-viewport, 94dvh); max-height: 96dvh; padding: 0; overflow: hidden; border-radius: 24px 24px 0 0; }
+#sheet.document-sheet[open] { display: flex; flex-direction: column; }
+.document-sheet > .sheet-head { position: static; flex: 0 0 auto; margin: 0; padding: 14px 18px 8px; gap: 12px; }
+.document-sheet > .sheet-head h2 { font-size: 17px; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.document-sheet > .sheet-head button { padding: 0 8px; font-size: 14px; }
+.document-sheet > .sheet-status { flex-shrink: 0; margin: 0 18px 8px; }
+#document-toolbar-root { flex: 0 0 auto; padding-inline: 12px; border-bottom: 1px solid var(--line); }
+.document-body { flex: 1 1 auto; min-height: 0; padding: 16px 20px 32px; overflow: auto; overscroll-behavior: contain; scroll-padding-block: 20px; }
+.document-body .reader { padding: 0; font-size: 16px; line-height: 1.85; overflow-wrap: anywhere; }
+.document-body .reader > :first-child { margin-top: 0; }
+.document-body .reader pre { max-width: 100%; overflow: auto; overscroll-behavior: contain; }
+.document-body .reader table { max-width: 100%; display: block; overflow: auto; }
+.document-body .reader img { max-width: 100%; height: auto; }
+.document-editor { margin: 0; gap: 16px; }
+.document-title { margin: 0; color: var(--muted); font-size: 12px; }
+.document-title input { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 9px 0 14px; font-size: 22px; font-weight: 650; line-height: 1.45; background: transparent; }
+.document-source { display: block; min-height: 240px; width: 100%; padding: 0; border: 0; border-radius: 0; resize: none; overflow: hidden; background: transparent; line-height: 1.8; font-size: 16px; tab-size: 2; }
+.document-source:focus { outline: none; box-shadow: none; }
+.document-source:focus-visible { outline: 1px solid var(--line); outline-offset: 6px; }
+.document-source:disabled { opacity: 1; color: var(--muted); }
+.document-sheet [hidden] { display: none !important; }
+#document-save-root { flex: 0 0 auto; padding: 8px 18px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--surface); }
+#document-origin-root:empty { display: none; }
+@media (min-width: 760px) { #sheet.document-sheet { margin-block: auto; border-radius: 24px; } .document-body { padding-inline: 32px; } }
+@media (prefers-reduced-motion: reduce) { #sheet.document-sheet[open] { animation: none; } }

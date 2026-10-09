@@ -4,8 +4,11 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import { Share } from "@capacitor/share";
 import { IndexedAdapter } from "./store.js";
 import { httpError } from "./http-error.js";
+import { nativeModelStream, fetchModelStream } from "./model-stream.js";
 import { tabVault, browserRequest, browserNotifications, claimWorkspace, extractPDF } from "./web-platform.js";
 export const native = Capacitor.isNativePlatform();
+export const platformName = Capacitor.getPlatform();
+export const deviceLabel = platformName === "android" ? "AI Bro Android" : native ? "AI Bro iPhone" : "AI Bro Web";
 export const Bridge = registerPlugin("MobileBridge");
 export const adapter = native
   ? {
@@ -20,7 +23,7 @@ export const adapter = native
         ? "aibro-mobile-demo-v1"
         : "aibro-mobile-v1",
     );
-// Keychain on iOS; browser credentials are scoped to this tab.
+// Keychain on iOS, Keystore on Android; browser credentials stay in this tab.
 const secrets = native ? null : tabVault(sessionStorage, "aibro-web-session:" + (new URLSearchParams(location.search).get("demo") === "1" ? "demo:" : "live:"));
 export const vault = {
   get: async (key) =>
@@ -97,6 +100,24 @@ export async function http(
     return typeof data === "string" ? JSON.parse(data) : data;
   } catch {
     throw Error("服务返回了无法识别的内容");
+  }
+}
+export async function httpStream(url, options = {}) {
+  const u = new URL(url);
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname))) throw Error("请使用 HTTPS 地址");
+  if (u.username || u.password) throw Error("地址不可包含账号密码");
+  // AbortSignal.any is not available on the oldest supported iOS WebKit.
+  const controller = new AbortController();
+  const abort = () => controller.abort(options.signal?.reason);
+  const timer = setTimeout(() => controller.abort(new DOMException("模型连接超时", "TimeoutError")), 180000);
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) abort();
+  const init = { ...options, signal: controller.signal, method: options.method || "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...options.headers } };
+  try {
+    return await (native ? nativeModelStream(Bridge, url, init) : fetchModelStream((u, o) => browserRequest(u, o, vault), url, init));
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
   }
 }
 let blobDB;

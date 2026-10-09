@@ -1,0 +1,47 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
+import { Store, MemoryAdapter } from '../src/store.js';
+import { ask } from '../src/ai.js';
+import { applyPlan } from '../src/agent-tools.js';
+import { fetchModelStream } from '../src/model-stream.js';
+import { readEvent } from '../src/agenda.js';
+
+test('iOS embedded agenda fixture uses structured clarification then real proposal in the same conversation', async () => {
+  const source = await readFile(new URL('../ios/App/AppTests/MobileNativeTests.swift', import.meta.url), 'utf8');
+  const script = source.match(/static let agendaClarificationFixtureScript = #"""\n([\s\S]*?)\n\s*"""#/);
+  assert.ok(script);
+  const window = { fetch: async () => { throw Error('External request prohibited'); } };
+  vm.runInNewContext(script[1], { window, Response, ReadableStream, TextEncoder, setTimeout });
+  const store = await new Store(new MemoryAdapter()).load();
+  await store.tx(state => { state.settings.model = { base: 'https://responses.fixture.invalid/v1', model: 'qa-ios-clarification', format: 'responses' }; });
+  await store.put('conversations', { id: 'qa-clarification', title: '合成澄清', projectId: null });
+  const options = { store, conversationID: 'qa-clarification', vault: { get: async () => 'synthetic-ios-clarification-key' },
+    stream: (url, config) => fetchModelStream(window.fetch, url, config) };
+  const first = await ask({ ...options, prompt: '帮我新建日程：合成讨论，时间还没定' });
+  assert.equal(first.status, 'completed');
+  assert.equal(first.clarification.status, 'needs_input');
+  assert.deepEqual(first.clarification.requests, [{ kind: 'agenda', operation: 'create', fields: ['start', 'end'] }]);
+  assert.match(first.text, /请补充日程/);
+  assert.match(first.text, /尚未保存/);
+  assert.equal(first.pendingPlan, null);
+  assert.equal(window.__responsesRequests, 1);
+  assert.equal(store.list('notes').length, 0);
+  const second = await ask({ ...options, prompt: '2030年12月4日下午3点开始，持续1小时，上海时区' });
+  assert.deepEqual(Array.from(window.__agendaProviderPhases), ['request-clarification', 'propose-agenda', 'review-summary']);
+  assert.equal(second.pendingPlan.status, 'pending');
+  assert.equal(second.conversationID, first.conversationID);
+  assert.equal(store.list('notes').length, 0);
+  const applied = await applyPlan(store, second.pendingPlan);
+  const reopened = await new Store(store.adapter).load();
+  assert.equal(reopened.list('notes').length, 1);
+  const note = reopened.list('notes')[0], event = readEvent(note);
+  assert.equal(applied.receipts[0].id, note.id);
+  assert.equal(event.title, '合成讨论');
+  assert.equal(event.start, Date.parse('2030-12-04T15:00:00+08:00'));
+  assert.equal(event.end, Date.parse('2030-12-04T16:00:00+08:00'));
+  assert.equal(event.timeZone, 'Asia/Shanghai');
+  assert.ok(reopened.list('messages').filter(m => m.role === 'user').every(m => m.conversationId === first.conversationID));
+  assert.doesNotMatch(JSON.stringify(reopened.state), /synthetic-ios-clarification-key/);
+});

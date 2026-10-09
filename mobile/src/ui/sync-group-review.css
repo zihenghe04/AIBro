@@ -1,0 +1,10 @@
+.sync-group-root{--text:var(--ink);--bg:var(--surface);--panel:var(--surface);--panel-raised:var(--surface);--panel-hover:var(--soft);--line-strong:var(--line);--faint:var(--muted);font-family:"AI Bro Mobile Geist",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif!important;min-width:0}
+.sync-group-root *{font-family:inherit!important;min-width:0}
+.sync-group-review__group{padding:18px 0 24px;border-bottom:1px solid var(--line)}
+.sync-group-review__group p{font-size:14px;line-height:1.65;color:var(--muted);overflow-wrap:anywhere}
+.sync-group-review__record{margin:10px 0;border:1px solid var(--line);border-radius:12px;padding:0 12px}
+.sync-group-review__record summary{min-height:46px;padding:12px 0;cursor:pointer;overflow-wrap:anywhere;font-size:14px}
+.sync-group-review__record h4{margin:8px 0;font-size:13px}
+.sync-group-review__record pre{white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,monospace!important;font-size:12px;line-height:1.6;max-height:220px;overflow:auto;overscroll-behavior:contain;padding:10px;background:var(--soft);border-radius:8px}
+.sync-group-review__group .sync-group-review__error{color:var(--danger,#bd493f)}
+@media(prefers-reduced-motion:reduce){.sync-group-root *{transition:none!important;animation:none!important}}

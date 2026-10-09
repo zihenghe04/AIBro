@@ -2,6 +2,7 @@
   'use strict';
   const STORAGE='aibro-embedding-settings-v1';
   let hooks,engine,config=null,controller=null,timer,dirty=false,queued=false,sessionKey='',sessionEndpoint='',progress=null,epoch=0,saving=false,unlockIsland=null;
+  let profiles=null;
   let readinessIsland=null,credentialState='unknown',credentialGeneration=0,serviceResult=null;
   const $=id=>root.document.getElementById(id);
   const t=text=>root.WorkstationI18n?.t(text)||text;
@@ -43,6 +44,8 @@
     if(!error){credentialGeneration++;credentialState=cfg.noKey?'not-required':'stored';}
     paintReadiness();
   }
+  function rawForm(){return {base:$('embeddingBase').value,model:$('embeddingModel').value,dimensions:$('embeddingDimensions').value,enabled:$('embeddingEnabled').checked,autoUpdate:$('embeddingAuto').checked,noKey:$('embeddingNoKey').checked,token:$('embeddingKey').value.trim()};}
+  function writeForm(f){for(const [id,key] of [['embeddingBase','base'],['embeddingModel','model'],['embeddingDimensions','dimensions'],['embeddingKey','token']])$(id).value=f[key]||'';for(const [id,key] of [['embeddingEnabled','enabled'],['embeddingAuto','autoUpdate'],['embeddingNoKey','noKey']])$(id).checked=!!f[key];}
   function readForm(){return root.VectorIndex.configuration({base:$('embeddingBase').value,model:$('embeddingModel').value,dimensions:$('embeddingDimensions').value,enabled:$('embeddingEnabled').checked,autoUpdate:$('embeddingAuto').checked,noKey:$('embeddingNoKey').checked});}
   function paint(){
     $('embeddingUpdate').disabled=!!controller||saving||!config;
@@ -53,7 +56,8 @@
     unlockIsland?.update({disabled:!!controller||saving,children:t('解锁 embedding Key')});
     $('embeddingStop').hidden=!controller;
     if(progress){$('embeddingProgress').hidden=false;$('embeddingProgress').max=Math.max(1,progress.total);$('embeddingProgress').value=progress.ready;$('embeddingCounts').textContent=`${t('本机已索引段落')} ${progress.ready} / ${progress.total} · ${t('待更新')} ${progress.pending}`;}
-    paintReadiness();
+    if(profiles)$('embeddingClearKey').hidden=true;
+    profiles?.paint();paintReadiness();
   }
   async function refresh(){if(!config)return;try{progress=await engine.status(config);paint();}catch{report('无法读取本机向量索引');}}
   const missingKey=()=>Object.assign(Error('请保存 embedding API Key'),{code:'CREDENTIAL_KEY_MISSING'});
@@ -63,7 +67,7 @@
     const bridge=root.workstationDesktop?.embeddingCredentials;
     if(!bridge)throw Error('请填写 embedding API Key；浏览器模式仅在本次会话保留');
     const saved=await bridge.status();checkCurrent();if(!saved.hasKey)throw missingKey();
-    const record=await bridge.read({base:cfg.base});
+    const record=profiles?await profiles.read(cfg,cfg.base):await bridge.read({base:cfg.base});
     checkCurrent();
     // A status receipt is not a lease on the key: explicit removal can occur
     // before read resolves. Only noKey=true permits an unauthenticated request.
@@ -97,12 +101,13 @@
     saving=true;paint();
     try {
       const captured=readForm(),entered=$('embeddingKey').value.trim(),bridge=root.workstationDesktop?.embeddingCredentials;
-      if(!captured.noKey){
+      if(profiles){await profiles.save({...captured,token:entered});sessionKey='';sessionEndpoint='';}
+      else if(!captured.noKey){
         if(bridge){await (bridge.storageBackend==='encrypted-file'?bridge.save:bridge.authorizeSave||bridge.save).call(bridge,{base:captured.base,model:captured.model,token:entered});sessionKey='';sessionEndpoint='';}
         else if(entered){sessionKey=entered;sessionEndpoint=captured.base;}
         else if(!sessionKey||sessionEndpoint!==captured.base)throw Error('请填写 embedding API Key；浏览器模式仅在本次会话保留');
       }
-      root.localStorage.setItem(STORAGE,JSON.stringify(captured));config=captured;epoch++;dirty=false;$('embeddingKey').value='';serviceResult=null;credentialState='unknown';void inspectCredentials();
+      root.localStorage.setItem(STORAGE,JSON.stringify(captured));profiles?.acknowledge({...captured,token:entered});config={...captured,...profiles?.capture()};epoch++;dirty=false;$('embeddingKey').value='';serviceResult=null;credentialState='unknown';void inspectCredentials();
       report('Embedding 配置已保存；索引与对话模型独立');await refresh();paint();
       if(config.autoUpdate&&config.enabled)workspaceSaved();return true;
     }catch(error){report(error.message);return false;}finally{saving=false;paint();}
@@ -117,7 +122,7 @@
   async function testConnection(){
     if(controller||saving)return;
     try {
-      const draft=readForm(),entered=$('embeddingKey').value.trim();
+      const draft={...readForm(),...profiles?.capture()},entered=$('embeddingKey').value.trim();
       const usingDraftKey=!draft.noKey&&!!entered;
       controller=new AbortController();paint();report('正在测试 embedding 连接');
       // A test must not replace the saved credential or upload the knowledge base.
@@ -188,10 +193,27 @@
     const fileCredentials=root.workstationDesktop?.embeddingCredentials?.storageBackend==='encrypted-file';
     $('embeddingKeyHelp').textContent=fileCredentials?t('Key 独立保存在此 Mac 的加密文件中，无需钥匙串密码。旧 Key 无法迁移时，重新粘贴并保存一次即可。'):root.workstationDesktop?t('Key 独立加密保存在此 Mac；留空保留已保存的 Key。'):t('浏览器模式仅在本次会话保留 Key；重开后需重新填写。');
     if(!fileCredentials&&typeof root.workstationDesktop?.embeddingCredentials?.unlock==='function'&&root.HalaskaUI?.mount){const host=$('embeddingUnlockHost');host.hidden=false;unlockIsland=root.HalaskaUI.mount(host,'Button',{id:'embeddingUnlockKey',variant:'secondary',size:'sm',children:t('解锁 embedding Key'),onClick:()=>void unlockCredentials()});}
-    card.querySelectorAll('input').forEach(input=>input.addEventListener('input',()=>{dirty=true;}));
+    card.querySelectorAll('input').forEach(input=>input.addEventListener('input',()=>{dirty=true;profiles?.touch();}));
     $('embeddingSave').onclick=()=>void saveConfiguration();$('embeddingTest').onclick=()=>void testConnection();$('embeddingUpdate').onclick=()=>void update(true);
     $('embeddingStop').onclick=()=>{queued=false;clearTimeout(timer);controller?.abort();};
     $('embeddingClearKey').onclick=async()=>{if(controller||saving)return;saving=true;paint();try{const bridge=root.workstationDesktop?.embeddingCredentials;if(bridge)await (bridge.storageBackend==='encrypted-file'?bridge.remove:bridge.authorizeRemove||bridge.remove).call(bridge);sessionKey='';sessionEndpoint='';$('embeddingKey').value='';credentialGeneration++;credentialState='missing';serviceResult=null;if(config&&!config.noKey){config={...config,enabled:false,autoUpdate:false};root.localStorage.setItem(STORAGE,JSON.stringify(config));$('embeddingEnabled').checked=false;$('embeddingAuto').checked=false;epoch++;clearTimeout(timer);}report('Embedding Key 已删除');}catch(error){report(error.message);}finally{saving=false;paint();}};
+    const bridge=root.workstationDesktop?.embeddingCredentials;
+    if(bridge?.profiles&&root.APIProfiles){
+      const host=root.document.createElement('div');host.className='api-profile-host';host.id='embeddingProfiles';card.querySelector('h2').after(host);
+      const publicConfig=p=>root.VectorIndex.configuration({...(config||{}),base:p.base,model:p.model,...p.settings});
+      profiles=root.APIProfiles.create({bridge,readForm:rawForm,writeForm,
+        fromProfile:p=>p?{...publicConfig(p),token:''}:{base:'',model:'',dimensions:'',enabled:false,autoUpdate:false,noKey:false,token:''},
+        toProfile:f=>{const cfg=root.VectorIndex.configuration(f);return {base:cfg.base,model:cfg.model,token:cfg.noKey?'':f.token||'',settings:{dimensions:cfg.dimensions,enabled:cfg.enabled,autoUpdate:cfg.autoUpdate,noKey:cfg.noKey}};},
+        isBusy:()=>!!controller||saving,onChange:value=>{dirty=value;},
+        onActivate:async(p,{initial})=>{
+          epoch++;clearTimeout(timer);queued=false;sessionKey='';sessionEndpoint='';serviceResult=null;
+          if(p){const cfg=publicConfig(p);root.localStorage.setItem(STORAGE,JSON.stringify(cfg));config={...cfg,profileId:p.id,profileRevision:profiles.view().revision};}
+          else if(!initial){config=null;root.localStorage.removeItem(STORAGE);}
+          void refresh();void inspectCredentials();
+        }});
+      profiles.mount(host,{label:'Embedding API 方案',onSave:()=>void saveConfiguration()});
+      void profiles.load().then(()=>{paint();void refresh();}).catch(error=>report(error.message));
+    }
     paint();void refresh();void inspectCredentials();
   }
   root.VectorKnowledge={init,retrieve,searchRequest,workspaceSaved,refresh,update};

@@ -89,6 +89,7 @@ function normalizeStateShape(candidate) {
 try { normalizeStateShape(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')); } catch (_) { normalizeStateShape({}); }
 let settingsHydrated = false;
 let apiSettingsDirty = false;
+let apiProfiles = null;
 let apiCredentialReady = null;
 let apiCredentialState = null;
 let apiCredentialError = '';
@@ -423,6 +424,7 @@ const save = () => {
 window.flushLocalDrafts = async function () {
   // Capture the most recent caret/scroll before the native shell flushes state.
   window.ReadingPane?.remember?.();
+  if (window.APIProfiles?.hasPending()) { toast('API 方案有未保存的修改，请返回设置保存或还原。'); return false; }
   if (conversationPathSaving()) return false;
   if (saveTaskDetails.busy || window.PlanningWorkbench?.isBusy?.() || window.ProjectBoard?.isBusy?.() || window.ProjectSchedule?.isBusy?.()) { toast('任务或计划正在保存，请稍后退出。'); return false; }
   if (taskEditorHasDrafts() || $('#planningCreateForm')?.dataset.dirty === 'true') { toast('任务表单有未保存的输入，请先保存或关闭表单放弃修改。'); return false; }
@@ -1514,7 +1516,7 @@ function renderMessage(message, container, options = {}) {
   if (message.modelConfig && window.ConversationModels) {
     const modelInfo = document.createElement('span'); modelInfo.className = 'message-model-info';
     const config = message.modelConfig;
-    const modelName = config.model || (config.provider === 'openai-auth' ? '账号默认模型' : '选择模型');
+    const modelName = config.model || (config.provider === 'claude-auth' ? 'Claude 官方默认' : config.provider === 'openai-auth' ? '账号默认模型' : '选择模型');
     const effort = ConversationModels.describe({ ...config, model: '' }).split(' · ').slice(1).join(' · ');
     const fixedEffort = !config.effort || ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(config.effort);
     modelInfo.innerHTML = `<span ${config.model ? 'data-user-content' : 'data-i18n'}>${esc(modelName)}</span> · <span ${fixedEffort ? 'data-i18n' : 'data-user-content'}>${esc(effort)}</span>`;
@@ -1547,6 +1549,7 @@ function renderMessage(message, container, options = {}) {
   else renderBody(body, displayMessage.text || '');
   body.hidden = !displayMessage.text && !!outcome?.showNotice;
   wrapper.append(identity, body);
+  if (!sourceRun) window.MobileConversationHandoff?.mount(message, wrapper);
   if (responseIssue) {
     const details = document.createElement('details'); details.className = 'message-steps';
     const summary = document.createElement('summary'); summary.textContent = '查看原始异常回复';
@@ -4903,7 +4906,7 @@ async function sendMessage(options = {}) {
     if (submittedMessage && !options.retry) submittedMessage.fileReferences = fileContext.snapshots;
     if (selectedReferences.length) { stage(`已读取 ${selectedReferences.length} 项明确引用的文件`, 'done'); save(); }
 
-    if (provider !== 'openai-auth') {
+    if (provider === 'api') {
       ({ base, token } = await getApiConnection(connectionInput));
       assertRunActive(run);
       if (!conversation.modelConfig && (connectionInput.awaitingRestore || !model)) model = apiCredentialState?.model || connectionInput.model || model;
@@ -4944,6 +4947,7 @@ async function sendMessage(options = {}) {
       if (rememberedModel && state.settings?.recentConversationModel === rememberedModel) ConversationModels.remember?.(state, { provider, model, effort });
       run.modelConfig = { provider, model, effort }; liveMessage.modelConfig = { provider, model, effort };
     } else if (provider === 'openai-auth') await OpenAIAuth.ensureReady();
+    else if (provider === 'claude-auth') await ClaudeAuth.ensureReady();
     assertRunActive(run);
     run.mode = 'ai';
     run.webSearch = !!window.ConversationWeb?.searchSupported(provider, base, goal);
@@ -5332,7 +5336,7 @@ function openRunFailureRecovery(runId, destination) {
   } else {
     showView('settings', '设置');
     window.SettingsWorkspace?.reveal('models');
-    const requestedControl = document.getElementById(run.modelConfig?.provider === 'openai-auth' ? 'provider' : 'apiBase');
+    const requestedControl = document.getElementById(['openai-auth','claude-auth'].includes(run.modelConfig?.provider) ? 'provider' : 'apiBase');
     const control = requestedControl?.getClientRects().length ? requestedControl : document.getElementById('provider');
     if (control) { control.scrollIntoView({ block: 'center', behavior: 'instant' }); control.focus({ preventScroll: true }); }
   }
@@ -6166,7 +6170,7 @@ window.__receiveNativeFiles = async function (items) {
   } catch (error) { console.warn('原生文件选择结果处理失败', error); }
 };
 function openImportDialog() { if (window.ImportWorkspace?.open()) return; const dialog = $('#importDialog'); if (!dialog) return; if (!dialog.open) dialog.showModal(); renderFileSelection(); $('#fileInput').focus(); }
-function defaultModelConfiguration() { const provider = window.OpenAIAuth?.provider() || 'api'; return { provider, model: provider === 'openai-auth' ? OpenAIAuth.model() : ($('#model')?.value || localStorage.getItem('workstation-api-model') || '').trim(), effort: '' }; }
+function defaultModelConfiguration() { const provider = window.OpenAIAuth?.provider() || 'api'; return { provider, model: provider === 'openai-auth' ? OpenAIAuth.model() : provider === 'claude-auth' ? (window.ClaudeAuth?.model() || '') : ($('#model')?.value || localStorage.getItem('workstation-api-model') || '').trim(), effort: '' }; }
 function syncComposerModel() { if (window.ConversationModels) ConversationModels.sync(); else $('#composerModel').textContent = defaultModelConfiguration().model || '选择模型'; }
 function apiOrigin(value) {
   try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.origin : ''; } catch (_) { return ''; }
@@ -6174,7 +6178,7 @@ function apiOrigin(value) {
 function captureApiConnection() {
   const baseInput = $('#apiBase'), tokenInput = $('#apiKey');
   const protocol = ($('#apiProtocol')?.value || localStorage.getItem('workstation-api-protocol') || 'auto');
-  return { base: (baseInput ? baseInput.value : localStorage.getItem('workstation-api-base') || '').trim(), token: (tokenInput?.value || '').trim(), model: ($('#model')?.value || '').trim(), protocol: ['responses', 'chat'].includes(protocol) ? protocol : 'auto', awaitingRestore: !!window.workstationDesktop && !apiCredentialState && !apiSettingsDirty };
+  return { ...apiProfiles?.capture(), base: (baseInput ? baseInput.value : localStorage.getItem('workstation-api-base') || '').trim(), token: (tokenInput?.value || '').trim(), model: ($('#model')?.value || '').trim(), protocol: ['responses', 'chat'].includes(protocol) ? protocol : 'auto', awaitingRestore: !!window.workstationDesktop && !apiCredentialState && !apiSettingsDirty };
 }
 // 接口协议偏好注入传输层：设置页保存后立即生效。传输层保持自身无环境依赖——
 // 读不到配置（如测试沙箱）时按域名自动判定，OpenAI 官方走 Responses，其余走 Chat。
@@ -6210,15 +6214,15 @@ function updateApiCredentialNotice() {
     if (!unlock.hidden && window.HalaskaUI) HalaskaUI.mount(unlock, 'Button', { size: 'sm', variant: 'secondary', loading: !!unlockApiCredentials.busy, disabled: !!saveApiSettings.busy || !!clearApiCredentials.busy, children: window.WorkstationI18n?.getLanguage?.() === 'en' ? 'Unlock saved Key' : '解锁已保存的 Key', onClick: unlockApiCredentials });
   }
   const testButton = $('#testApi'); if (testButton) testButton.disabled = !!testConnection.active || !!saveApiSettings.busy || !!clearApiCredentials.busy || !!unlockApiCredentials.busy;
-  const clear = $('#clearApiKey'); if (clear) { clear.hidden = !hasKey && !legacyKey; clear.disabled = !!saveApiSettings.busy || !!clearApiCredentials.busy || !!unlockApiCredentials.busy; }
+  const clear = $('#clearApiKey'); if (clear) { clear.hidden = !!apiProfiles || (!hasKey && !legacyKey); clear.disabled = !!saveApiSettings.busy || !!clearApiCredentials.busy || !!unlockApiCredentials.busy; }
 }
 function installApiCredentialControls() {
   const input = $('#apiKey'); if (!input || $('#apiCredentialStatus')) return;
   const help = document.createElement('p'); help.id = 'apiCredentialStatus'; help.className = 'setting-help'; help.setAttribute('role', 'status'); help.setAttribute('aria-live', 'polite'); input.insertAdjacentElement('afterend', help);
   const remove = document.createElement('button'); remove.id = 'clearApiKey'; remove.type = 'button'; remove.className = 'secondary'; remove.textContent = '删除已保存的 API Key'; remove.onclick = clearApiCredentials; help.insertAdjacentElement('afterend', remove);
   const unlock = document.createElement('span'); unlock.id = 'apiCredentialUnlock'; unlock.hidden = true; help.insertAdjacentElement('afterend', unlock);
-  for (const field of [$('#apiBase'), input, $('#model')]) field?.addEventListener('input', () => { apiSettingsDirty = true; apiCredentialError = ''; invalidateApiConnectionTest({ clearModels: field.id !== 'model' }); updateApiCredentialNotice(); });
-  $('#apiProtocol')?.addEventListener('change', () => { apiSettingsDirty = true; apiCredentialError = ''; invalidateApiConnectionTest(); updateApiCredentialNotice(); });
+  for (const field of [$('#apiBase'), input, $('#model')]) field?.addEventListener('input', () => { apiSettingsDirty = true; apiProfiles?.touch(); apiCredentialError = ''; invalidateApiConnectionTest({ clearModels: field.id !== 'model' }); updateApiCredentialNotice(); });
+  $('#apiProtocol')?.addEventListener('change', () => { apiSettingsDirty = true; apiProfiles?.touch(); apiCredentialError = ''; invalidateApiConnectionTest(); updateApiCredentialNotice(); });
   $('#provider')?.addEventListener('change', () => invalidateApiConnectionTest());
   $$('[data-permission]').forEach(field => field.addEventListener('change', () => { apiSettingsDirty = true; }));
   for (const id of ['usageCurrency', 'usageInputRate', 'usageOutputRate']) $('#' + id)?.addEventListener('input', () => { saveApiSettings.usageDirty = true; });
@@ -6253,7 +6257,7 @@ async function ensureApiCredentials() {
       // probing safeStorage availability can invoke a blocking Keychain dialog.
       // Public address/model values remain in localStorage until explicit use.
       apiCredentialState = stored; apiCredentialError = '';
-      if (!apiSettingsDirty) {
+      if (!apiSettingsDirty && !apiProfiles?.view().ready) {
         const base = localStorage.getItem('workstation-api-base'), model = localStorage.getItem('workstation-api-model');
         if (base) $('#apiBase').value = base; if (model) $('#model').value = model; syncComposerModel();
       }
@@ -6283,7 +6287,18 @@ async function migrateLegacyApiCredentials(base) {
 async function getApiConnection(captured = captureApiConnection()) {
   if (captured.token && captured.base) return { base: captured.base, token: captured.token, temporary: true };
   const native = !!window.workstationDesktop;
-  if (native) await ensureApiCredentials();
+  if (native) {
+    await ensureApiCredentials();
+    if (apiProfiles) {
+      await apiProfiles.load();
+      if (!captured.profileId && captured.awaitingRestore) captured = captureApiConnection();
+      if (apiProfiles.view().busy) throw new Error('连接方案正在切换，请稍后重试。');
+      const version = apiCredentialVersion;
+      const result = await apiProfiles.read(captured, captured.base);
+      if (version !== apiCredentialVersion) throw Object.assign(new Error('连接方案已改变，请重新发送。'), { code: 'CANCELLED' });
+      return { base: captured.base, token: result.token || '', temporary: false };
+    }
+  }
   const base = captured.awaitingRestore ? captured.base || localStorage.getItem('workstation-api-base') || '' : captured.base;
   if (captured.token) return { base, token: captured.token, temporary: true };
   if (!base) return { base, token: '', temporary: false };
@@ -6317,6 +6332,33 @@ async function getApiConnection(captured = captureApiConnection()) {
   const savedBase = localStorage.getItem('workstation-api-base');
   return { base, token: apiOrigin(base) && apiOrigin(base) === apiOrigin(savedBase) ? localStorage.getItem('workstation-api-key') || '' : '', temporary: false };
 }
+function installAPIProfiles() {
+  const bridge = window.workstationDesktop?.apiCredentials;
+  if (apiProfiles || !bridge?.profiles || !window.APIProfiles) return;
+  const host = document.createElement('div'); host.className = 'api-profile-host'; host.id = 'apiProfiles'; $('#apiCredentials')?.prepend(host);
+  const write = form => {
+    $('#apiBase').value = form.base || ''; $('#model').value = form.model || ''; $('#apiKey').value = form.token || '';
+    $('#apiProtocol').value = form.protocol || 'auto'; window.ModelSettingsUI?.refresh(); updateApiCredentialNotice(); syncComposerModel();
+  };
+  apiProfiles = window.APIProfiles.create({
+    bridge, readForm: captureApiConnection, writeForm: write,
+    fromProfile: p => ({ base: p?.base || '', model: p?.model || '', token: '', protocol: p?.settings?.protocol || localStorage.getItem('workstation-api-protocol') || 'auto' }),
+    toProfile: f => ({ base: f.base, model: f.model, token: f.token || '', settings: { protocol: f.protocol || 'auto' } }),
+    isBusy: () => !!saveApiSettings.busy || !!clearApiCredentials.busy || !!unlockApiCredentials.busy || !!testConnection.active,
+    onChange: changed => { if (changed) { apiSettingsDirty = true; $('#apiStatus').textContent = '有未保存修改'; } else if ($('#apiStatus').textContent === '有未保存修改') { $('#apiStatus').textContent = ''; } },
+    onActivate: async (profile, {initial}) => {
+      apiCredentialVersion++; invalidateApiConnectionTest({announce:false});
+      if (profile) {
+        localStorage.setItem('workstation-api-base', profile.base); localStorage.setItem('workstation-api-model', profile.model);
+        if (profile.settings?.protocol) localStorage.setItem('workstation-api-protocol', profile.settings.protocol);
+      } else if (!initial) { localStorage.removeItem('workstation-api-base'); localStorage.removeItem('workstation-api-model'); }
+      apiCredentialState = await bridge.status(); apiCredentialReady = Promise.resolve(apiCredentialState); apiCredentialError = '';
+      if (!initial) { apiSettingsDirty = true; window.dispatchEvent(new Event('aibro-api-credentials-saved')); }
+    }
+  });
+  apiProfiles.mount(host, {label:'对话 API 方案', onSave:saveApiSettings});
+  void apiProfiles.load().catch(error => {apiCredentialError = error.message; updateApiCredentialNotice();});
+}
 function renderSettings() {
   window.OpenAIAuth?.render(); installApiCredentialControls();
   if (!apiSettingsDirty) {
@@ -6330,6 +6372,7 @@ function renderSettings() {
   window.AlertSound?.sync(); if (!saveApiSettings.usageDirty) window.UsageCost?.sync(); updateApiCredentialNotice(); syncComposerModel();
   if (window.workstationDesktop) void ensureApiCredentials().catch(() => {});
   window.ModelSettingsUI?.mount();
+  installAPIProfiles();
   window.SettingsWorkspace?.restore();
 }
 function captureUsagePriceSettings() {
@@ -6340,14 +6383,14 @@ function captureUsagePriceSettings() {
 }
 function apiSettingsSaveLabel() { return window.WorkstationI18n?.t?.('保存模型与权限') || '保存模型与权限'; }
 async function saveApiSettings() {
-  if (saveApiSettings.busy || clearApiCredentials.busy || unlockApiCredentials.busy) return false;
+  if (saveApiSettings.busy || clearApiCredentials.busy || unlockApiCredentials.busy || apiProfiles?.view().busy) return false;
   const captured = captureApiConnection(), permissions = $$('[data-permission]').map(select => [select.dataset.permission, select.value]), usage = captureUsagePriceSettings();
   invalidateApiConnectionTest({ clearModels: false, announce: false });
   let credentialSaved = false;
   const button = $('#saveSettings'); saveApiSettings.busy = true; button.disabled = true; button.textContent = '正在保存…'; $('#apiStatus').textContent = '正在保存模型、权限与用量…'; updateApiCredentialNotice();
   try {
     const native = !!window.workstationDesktop;
-    const apiSelected = (window.OpenAIAuth?.provider() || 'api') !== 'openai-auth';
+    const apiSelected = (window.OpenAIAuth?.provider() || 'api') === 'api';
     // Account-login users can save their other preferences without inventing
     // an API configuration. Any supplied API credentials still require save.
     if (apiSelected || captured.token) {
@@ -6360,7 +6403,7 @@ async function saveApiSettings() {
         if (migrateLegacyApiCredentials.pending) await migrateLegacyApiCredentials.pending.catch(() => {});
         const legacyToken = !apiCredentialState?.hasKey && apiOrigin(captured.base) === apiOrigin(localStorage.getItem('workstation-api-base')) ? localStorage.getItem('workstation-api-key') : '';
         const store = bridge.storageBackend === 'encrypted-file' ? bridge.save : bridge.authorizeSave || bridge.save;
-        const stored = await store.call(bridge, { base: captured.base, token: captured.token || legacyToken || undefined, model: captured.model });
+        const stored = apiProfiles ? (await apiProfiles.save({ ...captured, token: captured.token || legacyToken || '' }), await bridge.status()) : await store.call(bridge, { base: captured.base, token: captured.token || legacyToken || undefined, model: captured.model });
         if (!stored.hasKey || stored.available === false) throw new Error('API Key 未成功保存，请重试。');
         apiCredentialState = { ...stored, verified: true, requiresUnlock: false }; apiCredentialReady = Promise.resolve(apiCredentialState); credentialSaved = true; localStorage.removeItem('workstation-api-key');
       } else {
@@ -6378,16 +6421,18 @@ async function saveApiSettings() {
     // Do not clear drafts or claim the whole settings save before its DB ACK.
     await saveDocumentDurably();
     const latest = captureApiConnection();
-    if (latest.base === captured.base && latest.token === captured.token && latest.model === captured.model && latest.protocol === captured.protocol && $$('[data-permission]').every(select => permissions.some(([key, value]) => key === select.dataset.permission && value === select.value))) { $('#apiKey').value = ''; apiSettingsDirty = false; }
+    if (latest.base === captured.base && latest.token === captured.token && latest.model === captured.model && latest.protocol === captured.protocol && $$('[data-permission]').every(select => permissions.some(([key, value]) => key === select.dataset.permission && value === select.value))) { apiProfiles?.acknowledge(captured); $('#apiKey').value = ''; apiSettingsDirty = false; }
     else apiSettingsDirty = true;
     const latestUsage = captureUsagePriceSettings();
     saveApiSettings.usageDirty = !!usage && (!latestUsage || usage.values.some((value, index) => value !== latestUsage.values[index]));
     apiCredentialError = ''; settingsHydrated = true;
     const hasNewerDraft = apiSettingsDirty || saveApiSettings.usageDirty;
     $('#apiStatus').textContent = (native ? '✓ 设置已保存到此 Mac' : '✓ 设置已保存到当前浏览器') + (hasNewerDraft ? ' · 保存期间的新修改尚未保存。' : '');
-    button.textContent = hasNewerDraft ? '✓ 已保存提交的修改' : '✓ 已保存'; updateApiCredentialNotice(); syncComposerModel(); return true;
+    button.textContent = hasNewerDraft ? '✓ 已保存提交的修改' : '✓ 已保存'; updateApiCredentialNotice(); syncComposerModel();
+    if (native) window.dispatchEvent(new Event('aibro-api-credentials-saved'));
+    return true;
   } catch (error) { apiCredentialError = credentialSaved ? `连接凭据已保存，其他设置尚未全部保存；当前输入已保留，请重试。${error.message}` : `保存失败：${error.message}`; $('#apiStatus').textContent = apiCredentialError; apiSettingsDirty = true; if (usage) saveApiSettings.usageDirty = true; button.textContent = apiSettingsSaveLabel(); updateApiCredentialNotice(); return false; }
-  finally { saveApiSettings.busy = false; button.disabled = false; updateApiCredentialNotice(); setTimeout(() => { if (!saveApiSettings.busy) button.textContent = apiSettingsSaveLabel(); }, 1400); }
+  finally { saveApiSettings.busy = false; apiProfiles?.paint(); button.disabled = false; updateApiCredentialNotice(); setTimeout(() => { if (!saveApiSettings.busy) button.textContent = apiSettingsSaveLabel(); }, 1400); }
 }
 async function clearApiCredentials() {
   if (clearApiCredentials.busy || saveApiSettings.busy || unlockApiCredentials.busy) return false;
@@ -6416,7 +6461,10 @@ function invalidateApiConnectionTest({ clearModels = true, announce = true } = {
   active?.controller.abort();
   if (active && $('#testApi')) $('#testApi').disabled = false;
   if (clearModels && typeof fillModelOptions === 'function') fillModelOptions([]);
-  if (announce && (active || testConnection.hasResult) && $('#apiStatus')) $('#apiStatus').textContent = '连接配置已更改，请重新测试；尚未验证模型调用。';
+  if (announce && $('#apiStatus')) {
+    if (active || testConnection.hasResult) $('#apiStatus').textContent = '有未保存修改 · 连接配置已更改，请重新测试；尚未验证模型调用。';
+    else if (apiSettingsDirty) $('#apiStatus').textContent = '有未保存修改';
+  }
   testConnection.hasResult = false;
 }
 async function testConnection() {
@@ -6843,6 +6891,7 @@ window.WorkstationOnboarding?.init({ getState: () => state, save, toast, ready: 
 hydratePersistentState();
 
 window.OpenAIAuth?.init({ getState: () => state, save, toast, onChange: () => { OpenAIAuth.render(); syncComposerModel(); window.ContextWorkbench?.refresh(); } });
+window.ClaudeAuth?.init({ getState: () => state, save: saveDocumentDurably, toast, onChange: () => { syncComposerModel(); window.ContextWorkbench?.refresh(); } });
 window.ConversationModels?.init({ getState: () => state, getConversation: currentConversation, getDefaults: defaultModelConfiguration, getResolvedConfig: resolveRunModel, canSave: () => !sendMessage.preflight && !sendMessage.preparingWiki && !window.ProjectAutomation?.isStarting?.() && !window.ResearchQueue?.isStarting?.(), save: async () => { await saveDocumentDurably(); window.ContextWorkbench?.refresh(); }, toast, openSettings: () => { showView('settings', '设置'); window.SettingsWorkspace?.reveal('models'); } });
 let documentChatController = null, documentChatNavigating = false, documentChatRoute = null;
 window.ReadingPane?.init({
@@ -7469,6 +7518,7 @@ window.PdfTextIndex?.init({getState:()=>state,persist:saveDocumentDurably,
 window.addEventListener('pagehide',()=>window.PdfTextIndex?.stop(),{once:true});
 // Group the existing owned cards only after their controllers have created them.
 window.SettingsWorkspace?.init({ getState: () => state, save: () => { if (storageHydrated && !serverConflict) save(); } });
+window.ConnectionSyncSettings?.init({ getProtocol: () => localStorage.getItem('workstation-api-protocol') || '' });
 window.ImportWorkspace?.init({ getState: () => state, openSource: openImport, retrySave: () => importMaterials.retryPersistence?.(), pending: () => importMaterials.pending?.(), isBusy: () => importMaterials.busy, toast });
 
 window.FileReview?.init({getState:()=>state,open:(id,fileId,options={})=>openPreview('review',id,fileId,undefined,undefined,options),openFile:(type,id,options={})=>openPreview(type,id,undefined,options.sourceGuard,options.canOpen,{anchor:options.anchor}),markdown:renderRichText,toast,

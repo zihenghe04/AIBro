@@ -19,12 +19,12 @@ COLLECTIONS = ('projects', 'tasks', 'notes', 'imports', 'papers', 'conversations
 COMMON = set('id title name description workspace projectId project folderId folderPath createdAt updatedAt archived deletedAt tags sourceAttachmentIds sourceAttachmentId sourceConversationId agentRunId'.split())
 FIELDS = {
  'projects': COMMON | set('status dueAt deadline completedAt color icon'.split()),
- 'tasks': COMMON | set('status priority startAt dueAt completedAt checklist sourceNoteIds dependsOn provenance workflowCategory'.split()),
+ 'tasks': COMMON | set('status priority startAt dueAt completedAt checklist sourceNoteIds dependsOn provenance workflowCategory reminderMinutes'.split()),
  'notes': COMMON | set('content kind paperId userEdited userEditedAt revisionHistory aiDraft aiDraftHistory provenance sourceNoteIds relatedNoteIds mergedNoteIds consolidatedSections sourceComparison projectMemoryType memoryDate memoryRunIds managedIndex wikiFileBacked wikiCategory wikiMigratedAt wikiImportHash wikiOriginalName wikiImportBatch'.split()),
  'imports': COMMON | set('originalName content pages parser mimeType size url warning error blobHash analysis importOrigin'.split()),
  'papers': COMMON | set('noteId authors year venue doi arxivId url sourceUrl canonicalKey metadata paperType structured userEdits confidence reviewed reviewedAt relations provenance'.split()),
- 'conversations': COMMON | set('attachments skillId skillIds modelOverride favorite pinnedAt'.split()),
- 'messages': set('id conversationId position role content text at createdAt updatedAt attachments attachmentIds retrievedSources provider model reasoningEffort modelLabel actualModel skillSnapshot'.split()),
+ 'conversations': COMMON | set('attachments skillId skillIds modelOverride favorite pinnedAt mobileContext'.split()),
+ 'messages': set('id conversationId position role content text at createdAt updatedAt attachments attachmentIds retrievedSources provider model reasoningEffort modelLabel actualModel skillSnapshot pendingPlan reasoning toolEvents status error capabilities'.split()),
  'attachments': COMMON | set('type relation taskId noteId importId sourceId targetId sourceType targetType'.split()),
  'links': COMMON | set('sourceId targetId sourceType targetType relation'.split()),
  'trash': set('id type title deletedAt counts data'.split()),
@@ -34,10 +34,70 @@ FIELDS = {
 SENSITIVE = set('apikey accesstoken refreshtoken idtoken authorization password passwd secret clientsecret token credentials credential auth localfolder localpath path rootpath rootid absolutepath dataurl rawbase64 permissionmode permissions approvalpolicy sandboxmode'.split())
 IDENTIFIER = re.compile(r'^[A-Za-z0-9_-]{1,200}$')
 DIGEST = re.compile(r'^[a-f0-9]{64}$')
+MESSAGE_PROCESS_FIELDS = ('pendingPlan', 'reasoning', 'toolEvents', 'status', 'error', 'capabilities')
+MESSAGE_ENTITY_BYTES = 4 * 1024 * 1024
 
 def dump(value): return json.dumps(value, ensure_ascii=False, separators=(',', ':'), sort_keys=True, allow_nan=False)
 def copy(value): return json.loads(dump(value))
 def new_id(): return uuid.uuid4().hex
+
+
+class MessageBodyConflict(ValueError):
+    """Both wire spellings changed, so picking either would lose user content."""
+    code = 'MESSAGE_BODY_CONFLICT'
+    status = 409
+    def __init__(self):
+        super().__init__('消息的 text 与 content 正文存在不同修改，请保留两份内容并重新核对后保存。')
+
+
+def _invalidate_message_plan(message, reason):
+    plan = message.get('pendingPlan')
+    if isinstance(plan, dict) and plan.get('status') == 'pending':
+        message['pendingPlan'] = {**plan, 'status': 'invalidated',
+                                  'invalidatedReason': reason, 'invalidatedAt': int(time.time() * 1000)}
+
+
+def _message_body(message):
+    if 'content' in message: return message['content']
+    return message.get('text')
+
+
+def _message_text_alias(message):
+    # Mac rendering and continuation consume text. This alias is snapshot-only:
+    # record() omits an identical text beside content, preserving the wire body.
+    if isinstance(message.get('content'), str):
+        if 'text' in message and message['text'] != message['content']: raise MessageBodyConflict()
+        message['text'] = message['content']
+    return message
+
+
+def _validate_message_process(value):
+    """Keep complete history or reject atomically; never truncate an action plan.
+
+    The size/tree envelope matches cloud_server's existing v1 entity limits:
+    4 MiB UTF-8 JSON, depth 32 and 20,000 values, including the message body.
+    Status names stay extensible for older/newer clients; no execution is added.
+    """
+    for key in ('reasoning', 'status', 'error'):
+        if key in value and value[key] is not None and not isinstance(value[key], str):
+            raise ValueError('消息过程字段 %s 必须为文字或空值。' % key)
+    if isinstance(value.get('status'), str) and (len(value['status']) > 80 or re.search(r'[\x00-\x1f\x7f]', value['status'])):
+        raise ValueError('消息状态标识无效。')
+    if 'pendingPlan' in value and value['pendingPlan'] is not None and not isinstance(value['pendingPlan'], dict):
+        raise ValueError('消息待审阅方案必须为对象或空值。')
+    if 'toolEvents' in value and (not isinstance(value['toolEvents'], list) or any(not isinstance(event, dict) for event in value['toolEvents'])):
+        raise ValueError('消息工具历史必须为对象数组。')
+    if 'capabilities' in value and (not isinstance(value['capabilities'], dict) or any(type(flag) is not bool for flag in value['capabilities'].values())):
+        raise ValueError('消息能力记录必须为布尔值对象。')
+    if len(dump(value).encode('utf-8')) > MESSAGE_ENTITY_BYTES:
+        raise ValueError('含过程历史的消息不能超过 4 MiB，请保留原记录后分批处理。')
+    pending = [(value, 0)]; count = 0
+    while pending:
+        item, depth = pending.pop(); count += 1
+        children = list(item.values()) if isinstance(item, dict) else item if isinstance(item, list) else []
+        if depth > 32 or count + len(pending) + len(children) > 20000:
+            raise ValueError('消息过程历史超出深度 32 或 20000 个 JSON 值的限制。')
+        pending.extend((child, depth + 1) for child in children)
 
 
 class ConflictRevisionError(ValueError):
@@ -146,6 +206,31 @@ def clean(value, depth=0, provenance_context=None):
         return [clean(item, depth+1, context) for item in value]
     return value
 
+def conversation_context(value):
+    """Portable explicit references, never copied content or local file paths.
+
+    Reject a malformed selection as a whole: dropping invalid keys could turn
+    an explicitly scoped discussion into an unrestricted one on another device.
+    The same bounded v1 contract is enforced by the mobile and Mac consumers.
+    """
+    def invalid(): raise ValueError('会话引用或返回来源格式无效，请重新选择资料。')
+    if (not isinstance(value, dict) or set(value) != {'version', 'keys', 'source'}
+            or type(value.get('version')) is not int or value['version'] != 1
+            or not isinstance(value.get('keys'), list) or len(value['keys']) > 50): invalid()
+    keys = []
+    for key in value['keys']:
+        if not isinstance(key, str) or re.fullmatch(r'(notes|imports):[A-Za-z0-9_-]{1,200}', key) is None: invalid()
+        if key not in keys: keys.append(key)
+    source = value['source']
+    if source is not None:
+        if (not isinstance(source, dict) or set(source) - {'kind', 'id', 'conversationId'}
+                or source.get('kind') != 'notes' or not isinstance(source.get('id'), str)
+                or IDENTIFIER.fullmatch(source['id']) is None
+                or 'conversationId' in source and (not isinstance(source['conversationId'], str)
+                    or IDENTIFIER.fullmatch(source['conversationId']) is None)): invalid()
+        source = copy(source)
+    return {'version': 1, 'keys': keys, 'source': source}
+
 def record(kind, item):
     if not isinstance(item, dict): raise ValueError('同步记录格式无效。')
     if kind == 'folders' and item.get('kind') == 'library':
@@ -155,9 +240,28 @@ def record(kind, item):
                 or len(folder.split('/')) > 6 or item.get('workspace') not in ('日常', '课程', '科研')
                 or item.get('projectId') is not None and (not isinstance(item['projectId'], str) or not IDENTIFIER.fullmatch(item['projectId']))):
             raise ValueError('资料目录归属或路径无效。')
+    # Validate the raw value, before generic sensitive-field filtering can
+    # conceal an unexpected field inside an otherwise valid reference object.
+    mobile_context = conversation_context(item['mobileContext']) if kind == 'conversations' and 'mobileContext' in item else None
     context = 'note' if kind == 'notes' else 'artifact' if kind in ('tasks', 'papers') else None
     result = clean({key: value for key, value in item.items() if key in FIELDS[kind]}, provenance_context=context)
+    if mobile_context is not None: result['mobileContext'] = mobile_context
+    if kind == 'messages':
+        if 'content' in result and 'text' in result:
+            if result['content'] != result['text']: raise MessageBodyConflict()
+            result.pop('text')
+        if any(key in result for key in MESSAGE_PROCESS_FIELDS):
+            if result.get('pendingPlan') != item.get('pendingPlan'):
+                _invalidate_message_plan(result, 'metadata-redacted')
+            _validate_message_process(result)
     if kind == 'tasks':
+        # Missing inherits each device's default; null explicitly disables it.
+        # Match the portable agenda range and reject booleans/fractional values.
+        if 'reminderMinutes' in item:
+            minutes = item['reminderMinutes']
+            if minutes is not None and (type(minutes) is not int or not 0 <= minutes <= 10080):
+                raise ValueError('任务提醒必须为 0 到 10080 的整数分钟，或为空以关闭提醒。')
+            result['reminderMinutes'] = minutes
         # Only the category identity syncs, never the external-inbox source ID.
         # Explicit null means a deliberate removal and must outrank provenance.
         if 'workflowCategory' in item:
@@ -296,6 +400,9 @@ class SyncStore:
                 CREATE TABLE IF NOT EXISTS outbox (op_id TEXT PRIMARY KEY, kind TEXT NOT NULL, id TEXT NOT NULL, base_version INTEGER NOT NULL, data TEXT, deleted INTEGER NOT NULL, blocked INTEGER NOT NULL DEFAULT 0, UNIQUE(kind,id));
                 CREATE TABLE IF NOT EXISTS sent (op_id TEXT PRIMARY KEY, kind TEXT NOT NULL, id TEXT NOT NULL, data TEXT, deleted INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS conflicts (id TEXT PRIMARY KEY, kind TEXT NOT NULL, entity_id TEXT NOT NULL, remote_version INTEGER NOT NULL, remote_data TEXT, remote_deleted INTEGER NOT NULL, UNIQUE(kind,entity_id));
+                CREATE TABLE IF NOT EXISTS incoming_groups (group_id TEXT PRIMARY KEY, first_seq INTEGER NOT NULL, last_seq INTEGER NOT NULL, envelope TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS incoming_group_members (group_id TEXT NOT NULL, kind TEXT NOT NULL, entity_id TEXT NOT NULL, PRIMARY KEY(group_id,kind,entity_id));
+                CREATE INDEX IF NOT EXISTS incoming_group_member_record ON incoming_group_members(kind,entity_id);
                 CREATE TRIGGER IF NOT EXISTS capture_projection_insert AFTER INSERT ON entities BEGIN DELETE FROM meta WHERE key='captureProjectionDigest'; END;
                 CREATE TRIGGER IF NOT EXISTS capture_projection_update AFTER UPDATE ON entities BEGIN DELETE FROM meta WHERE key='captureProjectionDigest'; END;
                 CREATE TRIGGER IF NOT EXISTS capture_projection_delete AFTER DELETE ON entities BEGIN DELETE FROM meta WHERE key='captureProjectionDigest'; END;
@@ -312,7 +419,19 @@ class SyncStore:
     def _put(self, db, key, value): db.execute('INSERT OR REPLACE INTO meta VALUES (?,?)', (key,dump(value)))
     def snapshot(self):
         if not self.path.exists(): return None
-        with self.db() as db: return self._get(db, 'snapshot')
+        with self.db() as db: return self._read_message_aliases(self._get(db, 'snapshot'))
+    @staticmethod
+    def _read_message_aliases(snapshot):
+        # Existing databases may predate the display alias. Make old phone
+        # bodies visible immediately without creating a version or rewriting
+        # persisted data. Preserve differing existing fields for capture's
+        # baseline comparison instead of guessing which text the user edited.
+        if snapshot is not None:
+            for conversation in snapshot.get('conversations', []):
+                for message in conversation.get('messages', []):
+                    if 'text' not in message and isinstance(message.get('content'), str):
+                        message['text'] = message['content']
+        return snapshot
     def has_snapshot(self):
         if not self.path.exists(): return False
         with self.db() as db: return db.execute("SELECT 1 FROM meta WHERE key='snapshot'").fetchone() is not None
@@ -333,8 +452,8 @@ class SyncStore:
     def snapshot_at(self, revision):
         with self.db() as db:
             current=self._get(db,'snapshot')
-            if current is not None and current.get('_revision',0)==revision: return current
-            return self._get(db,'history:'+str(revision))
+            if current is not None and current.get('_revision',0)==revision: return self._read_message_aliases(current)
+            return self._read_message_aliases(self._get(db,'history:'+str(revision)))
     def _save_snapshot(self, db, snapshot):
         serialized = dump(snapshot)
         previous = db.execute("SELECT value FROM meta WHERE key='snapshot'").fetchone()
@@ -393,25 +512,93 @@ class SyncStore:
         return snapshot
     def capture(self, snapshot, before_commit=None):
         snapshot = self._with_hashes(snapshot)
-        projected = project(snapshot)
-        values = {key: dump(value) for key, value in projected.items()}
-        digest = hashlib.sha256(b'capture-projection-v1\0')
-        for (kind, identifier), value in sorted(values.items()):
-            # JSON escapes embedded NULs; kinds and wire IDs cannot contain one.
-            digest.update(kind.encode() + b'\0' + identifier.encode() + b'\0' + value.encode('utf-8') + b'\0')
-        fingerprint = digest.hexdigest()
+        for conversation in snapshot.get('conversations', []):
+            for message in conversation.get('messages', []):
+                plan = message.get('pendingPlan')
+                if isinstance(plan, dict) and clean(plan) != plan:
+                    _invalidate_message_plan(message, 'metadata-redacted')
+        def projection():
+            values = {key: dump(value) for key, value in project(snapshot).items()}
+            digest = hashlib.sha256(b'capture-projection-v1\0')
+            for (kind, identifier), value in sorted(values.items()):
+                digest.update(kind.encode() + b'\0' + identifier.encode() + b'\0' + value.encode('utf-8') + b'\0')
+            return values, digest.hexdigest()
+        try: values, fingerprint = projection()
+        except MessageBodyConflict:
+            # The canonical baseline below can resolve a one-sided alias edit.
+            values, fingerprint = None, None
         with self.db() as db:
             # The trigger invalidates this transactional certificate on *every*
             # entity write, including sync, other processes and older clients.
             # Matching projections may skip only entity/outbox comparison; all
             # snapshot history, file publication and FULL commit still happen.
-            if self._get(db, 'captureProjectionDigest') != fingerprint:
-                self._capture_entities(db, values)
-                self._put(db, 'captureProjectionDigest', fingerprint)
+            if values is None or self._get(db, 'captureProjectionDigest') != fingerprint:
+                self._reconcile_conversation_context(db, snapshot)
+                self._reconcile_message_process(db, snapshot)
+                values, fingerprint = projection()
+                if self._get(db, 'captureProjectionDigest') != fingerprint:
+                    self._capture_entities(db, values)
+                    self._put(db, 'captureProjectionDigest', fingerprint)
+            for conversation in snapshot.get('conversations', []):
+                for message in conversation.get('messages', []): _message_text_alias(message)
             self._save_snapshot(db,snapshot)
             if before_commit: before_commit(snapshot)
             self._save_snapshot(db,snapshot)
         return snapshot
+    def _reconcile_conversation_context(self, db, snapshot):
+        # Older renderers may reconstruct a conversation without newer fields.
+        # Preserve the authoritative selection on that local save; an explicit
+        # empty v1 context clears it. Incoming remote omission still clears the
+        # field through _assemble(), where it is now a synchronized field.
+        conversations = {item['id']: item for item in snapshot.get('conversations', [])}
+        for row in db.execute("SELECT id,data FROM entities WHERE kind='conversations' AND deleted=0"):
+            current = conversations.get(row['id'])
+            if current is None or 'mobileContext' in current: continue
+            old = json.loads(row['data'])
+            if 'mobileContext' in old: current['mobileContext'] = conversation_context(old['mobileContext'])
+    def _reconcile_message_process(self, db, snapshot):
+        # An old renderer may omit unfamiliar fields on save. Recover them from
+        # the authoritative entity in this transaction, never from another chat
+        # or a deleted record. A normal continuation merely appends messages.
+        conversations = {conversation['id']: conversation for conversation in snapshot.get('conversations', [])}
+        messages = {wire_id(cid, message['id']): (cid, message) for cid, conversation in conversations.items()
+                    for message in conversation.get('messages', [])}
+        changed = set()
+        for row in db.execute("SELECT id,data FROM entities WHERE kind='messages' AND deleted=0"):
+            old = json.loads(row['data'])
+            current = messages.get(row['id'])
+            if current is None:
+                if old.get('conversationId') in conversations: changed.add(old['conversationId'])
+                continue
+            cid, message = current
+            baseline = _message_body(old)
+            candidates = [message[key] for key in ('content', 'text') if key in message]
+            if candidates:
+                if len(candidates) == 2 and candidates[0] != candidates[1]:
+                    edited = [value for value in candidates if value != baseline]
+                    if len(edited) != 1: raise MessageBodyConflict()
+                    body = edited[0]
+                else: body = candidates[0]
+                # Preserve the original wire spelling. A content-only phone
+                # message stays content-only despite Mac's display alias.
+                if 'content' in old:
+                    message['content'] = body
+                    if 'text' in message: message['text'] = body
+                elif 'text' in old:
+                    message['text'] = body; message.pop('content', None)
+                if body != baseline: changed.add(cid)
+            elif 'content' in old or 'text' in old: changed.add(cid)
+            if message.get('role') != old.get('role'): changed.add(cid)
+            for key in MESSAGE_PROCESS_FIELDS:
+                if key not in message and key in old: message[key] = copy(old[key])
+            prior, proposed = old.get('pendingPlan'), message.get('pendingPlan')
+            if (isinstance(prior, dict) and isinstance(proposed, dict) and prior.get('id') == proposed.get('id')
+                    and prior.get('status') != 'pending' and proposed.get('status') == 'pending'):
+                # Replaying an older UI snapshot cannot re-arm a terminal plan.
+                message['pendingPlan'] = copy(prior)
+        for cid in changed:
+            for message in conversations[cid].get('messages', []):
+                _invalidate_message_plan(message, 'conversation-message-edited')
     def _capture_entities(self, db, values):
         # Compare canonical JSON as UTF-8 bytes, without decoding every old
         # body or loading remote_data (unused by local capture). Restore the
@@ -459,6 +646,7 @@ class SyncStore:
                 if not isinstance(version,int) or isinstance(version,bool) or version<1: raise ValueError('同步服务器版本无效。')
                 if not entity or version < entity['remote_version']: continue
                 db.execute('UPDATE entities SET remote_version=?,remote_data=?,remote_deleted=? WHERE kind=? AND id=?',(version,sent['data'],sent['deleted'],*key))
+                if self._group_locked(db,*key): self._conflict(db,*key,version,sent['data'],sent['deleted'])
                 current=db.execute('SELECT * FROM outbox WHERE kind=? AND id=?',key).fetchone()
                 if current:
                     if current['op_id']==answer['opId'] or (current['data']==sent['data'] and current['deleted']==sent['deleted']): db.execute('DELETE FROM outbox WHERE kind=? AND id=?',key)
@@ -501,7 +689,7 @@ class SyncStore:
         for message in grouped['messages']: by_conv.setdefault(message['conversationId'],[]).append(message)
         for conversation in snapshot['conversations']:
             messages=sorted(by_conv.get(conversation['id'],[]),key=lambda m:(m.get('position',0),m.get('createdAt',0),m['id']))
-            conversation['messages']=[{k:v for k,v in m.items() if k not in ('position','conversationId')} for m in messages]
+            conversation['messages']=[_message_text_alias({k:v for k,v in m.items() if k not in ('position','conversationId')}) for m in messages]
         snapshot['folders']={kind:[{k:v for k,v in item.items() if k!='kind'} for item in grouped['folders'] if item.get('kind')==kind] for kind in ('projects','conversations')}
         library=[{k:v for k,v in item.items() if k!='kind'} for item in grouped['folders'] if item.get('kind')=='library']
         # Private or orphaned directory metadata stays local, including when an
@@ -512,25 +700,85 @@ class SyncStore:
             snapshot['folders']['library']=local_folders+[item for item in library if item['id'] not in local_ids]
         snapshot.setdefault('agentRuns',[])
         return snapshot
+    @staticmethod
+    def _group_locked(db, kind, identifier):
+        return db.execute('SELECT 1 FROM incoming_group_members WHERE kind=? AND entity_id=?',(kind,identifier)).fetchone() is not None
+
+    @staticmethod
+    def _incoming_change(change):
+        if not isinstance(change,dict): raise ValueError('未知同步记录。')
+        kind,identifier=change.get('entityType'),change.get('entityId')
+        if not isinstance(kind,str) or kind not in FIELDS or not isinstance(identifier,str) or not IDENTIFIER.fullmatch(identifier): raise ValueError('未知同步记录。')
+        version=change.get('version'); deleted=change.get('deleted')
+        if type(version) is not int or not 1<=version<=9007199254740991 or type(deleted) is not bool: raise ValueError('无效同步版本。')
+        if deleted and change.get('data') is not None: raise ValueError('删除记录内容必须为空。')
+        value=None if deleted else dump(record(kind,change.get('data')))
+        return kind,identifier,version,deleted,value
+
+    def _receive_group(self, db, envelope, cursor):
+        if (set(envelope)!={'type','groupId','firstSeq','lastSeq','changes'} or not isinstance(envelope.get('groupId'),str)
+                or not IDENTIFIER.fullmatch(envelope['groupId']) or not isinstance(envelope.get('changes'),list)
+                or not 1<=len(envelope['changes'])<=100 or type(envelope.get('firstSeq')) is not int or envelope['firstSeq']<1
+                or type(envelope.get('lastSeq')) is not int or envelope['lastSeq']!=envelope['firstSeq']+len(envelope['changes'])-1
+                or envelope['lastSeq']>cursor): raise ValueError('原子同步组格式无效。')
+        values=[self._incoming_change(change) for change in envelope['changes']]
+        if len({item[:2] for item in values})!=len(values) or any(type(change.get('seq')) is not int or change['seq']!=envelope['firstSeq']+index for index,change in enumerate(envelope['changes'])):
+            raise ValueError('原子同步组成员或序列不完整。')
+        encoded=dump(envelope)
+        if len(encoded.encode('utf-8'))>16*1024*1024: raise ValueError('原子同步组超过大小限制。')
+        prior=db.execute('SELECT envelope FROM incoming_groups WHERE group_id=?',(envelope['groupId'],)).fetchone()
+        if prior and prior['envelope']!=encoded: raise ValueError('原子同步组标识被用于不同内容。')
+        rows={item[:2]:db.execute('SELECT * FROM entities WHERE kind=? AND id=?',item[:2]).fetchone() for item in values}
+        # A replay of a group already observed completely must not turn later
+        # local edits into a new conflict against obsolete history.
+        if not prior and all(rows[item[:2]] and rows[item[:2]]['remote_version']>=item[2] for item in values) and not any(self._group_locked(db,*item[:2]) for item in values): return False
+        blocked=bool(prior) or any(self._group_locked(db,*item[:2]) or
+            db.execute('SELECT 1 FROM outbox WHERE kind=? AND id=?',item[:2]).fetchone() or
+            db.execute('SELECT 1 FROM sent WHERE kind=? AND id=?',item[:2]).fetchone() or
+            db.execute('SELECT 1 FROM conflicts WHERE kind=? AND entity_id=?',item[:2]).fetchone() for item in values)
+        if blocked:
+            db.execute('INSERT OR IGNORE INTO incoming_groups VALUES(?,?,?,?)',(envelope['groupId'],envelope['firstSeq'],envelope['lastSeq'],encoded))
+            for kind,identifier,version,deleted,value in values:
+                db.execute('INSERT OR IGNORE INTO incoming_group_members VALUES(?,?,?)',(envelope['groupId'],kind,identifier))
+                row=rows[kind,identifier]
+                if row and row['remote_version']>version: version,deleted,value=row['remote_version'],bool(row['remote_deleted']),row['remote_data']
+                self._conflict(db,kind,identifier,version,value,deleted)
+            return False
+        changed=False
+        for kind,identifier,version,deleted,value in values:
+            row=rows[kind,identifier]
+            if row and version<=row['remote_version']: continue
+            self._apply_remote(db,kind,identifier,version,value,deleted)
+            changed=changed or not row or row['data']!=value or bool(row['deleted'])!=deleted
+        return changed
+
+    @staticmethod
+    def _apply_remote(db, kind, identifier, version, value, deleted):
+        db.execute('INSERT INTO entities VALUES (?,?,?,?,?,?,?) ON CONFLICT(kind,id) DO UPDATE SET data=excluded.data,deleted=excluded.deleted,remote_version=excluded.remote_version,remote_data=excluded.remote_data,remote_deleted=excluded.remote_deleted',(kind,identifier,value,int(deleted),version,value,int(deleted)))
+        db.execute('DELETE FROM outbox WHERE kind=? AND id=?',(kind,identifier))
+        db.execute('DELETE FROM conflicts WHERE kind=? AND entity_id=?',(kind,identifier))
+
     def apply_changes(self, changes, cursor, before_commit=None):
         with self.db() as db:
             previous=self._get(db,'snapshot',{}); changed=False
             last_cursor=self._get(db,'cursor',0)
-            if not isinstance(cursor,int) or cursor<last_cursor: raise ValueError('无效同步游标。')
+            if type(cursor) is not int or cursor<last_cursor or cursor>9007199254740991 or not isinstance(changes,list): raise ValueError('无效同步游标。')
             for change in changes:
-                kind,identifier=change['entityType'],change['entityId']
-                if kind not in FIELDS or not IDENTIFIER.fullmatch(identifier): raise ValueError('未知同步记录。')
-                version=change['version']; deleted=bool(change.get('deleted')); value=None if deleted else dump(record(kind,change['data']))
-                if not isinstance(version,int) or isinstance(version,bool) or version<1: raise ValueError('无效同步版本。')
+                if isinstance(change,dict) and change.get('type')=='atomic-group':
+                    changed=self._receive_group(db,change,cursor) or changed
+                    continue
+                kind,identifier,version,deleted,value=self._incoming_change(change)
                 row=db.execute('SELECT * FROM entities WHERE kind=? AND id=?',(kind,identifier)).fetchone()
+                if self._group_locked(db,kind,identifier):
+                    if row and row['remote_version']>version: version,deleted,value=row['remote_version'],bool(row['remote_deleted']),row['remote_data']
+                    self._conflict(db,kind,identifier,version,value,deleted)
+                    continue
                 if row and version<=row['remote_version']: continue
                 pending=db.execute('SELECT * FROM outbox WHERE kind=? AND id=?',(kind,identifier)).fetchone()
                 if pending and (pending['data']!=value or bool(pending['deleted'])!=deleted):
                     self._conflict(db,kind,identifier,version,value,deleted)
                     continue
-                db.execute('INSERT INTO entities VALUES (?,?,?,?,?,?,?) ON CONFLICT(kind,id) DO UPDATE SET data=excluded.data,deleted=excluded.deleted,remote_version=excluded.remote_version,remote_data=excluded.remote_data,remote_deleted=excluded.remote_deleted',(kind,identifier,value,int(deleted),version,value,int(deleted)))
-                db.execute('DELETE FROM outbox WHERE kind=? AND id=?',(kind,identifier))
-                db.execute('DELETE FROM conflicts WHERE kind=? AND entity_id=?',(kind,identifier))
+                self._apply_remote(db,kind,identifier,version,value,deleted)
                 changed=changed or not row or row['data']!=value or bool(row['deleted'])!=deleted
             snapshot=self._assemble(db,previous) if changed else previous
             if changed:
@@ -550,10 +798,47 @@ class SyncStore:
                             'version': conflict['remote_version']}}
         return hashlib.sha256(dump(value).encode('utf-8')).hexdigest()
 
+    def _group_component(self, db, kind, identifier):
+        groups={row['group_id'] for row in db.execute('SELECT group_id FROM incoming_group_members WHERE kind=? AND entity_id=?',(kind,identifier))}
+        keys=set(); pending=list(groups)
+        while pending:
+            group_id=pending.pop()
+            for row in db.execute('SELECT kind,entity_id FROM incoming_group_members WHERE group_id=?',(group_id,)):
+                key=(row['kind'],row['entity_id'])
+                if key in keys: continue
+                keys.add(key)
+                for member in db.execute('SELECT group_id FROM incoming_group_members WHERE kind=? AND entity_id=?',key):
+                    if member['group_id'] not in groups: groups.add(member['group_id']); pending.append(member['group_id'])
+        return sorted(groups),sorted(keys)
+
+    def _group_conflict(self, db, group_ids, keys):
+        members=[]; certificate=[]
+        for kind,identifier in keys:
+            conflict=db.execute('SELECT * FROM conflicts WHERE kind=? AND entity_id=?',(kind,identifier)).fetchone()
+            if not conflict: raise ValueError('原子同步组冲突成员缺失，未进行恢复。')
+            row=db.execute('SELECT * FROM entities WHERE kind=? AND id=?',(kind,identifier)).fetchone()
+            local=json.loads(row['data']) if row and row['data'] else None
+            remote=json.loads(conflict['remote_data']) if conflict['remote_data'] else None
+            members.append({'id':conflict['id'],'type':kind,'entityId':identifier,
+                'title':(local or remote or {}).get('title') or (local or remote or {}).get('name') or identifier,
+                'local':local,'remote':remote,'remoteVersion':conflict['remote_version'],
+                'localDeleted':bool(row['deleted']) if row else True,'remoteDeleted':bool(conflict['remote_deleted'])})
+            certificate.append({'key':[kind,identifier],'conflict':dict(conflict),'local':dict(row) if row else None,
+                'outbox':[dict(item) for item in db.execute('SELECT * FROM outbox WHERE kind=? AND id=? ORDER BY op_id',(kind,identifier))],
+                'sent':[dict(item) for item in db.execute('SELECT * FROM sent WHERE kind=? AND id=? ORDER BY op_id',(kind,identifier))]})
+        envelopes=[dict(db.execute('SELECT * FROM incoming_groups WHERE group_id=?',(group_id,)).fetchone()) for group_id in group_ids]
+        revision=hashlib.sha256(dump({'groups':envelopes,'members':certificate}).encode('utf-8')).hexdigest()
+        return {**members[0],'groupId':group_ids[0],'groupIds':group_ids,'memberCount':len(members),'groupMembers':members,'revision':revision}
+
     def conflicts(self):
         with self.db() as db:
-            result=[]
+            result=[]; grouped=set()
             for c in db.execute('SELECT * FROM conflicts'):
+                group_ids,keys=self._group_component(db,c['kind'],c['entity_id'])
+                if group_ids:
+                    if group_ids[0] not in grouped:
+                        result.append(self._group_conflict(db,group_ids,keys)); grouped.update(group_ids)
+                    continue
                 row=db.execute('SELECT data,deleted FROM entities WHERE kind=? AND id=?',(c['kind'],c['entity_id'])).fetchone()
                 local=json.loads(row['data']) if row and row['data'] else None; remote=json.loads(c['remote_data']) if c['remote_data'] else None
                 result.append({'id':c['id'],'type':c['kind'],'entityId':c['entity_id'],'title':(local or remote or {}).get('title') or (local or remote or {}).get('name') or c['entity_id'],'local':local,'remote':remote,'remoteVersion':c['remote_version'],'revision':self._conflict_revision(c,row)})
@@ -564,6 +849,26 @@ class SyncStore:
         with self.db() as db:
             conflict=db.execute('SELECT * FROM conflicts WHERE id=?',(identifier,)).fetchone()
             if not conflict: raise ConflictRevisionError(changed=True)
+            group_ids,keys=self._group_component(db,conflict['kind'],conflict['entity_id'])
+            if group_ids:
+                if choice!='remote': raise ValueError('原子操作组不能逐项保留本机版本，请比较后采用完整云端组，再重新审阅本机修改。')
+                group=self._group_conflict(db,group_ids,keys)
+                if group['revision']!=revision: raise ConflictRevisionError(changed=True)
+                previous=self._get(db,'snapshot',{})
+                self._put(db,'resolved:'+identifier,{'groupId':group['groupId'],'groupIds':group_ids,'members':group['groupMembers'],'choice':'remote','at':int(time.time()*1000)})
+                for kind,entity_id in keys:
+                    current=db.execute('SELECT * FROM conflicts WHERE kind=? AND entity_id=?',(kind,entity_id)).fetchone()
+                    self._apply_remote(db,kind,entity_id,current['remote_version'],current['remote_data'],current['remote_deleted'])
+                    db.execute('DELETE FROM sent WHERE kind=? AND id=?',(kind,entity_id))
+                for group_id in group_ids:
+                    db.execute('DELETE FROM incoming_group_members WHERE group_id=?',(group_id,))
+                    db.execute('DELETE FROM incoming_groups WHERE group_id=?',(group_id,))
+                snapshot=self._assemble(db,previous)
+                snapshot['_revision']=int(previous.get('_revision',0))+1; snapshot['_savedAt']=int(time.time()*1000)
+                snapshot.pop('_pendingLocalSave',None)
+                self._save_snapshot(db,snapshot); self._put(db,'remoteAppliedRevision',snapshot['_revision'])
+                self._publish_files(db,before_commit,snapshot)
+                return {'changed':True,'snapshot':snapshot}
             key=(conflict['kind'],conflict['entity_id']); previous=self._get(db,'snapshot',{})
             local=db.execute('SELECT * FROM entities WHERE kind=? AND id=?',key).fetchone()
             # This is the authoritative CAS, inside the same write transaction

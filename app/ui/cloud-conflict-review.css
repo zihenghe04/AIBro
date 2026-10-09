@@ -13,3 +13,5 @@
 @media(max-width:580px){.cloud-conflict-review .cloud-sync-versions{grid-template-columns:minmax(0,1fr)}.cloud-conflict-review-heading{flex-wrap:wrap}}
 body.reduce-motion .cloud-conflict-review *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 @media(prefers-reduced-motion:reduce){.cloud-conflict-review *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+.cloud-conflict-group>p{margin:14px 16px;color:var(--muted);font-size:13px;line-height:1.7}.cloud-conflict-group>.cloud-conflict-fields{border-top:1px solid var(--line)}.cloud-conflict-group>.cloud-conflict-fields>summary{padding:12px 16px;color:var(--text);font-size:13px}

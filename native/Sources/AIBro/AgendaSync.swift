@@ -83,7 +83,12 @@ enum AgendaWire {
                 guard let dates=value as? [Double],dates.allSatisfy({$0.isFinite && abs($0)<8.64e15}) else {throw AgendaError.message("日程例外日期无效")}
             }
         }
-        if let excluded = v["excluded"] as? [Double] {e.excluded = excluded.map {Date(timeIntervalSince1970: $0/1000)}}
+        let excluded = (v["excluded"] as? [Double] ?? []).map {Date(timeIntervalSince1970: $0/1000)}
+        if let ics = v["ics"] as? String, !ics.isEmpty {
+            // Mobile cancellations supplement the imported EXDATE set; an empty
+            // overlay must not restore dates cancelled in the original calendar.
+            e.excluded = Array(Set(e.excluded + excluded)).sorted()
+        } else {e.excluded = excluded}
         e.completed = (v["completed"] as? [Double] ?? []).map {Date(timeIntervalSince1970: $0/1000)}
         e.reminderMinutes = v["reminderMinutes"] as? Int
         e.deleted = v["deleted"] as? Bool == true || n["deleted"] as? Bool == true || (n["deletedAt"] as? Double ?? 0) > 0 || n["archived"] as? Bool == true || (n["archivedAt"] as? Double ?? 0) > 0

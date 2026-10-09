@@ -41,6 +41,8 @@
 	<string>拍摄图片并保存到你的随记。</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>连接你在局域网中部署的 AI Bro 同步服务。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>录制你主动发起的语音，转写后供你检查和保存。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>选择照片作为随记或项目资料。</string>
 	<key>UIApplicationSceneManifest</key>

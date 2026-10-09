@@ -23,6 +23,6 @@ enum NativeQuickASRCredentialAdapter {
             guard config.valid else { throw NativeQuickASRError.configuration }
             let metadata = String(decoding: try JSONEncoder().encode(config), as: UTF8.self)
             _ = try credentials.call("api","save",["base":config.origin,"token":key,"model":metadata])
-        }, remove: { _ = try credentials.call("api","remove",[:]) })
+        }, remove: { _ = try credentials.call("api","remove",[:]) }, profiles: { action, options in try credentials.call("api", action, options) })
     }
 }
