@@ -4,14 +4,14 @@
 <p align="center">读课件和论文，整理可编辑的笔记，安排待办与日程。</p>
 <p align="center"><sub>Mac 原生 App · 本地优先 · 自选模型 · 开源</sub></p>
 <p align="center">简体中文 · <a href="README.en.md">English</a></p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.2"><strong>下载 Mac 预览版 ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/">查看官网与演示</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">更新日志</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.3"><strong>下载 Mac 预览版 ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/">查看官网与演示</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">更新日志</a></p>
 
 [![AI Bro：在 Mac 上阅读课件、提问和编辑学习笔记](launch/dist/assets/demo/hero-workspace.png)](https://zihenghe04.github.io/AIBro/)
 <p align="center"><sub>AI Bro 0.8.0 实际 App 界面，来自独立演示工作区。项目、资料与回答均为虚构；动图为界面步骤编排，不代表实时模型速度。<a href="https://zihenghe04.github.io/AIBro/#workspace">查看工作流演示 ↗</a></sub></p>
 
 把课件、论文和笔记放进项目，向自己的资料提问。AI Bro 可以帮你整理重点、起草笔记和拆分任务；你可以打开引用的原文核对，也可以审阅、修改并保存 AI 生成的内容。写报告或复习时，再从已保存的资料中查找需要的内容。
 
-当前公开下载为 **0.9.2 Mac 开发预览版**，面向 Apple Silicon / macOS 14+，尚未 Apple 公证。[查看本版说明](docs/RELEASE_NOTES.md)
+当前公开下载为 **0.9.3 Mac 开发预览版**，面向 Apple Silicon / macOS 14+，尚未 Apple 公证。[查看本版说明](docs/RELEASE_NOTES.md)
 
 ---
 
@@ -73,13 +73,13 @@
 
 ## 开始使用
 
-1. 从 [v0.9.2 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.2) 下载 DMG 与校验文件，按[安装指南](docs/DISTRIBUTION.md)安装。App 内置 Python 与 PDF 运行时。
+1. 从 [v0.9.3 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.3) 下载 DMG 与校验文件，按[安装指南](docs/DISTRIBUTION.md)安装。App 内置 Python 与 PDF 运行时。
 2. 在设置中连接模型服务，选择模型。
 3. 新建项目，加入一份资料，开始第一段对话。
 
 > 根据这份讲义整理核心概念，保留来源页码，保存成学习笔记，再列出三项复习任务。
 
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.2"><strong>下载 AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/">查看使用演示</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.3"><strong>下载 AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/">查看使用演示</a></p>
 
 <details>
 <summary><strong>预览版边界与数据说明</strong></summary>

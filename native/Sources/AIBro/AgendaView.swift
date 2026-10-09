@@ -119,10 +119,8 @@ struct AgendaView:View {
                 HStack{Image(systemName:"bell");Text(NativeL10n.notificationStatus(store.notificationStatus));Spacer();Text(nativeUI("本机时间：\(TimeZone.current.identifier)", "Local time: \(TimeZone.current.identifier)"))}.font(.caption).foregroundStyle(.secondary)
             }.padding(30).frame(maxWidth:1400).frame(maxWidth:.infinity)
         }.background(StudioPalette.canvas)
-        .background(AgendaAgentReviewHost(controller: model.agendaAgent))
         .sheet(item:$selectedDay){selection in AgendaDayDetail(model:model,store:store,date:selection.date)}
         .sheet(item:$editor){event in AgendaEditor(model:model,store:store,event:event)}
-        .sheet(item:$model.agendaDraft){event in AgendaEditor(model:model,store:store,event:event)}
         .sheet(item:$model.agendaLinkedDetail){occurrence in AgendaDetail(model:model,store:store,occurrence:occurrence)}
         .sheet(item:$detail){occurrence in AgendaDetail(model:model,store:store,occurrence:occurrence)}
         .sheet(isPresented:$importing){AgendaImportView(model:model,store:store)}
@@ -246,6 +244,8 @@ struct AgendaEditor:View {
     @ObservedObject var model:Workspace
     @ObservedObject var store:AgendaStore
     @State var event:AgendaEvent
+    var verifySave:(() async -> Bool)?
+    @State private var saving=false
     @State private var initialEvent:AgendaEvent
     @State private var expected:AgendaEvent?
     @State private var session=UUID()
@@ -253,17 +253,22 @@ struct AgendaEditor:View {
     @State private var issue=""
     @Environment(\.dismiss) private var dismiss
     private var dirty:Bool {event != initialEvent}
-    init(model:Workspace,store:AgendaStore,event:AgendaEvent,expected:AgendaEvent? = nil) {
-        self.model=model;self.store=store
+    init(model:Workspace,store:AgendaStore,event:AgendaEvent,expected:AgendaEvent? = nil,verifySave:(() async -> Bool)? = nil) {
+        self.model=model;self.store=store;self.verifySave=verifySave
         _event=State(initialValue:event);_initialEvent=State(initialValue:event)
         // Details may already be stale when Edit is opened. Preserve the actual
         // displayed baseline, rather than accepting a newer store version.
         _expected=State(initialValue:expected)
     }
     private func closeEditor() {store.endEditorDraft(session);dismiss()}
-    private func requestDismiss() {if dirty {discardPrompt=true}else{closeEditor()}}
+    private func requestDismiss() {guard !saving else{return};if dirty {discardPrompt=true}else{closeEditor()}}
     private func saveEditor() {
+        guard !saving else{return};saving=true
+        Task { @MainActor in
+        defer{saving=false}
         do {
+            if let verifySave,!(await verifySave()) {throw AgendaError.message("日程来源或会话已变化，未保存。请重新审阅。")}
+
             guard model.ready,model.snapshot?.privateMode != true else {throw AgendaError.message(nativeUI("工作区尚未就绪或处于私密模式，当前输入已保留。", "The workspace is unavailable or in private mode. Your input is retained."))}
             let scope=AgendaEditingScope(projects:(model.snapshot?.projects ?? []).map{AgendaEditingProject(id:$0.id,title:$0.title)},
                 documents:(model.snapshot?.documents ?? []).map{AgendaEditingDocument(id:$0.id,title:$0.title,projectID:$0.projectId,kind:$0.kind)})
@@ -274,9 +279,10 @@ struct AgendaEditor:View {
             try store.save(event,expected:expected)
             closeEditor()
         } catch {issue=error.localizedDescription}
+        }
     }
     var body:some View {
-        VStack(spacing:0){HStack{Text(nativeUI("日程详情", "Event details")).font(.title2.bold());Spacer();Button(nativeUI("取消", "Cancel")){requestDismiss()};Button(nativeUI("保存", "Save")){saveEditor()}.buttonStyle(.borderedProminent).keyboardShortcut("s",modifiers:.command)}.padding(22)
+        VStack(spacing:0){HStack{Text(nativeUI("日程详情", "Event details")).font(.title2.bold());Spacer();Button(nativeUI("取消", "Cancel")){requestDismiss()};Button(nativeUI("保存", "Save")){saveEditor()}.buttonStyle(.borderedProminent).keyboardShortcut("s",modifiers:.command).disabled(saving)}.padding(22)
             ScrollView{VStack(alignment:.leading,spacing:17){TextField(nativeUI("日程名称", "Event title"),text:$event.title).font(.title3).textFieldStyle(.roundedBorder)
                 if event.source=="随记" {Text(nativeUI("由随记创建的日程草稿。请确认日期、时间和提醒；保存前不会安排通知。", "Drafted from a quick note. Check the date, time and reminder. Notifications are scheduled only after saving.")).font(.caption).foregroundStyle(.secondary)}
                 AgendaChoice(title:nativeUI("类型", "Type"),value:$event.kind,options:[("event",nativeUI("日程", "Agenda")),("course",nativeUI("课程", "Courses")),("meeting",nativeUI("会议", "Meeting"))])
@@ -298,13 +304,13 @@ struct AgendaEditor:View {
                 AgendaChoice(title:nativeUI("关联资料", "Linked source"),value:$event.documentID,options:[("",nativeUI("不关联资料", "No linked source"))]+(model.snapshot?.documents ?? []).filter{event.projectID.isEmpty || $0.projectId==event.projectID}.map{($0.id,$0.title)}).onChange(of:event.documentID){_,value in event.documentKind=model.snapshot?.documents?.first{$0.id==value}?.kind ?? "note"}
                 Text(nativeUI("备注", "Notes")).font(.headline);TextEditor(text:$event.details).frame(height:90).overlay(RoundedRectangle(cornerRadius:8).stroke(.primary.opacity(0.1)))
                 if !issue.isEmpty{Text(issue).foregroundStyle(.red)}
-            }.padding(22)}
-        }.frame(width:570,height:690).background(StudioPalette.canvas)
+            }.padding(22)}.disabled(saving)
+        }.environment(\.timeZone,TimeZone(identifier:event.timeZone) ?? .current).frame(width:570,height:690).background(StudioPalette.canvas)
             .background(NativeDraftQuitSheet())
             .onAppear{store.setEditorDraft(session,dirty:dirty)}
             .onChange(of:event){_,_ in store.setEditorDraft(session,dirty:dirty)}
             .onDisappear{store.endEditorDraft(session)}
-            .interactiveDismissDisabled(dirty)
+            .interactiveDismissDisabled(dirty || saving)
             .onExitCommand{requestDismiss()}
             .confirmationDialog(nativeUI("放弃尚未保存的日程修改？", "Discard unsaved event changes?"),isPresented:$discardPrompt,titleVisibility:.visible) {
                 Button(nativeUI("放弃修改", "Discard changes"),role:.destructive){closeEditor()}

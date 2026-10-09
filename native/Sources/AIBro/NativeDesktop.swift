@@ -190,6 +190,37 @@ import WebKit
                     replyHandler(["enabled":store.preferences.notifications,"status":store.notificationStatus],nil)
                 };return
             }
+            if command=="agenda-create-batch" {
+                guard let workspace,message.webView === workspace.web,let proposals=body["proposals"] as? [[String:Any]],
+                      !proposals.isEmpty,proposals.count<=12,let runID=body["runId"] as? String,runID.count<=512,
+                      let automatic=body["automatic"] as? Bool,Set(body.keys)==Set(["command","proposals","runId","automatic"]),
+                      workspace.ready,workspace.snapshot?.privateMode == false,let owner=workspace.agenda.storageIdentity else {throw AgendaError.message("日程提案不可用。")}
+                let origin=workspace.origin,web=workspace.web
+                let verify:@MainActor () async -> Bool = {[weak self,weak workspace] in
+                    guard let self,let workspace,self.workspace === workspace,workspace.ready,workspace.snapshot?.privateMode == false,
+                          workspace.origin==origin,workspace.agenda.storageIdentity==owner,web.url?.host==origin?.host,web.url?.port==origin?.port else{return false}
+                    let result=try? await web.callAsyncJavaScript("return window.AgendaProposals?.authorizeCreation(runID,proposals,automatic)",arguments:["runID":runID,"proposals":proposals,"automatic":automatic],in:nil,contentWorld:.page)
+                    return (result as? [String:Any])?["status"] as? String == "authorized" && self.workspace === workspace && workspace.ready && workspace.snapshot?.privateMode == false && workspace.origin==origin && workspace.agenda.storageIdentity==owner
+                }
+                Task { @MainActor in
+                    do {
+                        guard await verify() else{throw AgendaError.message("日程提案、来源或权限已变化，未保存。")}
+                        let events=try proposals.map{try workspace.proposedAgendaEvent($0)}
+                        guard Set(events.map(\.id)).count==events.count else{throw AgendaError.message("日程提案存在重复标识。")}
+                        if automatic {
+                            guard !proposals.contains(where:{$0["endEstimated"] as? Bool == true}) else{throw AgendaError.message("结束时间待确认，请审阅日程。")}
+                            let scope=AgendaEditingScope(projects:(workspace.snapshot?.projects ?? []).map{AgendaEditingProject(id:$0.id,title:$0.title)},documents:(workspace.snapshot?.documents ?? []).map{AgendaEditingDocument(id:$0.id,title:$0.title,projectID:$0.projectId,kind:$0.kind)})
+                            for event in events {try scope.validate(event,expected:nil)}
+                            let created=try workspace.agenda.createProposals(events)
+                            replyHandler(["status":"committed","persisted":true,"created":created,"eventIds":events.map(\.id)],nil)
+                        } else {
+                            guard workspace.agendaCreationReview == nil,workspace.agendaDraft == nil,workspace.agendaAgent.review == nil,!workspace.agenda.hasUnsavedEditorDrafts else{throw AgendaError.message("已有日程正在编辑，请先完成或关闭。")}
+                            workspace.agendaCreationReview=AgendaCreationReview(events:events,owner:owner,verify:verify)
+                            replyHandler(["status":"pending_review"],nil)
+                        }
+                    }catch{replyHandler(nil,error.localizedDescription)}
+                };return
+            }
             if command=="agenda-proposal",let proposal=body["proposal"] as? [String:Any]{try workspace?.reviewAgendaProposal(proposal);replyHandler(["ok":true],nil);return}
             if command=="agenda-draft",let id=body["id"] as? String {try workspace?.draftAgenda(id);replyHandler(["ok":true],nil);return}
             if command=="agenda-open",let id=body["id"] as? String {try workspace?.openLinkedAgenda(id);replyHandler(["ok":true],nil);return}

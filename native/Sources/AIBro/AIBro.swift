@@ -26,6 +26,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     var agendaSyncRunning=false
     var agendaSyncTimer:Timer?
     @Published var agendaDraft:AgendaEvent?
+    @Published var agendaCreationReview:AgendaCreationReview?
     @Published var agendaLinkedDetail:AgendaOccurrence?
     var returningFromModal = false
     var sawModal = false
@@ -98,8 +99,8 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
                 conversationIDs:Set((snapshot?.conversationLibrary ?? []).filter{!$0.archived}.map(\.id)),
                 documentWorkspaces:Dictionary(grouping:snapshot?.documents ?? [],by:\.id).compactMapValues{$0.count == 1 ? $0.first?.workspace:nil})
         },present:{[weak self] in
-            guard let self,self.agendaDraft == nil,!self.agenda.hasUnsavedEditorDrafts else{return false}
-            return await self.navigateWorkspace("agenda")
+            guard let self,self.agendaDraft == nil,self.agendaCreationReview == nil,!self.agenda.hasUnsavedEditorDrafts else{return false}
+            return self.ready && self.snapshot?.modalOpen != true
         })
         // Synthetic QA deliberately uses the browser fallback and never touches saved secrets.
         if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] == nil || ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_DESKTOP"] == "1" {
@@ -426,18 +427,14 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         var event=AgendaEvent();event.title=document.title;event.documentID=document.id;event.documentKind="note";event.projectID=document.projectId;event.source="随记";event.reminderMinutes=nil
         selection="agenda";agendaDraft=event
     }
-    func reviewAgendaProposal(_ proposal:[String:Any]) throws {
-        guard ready,agendaDraft == nil,let id=proposal["id"] as? String,id.hasPrefix("agenda_"),id.count<200,
+    func proposedAgendaEvent(_ proposal:[String:Any]) throws -> AgendaEvent {
+        guard ready,let id=proposal["id"] as? String,id.hasPrefix("agenda_"),id.count<200,
               let title=proposal["title"] as? String,title.count<=200,let start=proposal["start"] as? Double,let end=proposal["end"] as? Double,start.isFinite,end.isFinite,
               let timeZone=proposal["timeZone"] as? String else{throw AgendaError.message("日程提案或来源不可用。")}
         let documentID=proposal["documentID"] as? String ?? ""
         let document=snapshot?.documents?.first(where:{$0.id==documentID && $0.kind=="note"})
         let messageSource=proposal["sourceMessageId"] as? String
         guard document != nil || (messageSource?.isEmpty == false && (proposal["conversationId"] as? String)?.isEmpty == false) else {throw AgendaError.message("日程来源不可用。")}
-        if let existing=agenda.events.first(where:{$0.id==id}) {
-            guard !existing.deleted else{throw AgendaError.message("此日程已取消，原提案不会自动重新创建。")}
-            try openLinkedAgenda(id);return
-        }
         var event=AgendaEvent();event.id=id;event.title=title;event.start=Date(timeIntervalSince1970:start/1000);event.end=Date(timeIntervalSince1970:end/1000);event.timeZone=timeZone
         event.frequency=proposal["frequency"] as? String ?? "none";event.interval=proposal["interval"] as? Int ?? 1;event.weekdays=proposal["weekdays"] as? [Int] ?? []
         event.count=proposal["count"] as? Int;if let until=proposal["until"] as? Double {event.until=Date(timeIntervalSince1970:until/1000)}
@@ -449,7 +446,16 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         event.source=document == nil ? "对话":"随记"
         if document == nil {event.details=(proposal["details"] as? String ?? "")+"\n\n来源消息："+(proposal["quote"] as? String ?? "")}
         if proposal["endEstimated"] as? Bool == true {event.details += "\n结束时间未指定，默认时长1小时，请在保存前确认。"}
-        try event.validate();selection="agenda";agendaDraft=event
+        try event.validate();return event
+    }
+    func reviewAgendaProposal(_ proposal:[String:Any]) throws {
+        guard agendaDraft == nil,agendaCreationReview == nil else {throw AgendaError.message("已有日程正在审阅。")}
+        let event=try proposedAgendaEvent(proposal)
+        if let existing=agenda.events.first(where:{$0.id==event.id}) {
+            guard !existing.deleted else{throw AgendaError.message("此日程已取消，原提案不会重新创建。")}
+            try openLinkedAgenda(existing.id);return
+        }
+        agendaDraft=event
     }
     func openLinkedAgenda(_ id:String) throws {
         guard let event=agenda.events.first(where:{$0.id==id && !$0.deleted}) else {throw AgendaError.message("此日程已取消或不可用。")}
@@ -775,6 +781,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             _ = try await web.evaluateJavaScript(seed)
             try await Task.sleep(nanoseconds:800_000_000)
             guard snapshot?.projects.first?.id == "native-qa" else { throw CocoaError(.validationMissingMandatoryProperty) }
+            if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_CREATION"] == "1" {try await agendaCreationQA(destination);return}
             if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_CONTEXT"] == "1" {try await contextQA(destination);return}
             if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_OVERVIEW"] == "1" {
                 let fixture=try String(contentsOf:root.appendingPathComponent("native/Resources/qa-overview.js"),encoding:.utf8)
@@ -1052,6 +1059,9 @@ struct MainView: View {
         .onAppear{model.publishNativeSpaceNavigation()}
         .onReceive(model.browser.$visible){model.settingsBrowserVisibilityChanged($0)}
         .onChange(of:nativeContent){_,hidden in if hidden {model.dismissTransientModelPicker()}}
+        .background(AgendaAgentReviewHost(controller:model.agendaAgent))
+        .sheet(item:$model.agendaDraft){event in AgendaEditor(model:model,store:model.agenda,event:event)}
+        .sheet(item:$model.agendaCreationReview){review in AgendaCreationReviewView(model:model,store:model.agenda,review:review)}
         .sheet(item:$conversationTarget){target in ConversationManager(model:model,target:target)}
         .sheet(isPresented:$archiveOpen){ConversationArchive(model:model)}
         .alert("AI Bro",isPresented:Binding(get:{model.error != nil},set:{if !$0 {model.error=nil}})){Button(nativeUI("好", "OK"),role:.cancel){model.error=nil}} message:{Text(model.error ?? "")}

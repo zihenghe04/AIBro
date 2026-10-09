@@ -82,6 +82,21 @@ struct ContentRecord {let id:String;let title:String;let workspace:String;let pr
   do{try empty.move(removedOccurrence,to:removedSeries.start.addingTimeInterval(3600));fatalError("removed series move accepted")}catch{}
   do{try empty.save(removedSeries,expected:removedSeries);fatalError("removed series editor resurrected event")}catch{}
   check(empty.events.isEmpty,"removed recurring event cannot crash movement or be resurrected by stale editor")
+  var batchA=AgendaEvent();batchA.id="agenda_batch_a";batchA.title="Synthetic lecture A"
+  var batchB=batchA;batchB.id="agenda_batch_b";batchB.title="Synthetic lecture B"
+  let batchBefore=store.events
+  var invalidBatch=batchB;invalidBatch.title=""
+  do{try store.createProposals([batchA,invalidBatch]);fatalError("partial batch saved")}catch{}
+  check(store.events==batchBefore,"invalid batch saves nothing")
+  check(try store.createProposals([batchA,batchB])==[batchA.id,batchB.id],"batch creates all selected events")
+  let batchReload=AgendaStore();batchReload.load(folder:folder,qa:true)
+  check(batchReload.events.suffix(2)==[batchA,batchB],"batch persisted atomically and survives reload")
+  var editedBatch=batchA;editedBatch.title="Human correction";try store.save(editedBatch)
+  check(try store.createProposals([batchA,batchB]).isEmpty,"repeated confirmation creates no duplicates")
+  check(store.events.first{$0.id==batchA.id}==editedBatch,"repeated proposal never overwrites human correction")
+  try store.cancel(batchB)
+  do{try store.createProposals([batchA,batchB]);fatalError("cancelled event recreated")}catch{}
+  check(store.events.first{$0.id==batchB.id}?.deleted==true,"cancelled proposal is never resurrected")
   print("\(count) agenda store checks passed")
  }
 }

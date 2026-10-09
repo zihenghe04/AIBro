@@ -123,6 +123,20 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
         operationReceipts=nextReceipts;events=next;reschedule();onChanged?()
         return receipt
     }
+    /// All new proposals are persisted together. Retries never overwrite edits or resurrect cancellations.
+    @discardableResult func createProposals(_ items:[AgendaEvent]) throws -> [String] {
+        guard storageReady,!items.isEmpty,items.count<=12,Set(items.map(\.id)).count==items.count else {throw AgendaError.message("日程批次无效或存储未就绪。")}
+        for event in items {
+            try event.validate()
+            guard event.id.hasPrefix("agenda_"),!event.deleted,event.kind != "task" else {throw AgendaError.message("日程提案无效。")}
+            if events.contains(where:{$0.id==event.id && $0.deleted}) {throw AgendaError.message("此批次包含已取消日程，未重新创建。")}
+        }
+        let existing=Set(events.map(\.id)),fresh=items.filter{!existing.contains($0.id)}
+        guard !fresh.isEmpty else{return []}
+        let next=events+fresh
+        try persist(next,preferences);events=next;reschedule();onChanged?()
+        return fresh.map(\.id)
+    }
     func importEvents(_ items:[AgendaEvent],replace:Bool, projectID:String) throws {
         guard Set(items.map(\.id)).count == items.count else {throw AgendaError.message("导入存在重复标识，请重新生成预览。")};var next=events
         for var event in items {try event.validate();if !projectID.isEmpty {event.projectID=projectID}

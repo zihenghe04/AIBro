@@ -51,6 +51,13 @@ struct AgendaAgentReview: Identifiable {
             (includeCancelled || !$0.deleted) && (!$0.documentID.isEmpty || $0.id.hasPrefix("agenda_")) && value.editingScope.canAccess($0)
         }.map { event in
             var item: [String: Any] = ["id": event.id, "title": event.title, "documentID": event.documentID, "start": event.start.timeIntervalSince1970 * 1000]
+            item["end"]=event.end.timeIntervalSince1970 * 1000;item["timeZone"]=event.timeZone
+            item["kind"]=event.kind;item["allDay"]=event.allDay;item["projectID"]=event.projectID
+            item["frequency"]=event.frequency;item["interval"]=event.interval;item["weekdays"]=event.weekdays
+            item["count"]=event.count.map{$0 as Any} ?? NSNull()
+            item["until"]=event.until.map{$0.timeIntervalSince1970 * 1000 as Any} ?? NSNull()
+            item["reminderMinutes"]=event.reminderMinutes.map{$0 as Any} ?? NSNull()
+            item["location"]=event.location;item["details"]=event.details
             if includeCancelled { item["deleted"] = event.deleted }
             return item
         }

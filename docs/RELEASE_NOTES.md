@@ -1,3 +1,13 @@
+## 0.9.3 — 2026-10-09 · Mac 预览版
+
+- 日程创建遵循当前会话的审批设置：信息明确且已获自动审批时直接保存，需要补充时间或明确要求审阅时保留确认。
+- 多条日程可批量勾选、一次保存，也可逐条编辑；审阅完成后留在原对话。
+- 修复追问后重复生成相同日程提案的问题，正确显示已保存数量，保留人工修改。
+
+Apple Silicon / macOS 14+ 开发预览版，尚未 Apple 公证。安装包、对应源码、依赖源码及 SHA-256 校验文件附在发布页。
+
+**English:** Calendar creation now follows the conversation's approval setting. Review and save multiple events together, or edit them individually without leaving the chat. Repeated proposals in the same conversation recognize existing events instead of creating duplicates.
+
 ## 0.9.2 — 2026-10-04 · Mac 预览版
 
 - 可直接让 AI Bro 删除指定项目。Agent 会查询当前项目，再按照会话权限提交删除计划；默认需要在审批卡确认。
