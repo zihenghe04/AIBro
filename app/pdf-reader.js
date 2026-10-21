@@ -19,6 +19,21 @@
   const outputWidth=mode==='page'?Math.min(availableWidth,availableHeight*ratio):mode==='zoom'?baseWidth*clampZoom(zoom):availableWidth;
   return {width:Math.max(1,outputWidth),height:Math.max(1,outputWidth/ratio),zoom:outputWidth/baseWidth};
  }
+ // Map a cited excerpt onto this page's words. Spacing, line breaks and width
+ // variants differ between extraction and the text layer, so both sides are
+ // compared without whitespace. Only a unique match counts; otherwise null.
+ const compact=value=>String(value||'').normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,'');
+ function locateExcerpt(words,excerpt){
+  const list=Array.isArray(words)?words:[];let text='';const owner=[];
+  list.forEach((word,index)=>{const part=compact(word?.text);text+=part;for(let i=0;i<part.length;i++)owner.push(index);});
+  const body=String(excerpt||'').replace(/^\[第 \d+ 页\]\n/,'');
+  const lines=body.split('\n').map(compact).filter(line=>line.length>=8).sort((a,b)=>b.length-a.length);
+  for(const candidate of [compact(body).slice(0,600),...lines.map(line=>line.slice(0,180))]){
+   if(candidate.length<4)continue;const at=text.indexOf(candidate);
+   if(at>=0&&text.indexOf(candidate,at+1)===-1)return {start:owner[at],end:owner[at+candidate.length-1]};
+  }
+  return null;
+ }
  function mount(container,options={}){
   instances.get(container)?.destroy();
   const doc=root.document,item=options.item||{},base=`/__files/${encodeURIComponent(item.id||'')}`;
@@ -28,12 +43,13 @@
   let destroyed=false,epoch=0,request=null,image=null,island=null,resizeObserver=null,resizeFrame=null,count=0,page=1,mode='width',zoom=1,effectiveZoom=1,dimensions={width:612,height:792},phase='metadata',error='',retryKind='metadata',raster=0,attemptedRaster=0,pendingRaster=null,rasterTimer=null,rasterKey='',firstPageSize=null;
   let textRequest=null,textLayer=null,textData=null,textPhase='loading',pageText='',copying=false;
   let searchLayer=null,pendingMatch=null,find=null,findState=null,findFocus=0;
+  let textWords=[],citationLayer=null,citation=null,regionLayer=null,capturing=false;
   let measuredSize=null,deferredPosition=null,lastVisiblePosition={top:0,left:0};
   const positions=new Map(),measure=doc.createElement('canvas').getContext?.('2d');
   const valid=()=>!destroyed&&options.onValid?.()!==false;
-  function destroy(){if(destroyed)return;destroyed=true;epoch++;find?.destroy();request?.abort();textRequest?.abort();textData=null;textLayer=null;pageText='';positions.clear();cancelRaster();if(image){image.onload=null;image.onerror=null;image.removeAttribute('src');}resizeObserver?.disconnect();if(resizeFrame!==null)root.cancelAnimationFrame?.(resizeFrame);doc.removeEventListener?.('workstation-language-change',refresh);root.removeEventListener?.('resize',scheduleSize);island?.unmount();frame.replaceChildren();frame.remove();if(instances.get(container)===handle)instances.delete(container);}
+  function destroy(){if(destroyed)return;destroyed=true;epoch++;settleCitation(false);find?.destroy();request?.abort();textRequest?.abort();textData=null;textLayer=null;pageText='';positions.clear();cancelRaster();if(image){image.onload=null;image.onerror=null;image.removeAttribute('src');}resizeObserver?.disconnect();if(resizeFrame!==null)root.cancelAnimationFrame?.(resizeFrame);doc.removeEventListener?.('workstation-language-change',refresh);root.removeEventListener?.('resize',scheduleSize);island?.unmount();frame.replaceChildren();frame.remove();if(instances.get(container)===handle)instances.delete(container);}
   function guard(){if(valid())return true;destroy();return false;}
-  function toolbarProps(){return {find:findState,findFocus,onFind:openFind,onFindClose:closeFind,onFindQuery:value=>find?.query(value),onFindNext:delta=>find?.move(delta),onFindRun:()=>find?.run(),onFindStop:()=>find?.stop(),title:item.name||item.originalName||t('未命名 PDF','Untitled PDF'),count,page,mode,zoom:effectiveZoom,loading:phase==='metadata',error,textPhase:phase==='error'?'page-error':phase==='ready'?textPhase:'loading',canCopy:!!pageText&&phase==='ready',copying,onCopy:copyPage,onTextRetry:loadText,expanded:!!options.isExpanded?.(),canExpand:typeof options.onExpand==='function',onPage:setPage,onTurn:delta=>setPage(page+delta),onFit:value=>{if(!guard())return;const position=capturePosition();mode=value;applySize();restorePosition(value==='page'?{top:0,left:0}:position);},onZoom:delta=>{if(!guard())return;const position=capturePosition();zoom=clampZoom(Math.round((effectiveZoom+delta)*100)/100);mode='zoom';applySize();restorePosition(position);},onExpand:()=>{if(guard()){options.onExpand?.(!options.isExpanded?.());scheduleSize();renderToolbar();}},onRetry:()=>retryKind==='metadata'?loadInfo():retryKind==='refinement'?refine(true):renderPage()};}
+  function toolbarProps(){return {find:findState,findFocus,onFind:openFind,onFindClose:closeFind,onFindQuery:value=>find?.query(value),onFindNext:delta=>find?.move(delta),onFindRun:()=>find?.run(),onFindStop:()=>find?.stop(),title:item.name||item.originalName||t('未命名 PDF','Untitled PDF'),count,page,mode,zoom:effectiveZoom,loading:phase==='metadata',error,textPhase:phase==='error'?'page-error':phase==='ready'?textPhase:'loading',canCopy:!!pageText&&phase==='ready',copying,onCopy:copyPage,onTextRetry:loadText,expanded:!!options.isExpanded?.(),canExpand:typeof options.onExpand==='function',canAsk:typeof options.onAskPage==='function'&&options.canAskPage?.()!==false,onAsk:event=>{if(guard()&&phase==='ready')options.onAskPage({page,count,anchor:event?.currentTarget||null});},canRegion:typeof options.onAskRegion==='function',capturing,onRegion:()=>{if(guard())capturing?stopCapture():startCapture();},onPage:setPage,onTurn:delta=>setPage(page+delta),onFit:value=>{if(!guard())return;const position=capturePosition();mode=value;applySize();restorePosition(value==='page'?{top:0,left:0}:position);},onZoom:delta=>{if(!guard())return;const position=capturePosition();zoom=clampZoom(Math.round((effectiveZoom+delta)*100)/100);mode='zoom';applySize();restorePosition(position);},onExpand:()=>{if(guard()){options.onExpand?.(!options.isExpanded?.());scheduleSize();renderToolbar();}},onRetry:()=>retryKind==='metadata'?loadInfo():retryKind==='refinement'?refine(true):renderPage()};}
   function renderToolbar(){if(!guard())return;const props=toolbarProps();if(island)island.update(props);else island=root.HalaskaUI.mount(toolbar,'PDFReaderToolbar',props);}
   function setStatus(value,isError=false){status.textContent=value;status.hidden=!value;status.setAttribute('role',isError?'alert':'status');viewport.setAttribute('aria-busy',String(phase==='metadata'||phase==='page'));}
   function pageSize(){
@@ -88,7 +104,7 @@
   }
   function renderPage(){
    if(!guard()||!count)return;
-   ++epoch;request?.abort();textRequest?.abort();textLayer=null;searchLayer=null;textData=null;pageText='';textPhase='loading';copying=false;cancelRaster();if(image){image.onload=null;image.onerror=null;image.removeAttribute('src');}image=null;raster=0;attemptedRaster=0;
+   ++epoch;request?.abort();textRequest?.abort();if(capturing)stopCapture(false);textLayer=null;searchLayer=null;citationLayer=null;textWords=[];if(citation&&citation.page!==page)settleCitation(false);textData=null;pageText='';textPhase='loading';copying=false;cancelRaster();if(image){image.onload=null;image.onerror=null;image.removeAttribute('src');}image=null;raster=0;attemptedRaster=0;
    phase='page';retryKind='page';error='';deferredPosition=null;lastVisiblePosition={top:0,left:0};sheet.replaceChildren();viewport.scrollTop=0;viewport.scrollLeft=0;setStatus(t(`正在渲染第 ${page} 页…`,`Rendering page ${page}…`));
    if(page===1&&firstPageSize)dimensions={...firstPageSize};
    options.onPage?.(page);loadRaster(requestedRaster(),false);loadText();
@@ -124,22 +140,80 @@
    try{
     const response=await root.fetch(`${base}/preview-text?page=${requestedPage}`,{signal});const data=await response.json();
     if(signal.aborted||!guard()||current!==epoch)return;
-    if(!response.ok){textPhase=data.code==='PDF_COPY_RESTRICTED'?'restricted':'error';renderToolbar();return;}
+    if(!response.ok){textPhase=data.code==='PDF_COPY_RESTRICTED'?'restricted':'error';renderToolbar();applyCitation();return;}
     if(data.page!==requestedPage||!Number.isFinite(data.width)||!Number.isFinite(data.height)||data.width<=0||data.height<=0||!Array.isArray(data.words)||data.words.length>20000)throw Error('Invalid PDF text geometry');
     const words=data.words.filter(word=>typeof word.text==='string'&&word.text.length<=20000&&['x','y','width','height','angle'].every(key=>Number.isFinite(word[key]))&&word.width>0&&word.height>0&&[0,90,180,270].includes(word.angle));
     textData=data;const incomplete=data.partial||data.truncated||words.length!==data.words.length;textPhase=words.length?(incomplete?'partial':'ready'):(incomplete?'unsupported':'empty');
-    textLayer?.remove();textLayer=null;pageText=words.map((word,index)=>word.text+(index===words.length-1?'':word.line===words[index+1].line?' ':'\n')).join('');
+    textLayer?.remove();textLayer=null;textWords=words;pageText=words.map((word,index)=>word.text+(index===words.length-1?'':word.line===words[index+1].line?' ':'\n')).join('');
     if(words.length){
      textLayer=node('div','pdf-text-layer');textLayer.setAttribute('role','document');Object.assign(textLayer.dataset,{selectionSource:'import',selectionId:String(item.id||''),selectionPage:String(page),selectionTitle:String(item.name||'PDF')});textLayer.setAttribute('aria-label',t(`第 ${page} 页原文`,`Original text, page ${page}`));textLayer.style.width=`${data.width}px`;textLayer.style.height=`${data.height}px`;
      words.forEach((word,index)=>{const span=node('span','pdf-text-word'),fontSize=word.height*.8;span.textContent=word.text+(index===words.length-1?'':word.line===words[index+1].line?' ':'\n');span.style.left=`${word.x}px`;span.style.top=`${word.y}px`;span.style.fontSize=`${fontSize}px`;span.style.lineHeight=`${word.height}px`;span.style.height=`${word.height}px`;if(measure)measure.font=`${fontSize}px sans-serif`;const measured=measure?.measureText(word.text).width||word.width;span.style.transform=`rotate(${word.angle}deg) scaleX(${word.width/Math.max(.01,measured)})`;textLayer.append(span);});sheet.append(textLayer);
     }
     if(phase==='ready'){const position=capturePosition();dimensions={width:data.width,height:data.height};applySize();restorePosition(position);}else styleText();
-    renderToolbar();
-   }catch(failure){if(signal.aborted||!guard()||current!==epoch)return;textPhase='error';renderToolbar();}
+    renderToolbar();applyCitation();
+   }catch(failure){if(signal.aborted||!guard()||current!==epoch)return;textPhase='error';renderToolbar();applyCitation();}
+  }
+  // Citation jump: open the cited page, then mark the excerpt's words once
+  // that page's text arrives. Resolves true (marked), false (not located).
+  function settleCitation(found){const pending=citation;citation=null;pending?.resolve(found);}
+  function highlight({page:target,excerpt}={}){
+   if(!guard())return Promise.resolve(false);settleCitation(false);clearCitation();
+   const promise=new Promise(resolve=>{citation={page:validPage(target,count||Infinity)||page,excerpt:String(excerpt||''),resolve};});
+   if(!count)return promise; // loadInfo calls renderPage with the requested page.
+   if(citation.page!==page)setPage(citation.page);else applyCitation();
+   return promise;
+  }
+  function clearCitation(){citationLayer?.remove();citationLayer=null;}
+  function applyCitation(){
+   if(!citation||citation.page!==page||textPhase==='loading')return;
+   const range=textWords.length?locateExcerpt(textWords,citation.excerpt):null;
+   if(!range||!textData){settleCitation(false);return;}
+   clearCitation();citationLayer=node('div','pdf-search-layer pdf-citation-layer');citationLayer.setAttribute('aria-hidden','true');citationLayer.dataset.pageWidth=String(textData.width);citationLayer.style.width=`${textData.width}px`;citationLayer.style.height=`${textData.height}px`;
+   // One mark per upright line reads as a highlighter stroke; rotated words keep their own boxes.
+   const rects=[];for(const word of textWords.slice(range.start,range.end+1)){const last=rects.at(-1);
+    if(last&&word.angle===0&&last.angle===0&&last.line!==undefined&&last.line===word.line){const right=Math.max(last.x+last.width,word.x+word.width),bottom=Math.max(last.y+last.height,word.y+word.height);last.x=Math.min(last.x,word.x);last.y=Math.min(last.y,word.y);last.width=right-last.x;last.height=bottom-last.y;}
+    else rects.push({x:word.x,y:word.y,width:word.width,height:word.height,angle:word.angle,line:word.line});}
+   rects.forEach(rect=>{const mark=node('span','pdf-citation-mark');mark.style.left=`${rect.x}px`;mark.style.top=`${rect.y}px`;mark.style.width=`${rect.width}px`;mark.style.height=`${rect.height}px`;mark.style.transform=`rotate(${rect.angle}deg)`;citationLayer.append(mark);});
+   sheet.append(citationLayer);styleSearch();pendingMatch={page,rects,width:textData.width,key:'citation'};revealMatch();settleCitation(true);
+  }
+  // Region ask: drag a box over the page image (a figure, table or formula).
+  // The crop comes from this page's raster at its natural resolution.
+  function startCapture(){
+   if(phase!=='ready'||!image)return;capturing=true;regionLayer?.remove();regionLayer=node('div','pdf-region-layer');regionLayer.setAttribute('role','application');regionLayer.setAttribute('aria-label',t('拖动框选要提问的区域；Esc 取消','Drag to select the region to ask about; Esc cancels'));regionLayer.tabIndex=-1;
+   const box=node('div','pdf-region-box');box.hidden=true;regionLayer.append(box);sheet.append(regionLayer);regionLayer.focus({preventScroll:true});
+   let start=null;const bounds=()=>image.getBoundingClientRect();
+   const clamp=(event,r)=>({x:Math.min(r.right,Math.max(r.left,event.clientX))-r.left,y:Math.min(r.bottom,Math.max(r.top,event.clientY))-r.top});
+   const draw=(a,b)=>{const r=bounds(),o=regionLayer.getBoundingClientRect(),left=Math.min(a.x,b.x),top=Math.min(a.y,b.y);box.hidden=false;box.style.left=`${r.left-o.left+left}px`;box.style.top=`${r.top-o.top+top}px`;box.style.width=`${Math.abs(b.x-a.x)}px`;box.style.height=`${Math.abs(b.y-a.y)}px`;};
+   regionLayer.onpointerdown=event=>{if(event.button!==0)return;event.preventDefault();start=clamp(event,bounds());regionLayer.setPointerCapture?.(event.pointerId);draw(start,start);};
+   regionLayer.onpointermove=event=>{if(start)draw(start,clamp(event,bounds()));};
+   regionLayer.onpointerup=event=>{if(!start)return;const end=clamp(event,bounds()),a=start;start=null;const width=Math.abs(end.x-a.x),height=Math.abs(end.y-a.y);
+    if(width<12||height<12){box.hidden=true;options.toast?.(t('框选的区域太小，请拖出更大的范围。','The region is too small. Drag a larger box.'));return;}
+    finishCapture({x:Math.min(a.x,end.x),y:Math.min(a.y,end.y),width,height});};
+   regionLayer.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();stopCapture();}};
+   renderToolbar();
+  }
+  function stopCapture(render=true){capturing=false;regionLayer?.remove();regionLayer=null;if(render)renderToolbar();}
+  // Crop from a 2x render of this page (the service maximum) so small formula
+  // text stays legible; the visible raster is the fallback.
+  function sharpRaster(requestedPage,signal){return new Promise(resolve=>{const sharp=new root.Image();sharp.decoding='async';const done=value=>{sharp.onload=sharp.onerror=null;resolve(value);};sharp.onload=()=>done(sharp.naturalWidth>0?sharp:null);sharp.onerror=()=>done(null);signal.addEventListener('abort',()=>done(null),{once:true});sharp.src=`${base}/preview?page=${requestedPage}&scale=2&fit=1`;});}
+  async function finishCapture(rect){
+   const current=epoch,requestedPage=page,shown=image.getBoundingClientRect(),region={x:rect.x/shown.width,y:rect.y/shown.height,width:rect.width/shown.width,height:rect.height/shown.height};stopCapture();
+   const abort=new AbortController(),timer=root.setTimeout(()=>abort.abort(),8000);
+   try{
+    const source=(raster>=2?image:await sharpRaster(requestedPage,abort.signal))||image;
+    if(!guard()||current!==epoch||!source)return;
+    const sw=region.width*source.naturalWidth,sh=region.height*source.naturalHeight,fit=Math.min(1,2000/Math.max(sw,sh));
+    const canvas=doc.createElement('canvas');canvas.width=Math.max(1,Math.round(sw*fit));canvas.height=Math.max(1,Math.round(sh*fit));
+    const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(source,region.x*source.naturalWidth,region.y*source.naturalHeight,sw,sh,0,0,canvas.width,canvas.height);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+    if(!guard()||current!==epoch)return;if(!blob)throw Error('crop failed');
+    options.onAskRegion({page:requestedPage,count,blob,region,anchor:toolbar.querySelector?.('[data-pdf-region]')||null});
+   }catch(failure){if(guard())options.toast?.(t('无法截取这块区域，请重试。','Could not capture this region. Retry.'));}
+   finally{root.clearTimeout(timer);}
   }
   function openFind(){if(!guard()||!count||!find)return false;findFocus++;find.open();return true;}
   function closeFind(){find?.close();pendingMatch=null;toolbar.querySelector?.('[data-pdf-find]')?.focus({preventScroll:true});}
-  function styleSearch(){if(!searchLayer)return;searchLayer.hidden=phase!=='ready';if(!image)return;const width=Number(searchLayer.dataset.pageWidth);searchLayer.style.transform=`scale(${parseFloat(image.style.width)/width})`;searchLayer.style.left=`calc(50% - ${parseFloat(image.style.width)/2}px)`;}
+  function styleSearch(){for(const layer of [searchLayer,citationLayer]){if(!layer)continue;layer.hidden=phase!=='ready';if(!image)continue;const width=Number(layer.dataset.pageWidth);layer.style.transform=`scale(${parseFloat(image.style.width)/width})`;layer.style.left=`calc(50% - ${parseFloat(image.style.width)/2}px)`;}}
   function renderSearch(){
    searchLayer?.remove();searchLayer=null;if(!image||!findState?.open)return;
    const matches=findState.matches.filter(hit=>hit.page===page);if(!matches.length)return;
@@ -189,9 +263,9 @@
   }
   viewport.onscroll=()=>{if(!destroyed&&phase==='ready'&&hasVisibleSize()&&!deferredPosition)lastVisiblePosition=capturePosition();};
   viewport.onkeydown=event=>{if(event.target!==viewport||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();setPage(page+(event.key==='ArrowRight'?1:-1));}};
-  const handle={destroy,refresh,setPage,openFind,getSnapshot:()=>({page,count,mode,zoom:effectiveZoom,phase,rasterScale:raster,pendingScale:pendingRaster?.scale||null}),ready:null};instances.set(container,handle);
+  const handle={id:item.id,destroy,refresh,setPage,openFind,highlight,getSnapshot:()=>({page,count,mode,zoom:effectiveZoom,phase,rasterScale:raster,pendingScale:pendingRaster?.scale||null}),ready:null};instances.set(container,handle);
   if(root.ResizeObserver){resizeObserver=new root.ResizeObserver(scheduleSize);resizeObserver.observe(viewport);}
   doc.addEventListener?.('workstation-language-change',refresh);root.addEventListener?.('resize',scheduleSize);refresh();handle.ready=loadInfo();return handle;
  }
- return {mount,fitSize,clampZoom,validPage,rasterScale};
+ return {mount,fitSize,clampZoom,validPage,rasterScale,locateExcerpt};
 });

@@ -998,7 +998,7 @@ struct MainView: View {
                                 .animation(reduceMotion ? nil:.spring(response:0.32,dampingFraction:0.86),value:rect)
                                 .allowsHitTesting(false)
                         }
-                    VStack(alignment:.leading,spacing:5) {
+                    VStack(alignment:.leading,spacing:2) {
                         nav(nativeUI("总览", "Overview"),"square.grid.2x2","overview")
                         nav(nativeUI("全部对话", "All chats"),"bubble.left.and.bubble.right","conversations")
                         nav(nativeUI("日程", "Agenda"),"calendar.badge.clock","agenda")
@@ -1010,13 +1010,16 @@ struct MainView: View {
                         ForEach(model.snapshot?.projects ?? []) { item in
                             VStack(alignment:.leading,spacing:3) {
                                 HStack(spacing:0) {
-                                    Button {withAnimation(reduceMotion ? nil:.easeInOut(duration:0.18)){if expandedProjects.contains(item.id){expandedProjects.remove(item.id)}else{expandedProjects.insert(item.id)}}} label:{Image(systemName:expandedProjects.contains(item.id) ? "chevron.down":"chevron.right").font(.system(size:9)).frame(width:20,height:36)}.buttonStyle(.plain).accessibilityLabel(nativeUI("展开项目会话：", "Expand project chats: ")+item.title)
+                                    Button {withAnimation(reduceMotion ? nil:.spring(response:0.3,dampingFraction:0.88)){if expandedProjects.contains(item.id){expandedProjects.remove(item.id)}else{expandedProjects.insert(item.id)}}} label:{Image(systemName:"chevron.right").font(.system(size:9,weight:.semibold)).foregroundStyle(.tertiary).rotationEffect(.degrees(expandedProjects.contains(item.id) ? 90:0)).frame(width:18,height:32).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityLabel((expandedProjects.contains(item.id) ? nativeUI("收起项目会话：", "Collapse project chats: "):nativeUI("展开项目会话：", "Expand project chats: "))+item.title)
                                     sidebarButton(item.title,"folder","project:"+item.id,StudioPalette.space(item.workspace))
                                 }
                                 if expandedProjects.contains(item.id) {
-                                    Button {model.command("new-project-conversation",item.id)} label:{Label(nativeUI("新建项目对话", "New project chat"),systemImage:"plus").font(.system(size:11)).padding(9)}.buttonStyle(LiftStyle()).disabled(!model.ready).padding(.leading,24)
-                                    ForEach(Array(library.filter{!$0.archived && $0.projectId==item.id}.prefix(5))){chat in conversationRow(chat).padding(.leading,16)}
-                                    Button(nativeUI("全部项目会话", "All project chats")){model.openProject(item.id,section:"conversations")}.font(.system(size:10)).buttonStyle(.plain).foregroundStyle(.secondary).padding(.leading,32).padding(.vertical,6)
+                                    VStack(alignment:.leading,spacing:2) {
+                                        Button {model.command("new-project-conversation",item.id)} label:{Label(nativeUI("新建项目对话", "New project chat"),systemImage:"plus").font(.system(size:12)).foregroundStyle(.secondary).padding(.horizontal,10).frame(minHeight:28)}.buttonStyle(LiftStyle()).disabled(!model.ready)
+                                        ForEach(Array(library.filter{!$0.archived && $0.projectId==item.id}.prefix(5))){chat in conversationRow(chat)}
+                                        Button(nativeUI("全部项目会话", "All project chats")){model.openProject(item.id,section:"conversations")}.font(.system(size:11)).buttonStyle(.plain).foregroundStyle(.secondary).padding(.horizontal,10).padding(.vertical,5)
+                                    }.padding(.leading,18)
+                                    .transition(reduceMotion ? .opacity:.opacity.combined(with:.offset(y:-4)))
                                 }
                             }
                         }
@@ -1115,7 +1118,7 @@ struct MainView: View {
     var workspaceOverlay:Bool {model.settingsNavigationPending || model.snapshot?.modalOpen == true || model.snapshot?.tourOpen == true || model.snapshot?.commandSearchOpen == true || model.snapshot?.activityCenterOpen == true || model.snapshot?.comparisonOpen == true || model.commandSearchFollowup}
     var nativeContent:Bool {if workspaceOverlay {return false};if ["overview","agenda","conversations"].contains(model.selection ?? "") && model.spaceContent {return false};return ["overview","agenda","conversations"].contains(model.selection ?? "") || (spaceName != nil && ["projects","overview"].contains(currentSpaceSection) && !model.spaceContent)}
     var selectionTint:Color {if let space=spaceName{return StudioPalette.space(space)};if let id=activeProjectID,let project=model.snapshot?.projects.first(where:{$0.id==id}){return StudioPalette.space(project.workspace)};return StudioPalette.jade}
-    func sidebarHeading(_ title:String)->some View {Text(title).font(.system(size:10,weight:.medium)).foregroundStyle(.tertiary).padding(.horizontal,13).padding(.top,20).padding(.bottom,7)}
+    func sidebarHeading(_ title:String)->some View {Text(title).font(.system(size:11,weight:.semibold)).foregroundStyle(.tertiary).padding(.horizontal,10).padding(.top,16).padding(.bottom,4).accessibilityAddTraits(.isHeader)}
     func sidebarButton(_ name:String,_ icon:String,_ tag:String,_ tint:Color)->some View {
         Button {if tag=="conversations"{model.conversationProjectFilter=""};model.compactWorkspacePreferred=true;if tag.hasPrefix("project:"){model.openProject(String(tag.dropFirst(8)))}else if tag.hasPrefix("chat:"){model.rememberNavigationOrigin(model.selection);model.command("conversation",String(tag.dropFirst(5)))}else if tag == "history"{model.selection=tag}else{model.openWorkspace(tag)}} label:{SidebarEntry(title:name,icon:icon,selected:sidebarSelection==tag,tint:tint)}
             .buttonStyle(.plain).accessibilityAddTraits(sidebarSelection==tag ? .isSelected:[])
@@ -1207,7 +1210,7 @@ struct SidebarGlassSelection:View {
     let tint:Color
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var body:some View {
-        let shape=RoundedRectangle(cornerRadius:13)
+        let shape=RoundedRectangle(cornerRadius:10)
         if reduceTransparency {shape.fill(tint.opacity(0.19))}
         else if #available(macOS 26.0,*) {
             shape.fill(tint.opacity(0.10)).glassEffect(.regular.tint(tint.opacity(0.22)),in:shape)
@@ -1221,9 +1224,12 @@ struct SidebarEntry:View {
     @State private var hovering=false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body:some View {
-        HStack(spacing:10){Image(systemName:icon).accessibilityHidden(true).foregroundStyle(selected ? tint:.secondary).frame(width:21);Text(title).font(.system(size:13,weight:selected ? .semibold:.medium)).lineLimit(1);Spacer(minLength:0)}
-            .padding(.vertical,12).padding(.horizontal,12).contentShape(RoundedRectangle(cornerRadius:13))
-            .background(RoundedRectangle(cornerRadius:13).fill(.primary.opacity(hovering && !selected ? 0.045:0)))
+        // macOS 26 source-list rhythm: 32pt rows, 16pt glyphs, 13pt labels.
+        // Hover is a faint fill; the glass selection is drawn behind by the list.
+        HStack(spacing:9){Image(systemName:icon).font(.system(size:14,weight:.regular)).symbolRenderingMode(.hierarchical).accessibilityHidden(true).foregroundStyle(selected ? tint:.secondary).frame(width:20)
+            Text(title).font(.system(size:13,weight:selected ? .semibold:.regular)).foregroundStyle(selected ? AnyShapeStyle(.primary):AnyShapeStyle(.primary.opacity(0.86))).lineLimit(1);Spacer(minLength:0)}
+            .frame(minHeight:32).padding(.horizontal,10).contentShape(RoundedRectangle(cornerRadius:10))
+            .background(RoundedRectangle(cornerRadius:10).fill(.primary.opacity(hovering && !selected ? 0.05:0)))
             .animation(reduceMotion ? nil:.easeOut(duration:0.12),value:hovering).onHover{hovering=$0}
     }
 }
@@ -1743,6 +1749,25 @@ struct NativeDraftQuitGate {
                 self.acceptVoiceExecutionSnapshot()
             }
         }.store(in:&quickEntrySubscriptions)
+        // Ambient island states. Spotify is only polled while its card is
+        // visible, so its last snapshot can be stale; only the local player
+        // (which this process owns) reports playback to the island.
+        quickMedia.recordings.$phase.combineLatest(quickMedia.recordings.$elapsed)
+            .combineLatest(quickMedia.music.$playing.combineLatest(quickMedia.music.$index,quickMedia.music.$tracks))
+            .receive(on:RunLoop.main).sink{[weak self] recording,music in
+                guard let self else{return}
+                let (phase,elapsed)=recording
+                let state:NativeQuickIslandInputs.Recording?
+                switch phase {
+                case .recording: state = .recording(elapsed)
+                case .paused: state = .paused(elapsed)
+                case .saving: state = .saving
+                case .idle,.authorizing: state = nil
+                }
+                let (playing,index,tracks)=music
+                let title=playing && tracks.indices.contains(index) ? tracks[index].deletingPathExtension().lastPathComponent:nil
+                self.quickEntry.updateIslandActivity(recording:state,music:title.map{.init(title:$0)})
+            }.store(in:&quickEntrySubscriptions)
         // Disabling the last background entry must never strand a hidden workspace.
         quickEntry.$mode.dropFirst().removeDuplicates().sink{[weak self] mode in
             if mode == .off {self?.restoreWorkspaceWindow()}

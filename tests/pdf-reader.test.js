@@ -168,3 +168,16 @@ test('failed legacy upload exposes the restore error and preserves the remaining
  let step=0;const original={legacy:true},availability=[],h=harness(async()=>++step===1?{status:404,ok:false,json:async()=>({error:'missing'})}:{status:507,ok:false,json:async()=>({error:'原件恢复空间不足'})});const reader=h.mount({getOriginalBlob:async()=>original,onOriginalAvailability:(value,blob)=>availability.push({value,blob})});await reader.ready;
  assert.equal(h.requests.length,2);assert.match(h.byClass('pdf-page-status').textContent,/空间不足/);assert.equal(availability.at(-1).value,true);assert.equal(availability.at(-1).blob,original);reader.destroy();
 });
+
+test('cited excerpts map onto the page words despite spacing, line breaks and width variants', () => {
+  const { locateExcerpt } = require('../app/pdf-reader.js');
+  const words = ['Attention', 'is', 'all', 'you', 'need.', 'We', 'propose', 'the', 'Transformer,', 'a', 'new', 'network', '注意力机制', '是', '核心。'].map(text => ({ text }));
+  assert.deepEqual(locateExcerpt(words, '[第 3 页]\nWe propose the\nTransformer, a new network'), { start: 5, end: 11 });
+  assert.deepEqual(locateExcerpt(words, 'ＷＥ   PROPOSE the transformer'), { start: 5, end: 8 });
+  assert.deepEqual(locateExcerpt(words, '注意力机制是核心。'), { start: 12, end: 14 });
+  // Falls back to the longest unique line when the whole excerpt is not on the page.
+  assert.deepEqual(locateExcerpt(words, 'Text from the previous page only\nWe propose the Transformer'), { start: 5, end: 8 });
+  assert.equal(locateExcerpt(words, 'Nothing like this is on the page'), null);
+  assert.equal(locateExcerpt([{ text: 'repeat words' }, { text: 'repeat words' }], 'repeat words'), null);
+  assert.equal(locateExcerpt(words, ''), null);
+});

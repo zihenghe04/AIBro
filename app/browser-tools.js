@@ -8,8 +8,25 @@
  const available=()=>typeof bridge()?.request==='function';
  const isActive=item=>item&&!item.deleted&&!item.deletedAt&&!item.archived&&!item.archivedAt&&!['deleted','archived'].includes(item.status);
  const stopped=message=>Object.assign(Error(message||t('浏览器操作已停止。','Browser operation stopped.')),{code:'CANCELLED'});
- const owner=run=>({runId:run.id,conversationId:run.conversationId,projectId:run.projectId||null});
- const sameOwner=(a,b)=>a.runId===b.runId&&a.conversationId===b.conversationId&&(a.projectId||null)===(b.projectId||null);
+ // browserOwner is stable for a conversation, so the page (and any login in it)
+ // outlives a single run; runId stays per-run for cancellation and audit.
+ const owner=run=>({runId:run.id,conversationId:run.conversationId,projectId:run.projectId||null,browserOwner:`conversation:${run.conversationId}:${run.projectId||''}`});
+ const sameOwner=(a,b)=>a.runId===b.runId&&a.conversationId===b.conversationId&&(a.projectId||null)===(b.projectId||null)&&(a.browserOwner===undefined||b.browserOwner===undefined||a.browserOwner===b.browserOwner);
+ const liveSession=session=>!!session?.sessionId&&session.tabId&&!['closed','cancelled'].includes(session.status);
+ // A new run in the same conversation continues the page an earlier run left open,
+ // instead of orphaning it (and its login) and opening yet another tab.
+ function adoptSession(state,run,bound){
+  if(run.browserSession)return;
+  const runs=Array.isArray(state?.agentRuns)?state.agentRuns:[];
+  for(let i=runs.length-1;i>=0;i--){
+   const prior=runs[i],session=prior?.browserSession;
+   if(prior===run||prior.conversationId!==bound.conversationId||(prior.projectId||null)!==bound.projectId||!session)continue;
+   if(!liveSession(session)||session.browserOwner!==bound.browserOwner)return;
+   const {sessionId,tabId,url,title}=session;
+   run.browserSession={...bound,sessionId,tabId,url,title,status:['running','loading'].includes(session.status)?'ready':session.status,lastAction:'resume',updatedAt:new Date().toISOString(),operationCount:0,history:[]};
+   return;
+  }
+ }
  const currentState=state=>hooks.getState?.()||state;
  const id=()=>root.crypto?.randomUUID?.()||`browser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
  const actions={browser_open:'open',browser_snapshot:'snapshot',browser_click:'click',browser_type:'type',browser_scroll:'scroll',browser_screenshot:'snapshot',browser_handoff:'takeover',browser_close:'close'};
@@ -111,6 +128,7 @@
   if(!available())throw Error(t('此运行环境没有连接原生浏览器控制器。请使用支持浏览器的 AI Bro 原生应用。','This runtime has no native browser controller. Use the AI Bro native app with browser support.'));
   if(signal?.aborted)throw stopped();
   const bound=owner(run);validScope(state,run,bound,{running:true});
+  adoptSession(currentState(state),run,bound);
   if(active.has(run.id))throw Error(t('请等待当前浏览器操作结束，再执行下一步。','Wait for the current browser operation before starting another.'));
   if((run.browserSession?.operationCount||0)>=80)throw Object.assign(Error(t('本轮已执行 80 次浏览器操作。请整理已得到的结果，再开始新一轮。','This turn reached 80 browser operations. Summarize the results before starting a new turn.')),{code:'BROWSER_LIMIT'});
   const operationId=id(),data=payload(request,run,bound,operationId);
@@ -224,7 +242,7 @@
  function instructions(){
   if(!available())return 'Browser tools are not connected in this runtime. Do not claim to open pages, click, type, inspect a screenshot, or control desktop apps.';
   return `Browser tools control only this run’s owned native browser page, not the OS, other apps or existing user browser tabs. Return these requests in knowledgeRequests. Browser actions follow the host conversation policy: automatic by default; only explicit request-approval mode asks before sites and interactions. The host supplies and freezes this policy for the run; do not provide or change it in tool requests. The user can take over or stop at any time; wait for the real result. Never claim success before a returned result confirms it.
-1. {"type":"browser_open","url":"https://example.com"} opens or navigates this run’s page (http/https only).
+1. {"type":"browser_open","url":"https://example.com"} opens or navigates this conversation’s browser page (http/https only). A page left open by an earlier turn stays available (with any login): call browser_snapshot to continue instead of reopening.
 2. {"type":"browser_snapshot"} returns actual page text, elements with ref, and snapshotId. {"type":"browser_screenshot"} returns an actual image, element refs and snapshotId for visual verification. Coordinate clicks are not supported; always use returned DOM refs.
 3. {"type":"browser_click","snapshotId":"returned-id","ref":"returned-ref"} clicks an observed element. {"type":"browser_type","snapshotId":"returned-id","ref":"returned-ref","text":"text to enter"} fills that element. {"type":"browser_scroll","snapshotId":"returned-id","y":600,"x":0} scrolls by CSS pixels, at most 4000 pixels on either axis per operation.
 4. {"type":"browser_handoff"} gives control to the user and waits until they resume. Use it for login, CAPTCHA, or a user-only step. Do not bypass these steps. {"type":"browser_close"} closes this run’s page.

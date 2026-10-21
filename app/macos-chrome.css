@@ -1,0 +1,357 @@
+/* App-wide chrome for the native App (body.aibro-native): modal sheets,
+   toasts, the command palette, settings and empty states. Loaded after
+   macos-surfaces.css and shares its glass and fill variables.
+   Motion tokens follow NewMax's measured grammar (research/newmax.md §3.1):
+   swift for small feedback, soft for large areas, spring for entrances;
+   exits are always shorter than entrances and never overshoot.
+   Palettes are unchanged; only material, shape and motion are set here. */
+html body.aibro-native[data-view] {
+  --ds-ease-swift: cubic-bezier(.33, 1, .68, 1);
+  --ds-ease-soft: cubic-bezier(.22, 1, .36, 1);
+  --ds-ease-spring: cubic-bezier(.34, 1.3, .64, 1);
+  --ds-fast: 180ms;
+  --ds-base: 240ms;
+  --ds-slow: 350ms;
+  --ds-radius-sm: 8px;
+  --ds-radius-md: 12px;
+  --ds-radius-lg: 18px;
+  --ds-radius-xl: 24px;
+  /* Hairline elevation: a .5px ring plus stacked soft offsets instead of one
+     large blurred drop shadow. 100 = resting rows, 200 = cards, 300 = sheets. */
+  --ds-elevation-100: 0 0 0 .5px var(--line-strong), 0 1px 1px rgba(0, 0, 0, .04);
+  --ds-elevation-200: 0 0 0 .5px var(--line-strong), 0 1px 1px rgba(0, 0, 0, .04), 0 2px 2px rgba(0, 0, 0, .03), 0 5px 3px rgba(0, 0, 0, .02);
+  --ds-elevation-300: inset 0 .5px 0 rgba(255, 255, 255, .8), 0 0 0 .5px rgba(0, 0, 0, .1), 0 3px 6px rgba(0, 0, 0, .04), 0 11px 20px rgba(0, 0, 0, .05), 0 24px 44px rgba(0, 0, 0, .07), 0 43px 68px rgba(0, 0, 0, .05);
+  --ds-scrim: rgba(18, 28, 24, .22);
+}
+html body.aibro-native[data-view]:not(.light-mode) {
+  --ds-elevation-100: 0 0 0 .5px var(--line-strong);
+  --ds-elevation-200: 0 0 0 .5px var(--line-strong), 0 2px 6px rgba(0, 0, 0, .22);
+  --ds-elevation-300: inset 0 0 0 .5px rgba(255, 255, 255, .12), 0 0 0 .5px rgba(0, 0, 0, .6), 0 2px 12px -6px rgba(0, 0, 0, .44), 0 5px 36px -12px rgba(0, 0, 0, .2), 0 24px 60px -10px rgba(0, 0, 0, .45);
+  --ds-scrim: rgba(0, 0, 0, .42);
+}
+
+/* Modal sheets. One continuous surface: the header and action rows no
+   longer paint their own bands, so the sheet reads as a single pane of the
+   window material (AppKit draws it when data-appkit-glass is set; otherwise
+   the palette panel). The radius stays 24 to match the host's glass region.
+   Enter: scale from .96 on the snappy spring with a short fade. Exit: a
+   quicker fade and a slight shrink, no overshoot. The closed state carries
+   the exit transition; the open state carries the entrance. */
+html body.aibro-native[data-view] dialog:not(#previewDialog) {
+  border: 0;
+  border-radius: var(--ds-radius-xl);
+  background: var(--panel);
+  box-shadow: var(--ds-elevation-300);
+  opacity: 0;
+  transform: scale(.98);
+  transition: opacity 140ms var(--ds-ease-swift), transform 160ms var(--ds-ease-swift), display 160ms allow-discrete, overlay 160ms allow-discrete;
+}
+html body.aibro-native[data-view] dialog[open]:not(#previewDialog) {
+  opacity: 1;
+  transform: none;
+  animation: none;
+  transition: opacity 180ms var(--ds-ease-swift), transform 420ms var(--mac-spring-snappy), display 420ms allow-discrete, overlay 420ms allow-discrete;
+}
+@starting-style {
+  html body.aibro-native[data-view] dialog[open]:not(#previewDialog) { opacity: 0; transform: scale(.96) }
+}
+html body.aibro-native[data-view] dialog:not(#previewDialog)::backdrop {
+  background: var(--ds-scrim);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  opacity: 0;
+  animation: none;
+  transition: opacity 160ms var(--ds-ease-swift), display 160ms allow-discrete, overlay 160ms allow-discrete;
+}
+html body.aibro-native[data-view] dialog[open]:not(#previewDialog)::backdrop { opacity: 1; transition-duration: 220ms }
+@starting-style {
+  html body.aibro-native[data-view] dialog[open]:not(#previewDialog)::backdrop { opacity: 0 }
+}
+html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header {
+  margin-bottom: 18px;
+  padding: 22px 26px 4px;
+  border-bottom: 0;
+  background: transparent;
+}
+html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header h2 { font-size: 17px; font-weight: 650; letter-spacing: -.02em }
+html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header .eyebrow { color: var(--faint); font-weight: 500 }
+html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-actions {
+  margin: 22px -26px -26px;
+  padding: 14px 26px 20px;
+  border-top: 0;
+  background: transparent;
+}
+/* Close is a quiet circular glyph button, like a sheet's trailing control. */
+html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header .icon {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--mac-fill);
+  color: var(--muted);
+  box-shadow: none;
+}
+html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header .icon:hover:not(:disabled) { background: var(--mac-fill-hover); color: var(--text) }
+html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header .icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+/* Fields in a sheet sit as filled wells, not outlined boxes on a second tint. */
+html body.aibro-native[data-view] dialog:not(#previewDialog) :is(input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select) {
+  border-color: transparent;
+  background: var(--mac-fill);
+  box-shadow: none;
+  transition: background-color var(--ds-fast) var(--ds-ease-swift), box-shadow var(--ds-fast) var(--ds-ease-swift);
+}
+html body.aibro-native[data-view] dialog:not(#previewDialog) :is(input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select):hover { background: var(--mac-fill-hover) }
+html body.aibro-native[data-view] dialog:not(#previewDialog) :is(input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select):focus {
+  border-color: transparent;
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+html.appkit-web-glass body.aibro-native dialog[data-appkit-glass] :is(input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select) {
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+}
+
+/* Toast: the glass capsule from macos-surfaces, with an entrance that
+   springs up from slightly below and a quicker, flatter exit. */
+html body.aibro-native[data-view] :is(.toast, #toast) {
+  max-width: min(520px, calc(100vw - 40px));
+  min-height: 36px;
+  padding: 9px 18px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: center;
+  text-wrap: balance;
+  transform: translate(-50%, 10px) scale(.96);
+  transition: opacity 160ms var(--ds-ease-swift), transform 200ms var(--ds-ease-swift);
+}
+html body.aibro-native[data-view] :is(.toast, #toast):is(.visible, .show) {
+  transform: translate(-50%, 0);
+  transition: opacity 180ms var(--ds-ease-swift), transform 460ms var(--mac-spring-snappy);
+}
+
+/* Command palette: a Spotlight-style panel anchored in the upper third, so
+   the field stays put while the result list grows or shrinks below it.
+   Rows are compact menu rows; the active row is a soft accent fill (no edge
+   bar), and its return glyph appears only there. */
+html body.aibro-native[data-view] #searchDialog.command-search {
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(600px, calc(100dvh - 15vh - 24px));
+  margin: max(48px, 13vh) auto auto;
+  border-radius: 20px;
+  transform-origin: 50% 0;
+}
+html body.aibro-native[data-view] #searchDialog.command-search #searchForm { max-height: inherit }
+html body.aibro-native[data-view] #searchDialog.command-search .search-field-row {
+  min-height: 56px;
+  padding-inline: 18px 12px;
+  border-bottom: .5px solid var(--line-strong);
+  background: transparent;
+  box-shadow: none;
+}
+html body.aibro-native[data-view] #searchDialog.command-search #globalSearchInput {
+  height: 54px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 17px;
+  letter-spacing: -.01em;
+}
+html body.aibro-native[data-view] #searchDialog.command-search #globalSearchInput:focus { box-shadow: none }
+html body.aibro-native[data-view] #searchDialog.command-search .search-field-icon { color: var(--muted) }
+html body.aibro-native[data-view] #searchDialog.command-search .search-close {
+  min-width: 34px;
+  height: 24px;
+  min-height: 24px;
+  border: 0;
+  border-radius: var(--ds-radius-sm);
+  background: var(--mac-fill);
+  color: var(--muted);
+  font-size: 11px;
+}
+html body.aibro-native[data-view] #searchDialog.command-search .search-meta { padding: 10px 20px 4px; color: var(--faint); font-size: 11px }
+html body.aibro-native[data-view] #searchDialog.command-search .search-results { padding: 2px 8px 8px }
+html body.aibro-native[data-view] .command-search-group + .command-search-group { margin-top: 6px; padding-top: 4px; border-top: .5px solid var(--line) }
+html body.aibro-native[data-view] .command-search-group-heading { padding: 8px 12px 4px; color: var(--faint); font-size: 11px; font-weight: 600 }
+html body.aibro-native[data-view] #searchDialog.command-search .search-result {
+  min-height: 44px;
+  gap: 11px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: none;
+  transition: background-color 90ms var(--ds-ease-swift);
+}
+html body.aibro-native[data-view] #searchDialog.command-search .search-result:hover { background: var(--mac-fill) }
+html body.aibro-native[data-view] #searchDialog.command-search .search-result[aria-selected=true] {
+  border: 0;
+  background: var(--mac-row-hover);
+  box-shadow: none;
+}
+html body.aibro-native[data-view] #searchDialog.command-search .search-result-icon {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 7px;
+  background: var(--mac-fill);
+  color: var(--muted);
+}
+html body.aibro-native[data-view] #searchDialog.command-search .search-result[aria-selected=true] .search-result-icon {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+html body.aibro-native[data-view] #searchDialog.command-search .search-result-copy b { font-size: 13px; font-weight: 500 }
+html body.aibro-native[data-view] #searchDialog.command-search .search-result-copy small { margin-top: 1px; font-size: 11px; color: var(--muted) }
+html body.aibro-native[data-view] #searchDialog.command-search .search-footer {
+  min-height: 38px;
+  padding: 8px 18px;
+  border-top: .5px solid var(--line-strong);
+  background: transparent;
+  color: var(--faint);
+}
+html body.aibro-native[data-view] #searchDialog.command-search .search-footer kbd {
+  border: 0;
+  border-radius: 5px;
+  background: var(--mac-fill);
+  color: var(--muted);
+}
+html body.aibro-native[data-view] #searchDialog.command-search .search-welcome-icon {
+  border: 0;
+  border-radius: 14px;
+  background: var(--mac-fill);
+  box-shadow: none;
+  color: var(--muted);
+  opacity: .8;
+}
+html body.aibro-native[data-view] #searchDialog.command-search .search-scope-hints span { border: 0; border-radius: 999px; padding: 3px 9px; background: var(--mac-fill) }
+@media (max-width: 500px) {
+  html body.aibro-native[data-view] #searchDialog.command-search { width: calc(100vw - 20px); margin-top: 24px; max-height: calc(100dvh - 48px) }
+}
+@media (prefers-contrast: more) {
+  html body.aibro-native[data-view] #searchDialog.command-search .search-result[aria-selected=true] { box-shadow: inset 0 0 0 2px var(--accent) }
+}
+@media (forced-colors: active) {
+  html body.aibro-native[data-view] #searchDialog.command-search .search-result[aria-selected=true] { outline: 2px solid Highlight; outline-offset: -2px }
+}
+
+/* Settings: a source list on the leading edge and the selected section on
+   the trailing side, as in System Settings. The section controller keeps its
+   Kit tablist, panels and retained form nodes; only the presentation changes.
+   The two Kit wrapper divs become display:contents so the tab list and the
+   section intro join the page grid. Below 860px the horizontal capsule
+   segment from macos-surfaces.css stays. */
+@media (min-width: 860px) {
+  html body.aibro-native[data-view] #settings.settings-sectioned.active-view {
+    display: grid;
+    grid-template-columns: 196px minmax(0, 1fr);
+    grid-auto-rows: auto;
+    column-gap: 36px;
+    align-items: start;
+    max-width: 1180px;
+  }
+  html body.aibro-native[data-view] #settings.settings-sectioned > * { grid-column: 2; min-width: 0; max-width: none; margin-inline: 0 }
+  html body.aibro-native[data-view] #settings.settings-sectioned > .page-heading { grid-column: 1 / -1; margin-bottom: 22px }
+  html body.aibro-native[data-view] #settings.settings-sectioned :is(#settingsNavigation, .settings-navigation-kit) { display: contents }
+  html body.aibro-native[data-view] #settings.settings-sectioned .settings-tabs-scroll {
+    grid-column: 1;
+    grid-row: 2 / span 20;
+    position: sticky;
+    top: 0;
+    overflow: visible;
+    padding: 0;
+  }
+  html body.aibro-native[data-view] #settings.settings-sectioned .settings-section-intro { grid-column: 2; grid-row: 2; padding: 4px 2px 18px }
+  html body.aibro-native[data-view] #settings.settings-sectioned .settings-panels { grid-column: 2; grid-row: 3 }
+  html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs { min-width: 0; width: 100%; flex: none }
+  html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div {
+    flex-direction: column;
+    width: 100%;
+    padding: 0;
+    gap: 2px !important;
+    border-radius: 0;
+    background: transparent;
+  }
+  html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div > button {
+    justify-content: flex-start;
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 12px !important;
+    border-radius: 9px;
+    text-align: left;
+    font-size: 13px !important;
+    color: var(--muted) !important;
+    transition: background-color var(--ds-fast) var(--ds-ease-swift), color var(--ds-fast) var(--ds-ease-swift) !important;
+  }
+  html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div > button:hover { background: var(--mac-fill) !important; color: var(--text) !important }
+  html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div > button[aria-selected=true] {
+    background: var(--mac-row-hover) !important;
+    color: var(--text) !important;
+    font-weight: 600 !important;
+  }
+  html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div > button:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  /* The vertical list has no sliding thumb: the kit only measures x/width. */
+  html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div > div[aria-hidden="true"] { display: none }
+}
+/* Section changes cross-fade with a short rise (NewMax: tab content 140ms). */
+@keyframes settings-panel-in { from { opacity: 0; translate: 0 4px } to { opacity: 1; translate: 0 0 } }
+html body.aibro-native[data-view] #settings .settings-section:not([hidden]) { animation: settings-panel-in var(--ds-base) var(--ds-ease-soft) both }
+html body.aibro-native.reduce-motion[data-view] #settings .settings-section:not([hidden]),
+html body.aibro-native.workspace-resizing[data-view] #settings .settings-section { animation: none }
+/* The save scope is a quiet footnote row rather than a second card. */
+html body.aibro-native[data-view] #settings .settings-save-bar {
+  padding: 12px 14px 12px 16px;
+  border: 0;
+  border-radius: var(--ds-radius-md);
+  background: var(--mac-fill);
+}
+@media (prefers-contrast: more) {
+  html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div > button[aria-selected=true] { box-shadow: inset 0 0 0 2px var(--accent) }
+}
+@media (forced-colors: active) {
+  html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div > button[aria-selected=true] { background: Highlight !important; color: HighlightText !important }
+}
+
+/* Empty states (NewMax DsEmpty): quiet and gray, a tray glyph at 40%
+   opacity above one tertiary line, optically raised. No illustration and no
+   extra copy; the existing message text is the only content. A card that
+   holds nothing but the empty message drops its frame, so an empty page does
+   not show an empty box. */
+html body.aibro-native[data-view] :is(.empty-list, .trash-empty-message, .run-history-empty, .capture-empty):not(:empty):not(:has(*:not(span))) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 120px;
+  margin: 0;
+  padding: 28px 16px calc(28px + 4%);
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+  text-wrap: balance;
+}
+html body.aibro-native[data-view] :is(.empty-list, .trash-empty-message, .run-history-empty, .capture-empty):not(:empty):not(:has(*:not(span)))::before {
+  content: '';
+  width: 28px;
+  height: 28px;
+  flex: none;
+  background: currentColor;
+  opacity: .4;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 13.5 5.6 5.7A2.5 2.5 0 0 1 8 4h8a2.5 2.5 0 0 1 2.4 1.7L21 13.5V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3Cpath d='M3 13.5h4.5l1.5 2.5h6l1.5-2.5H21'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 13.5 5.6 5.7A2.5 2.5 0 0 1 8 4h8a2.5 2.5 0 0 1 2.4 1.7L21 13.5V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3Cpath d='M3 13.5h4.5l1.5 2.5h6l1.5-2.5H21'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+html body.aibro-native[data-view] .card:has(> .empty-list:only-child, > .trash-toolbar[hidden] + .empty-list:last-child) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+html body.aibro-native[data-view] .card > :is(.empty-list:only-child, .trash-toolbar[hidden] + .empty-list:last-child) { min-height: 220px }
+@media (forced-colors: active) {
+  html body.aibro-native[data-view] :is(.empty-list, .trash-empty-message, .run-history-empty, .capture-empty)::before { background: CanvasText }
+}
+
+

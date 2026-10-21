@@ -87,6 +87,21 @@ const watchdog=setTimeout(()=>{win?.destroy();server?.kill();app.exit(1)},90000)
   assert.match(await evaluate(`document.querySelector('.pdf-sheet img').src`),/preview\?page=2&/);
   assert.equal(await hidden(),true);await shot('source-pdf-page-2');
  });
+ await step('Open original marks the cited PDF excerpt on its page',async()=>{
+  await evaluate(`(()=>{ReadingPane.hide();state.agentRuns.push({id:'qa-cite-run',evidenceSources:[{type:'import',id:'qa-source-pdf',sourceId:'qa-cite-1',title:'Source citation.pdf',page:2,excerpt:'[第 2 页]\\nSource citation page 2',provided:true,number:1}]});const chip=document.createElement('button');chip.id='qa-cite-chip';chip.dataset.citationRun='qa-cite-run';chip.dataset.citationSource='qa-cite-1';chip.textContent='1';document.querySelector('#messageList').append(chip);})()`);
+  await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))`);
+  await evaluate(`(()=>{const chip=document.querySelector('#qa-cite-chip');chip.scrollIntoView({block:'center',behavior:'instant'});chip.focus();return true;})()`);
+  assert.equal(await hidden(),false);
+  const canOpen=await evaluate(`!document.querySelector('#citationOpenOriginal')?.disabled`);assert.equal(canOpen,true,'citation can open original');
+  await evaluate(`window.__toasts=[];const box=document.querySelector('#toast');if(box)new MutationObserver(()=>__toasts.push(box.textContent)).observe(box,{childList:true,subtree:true,characterData:true});document.querySelector('#citationOpenOriginal').click()`);
+  await until(()=>evaluate(`document.querySelectorAll('.pdf-citation-mark').length>0`),'citation marks on PDF page');
+  const marks=await evaluate(`(()=>{const marks=[...document.querySelectorAll('.pdf-citation-mark')].map(m=>m.getBoundingClientRect()),words=[...document.querySelectorAll('.pdf-text-word')].map(w=>w.textContent.trim());return{count:marks.length,page:document.querySelector('[data-pdf-page]').value,words,visible:marks.every(r=>r.width>0&&r.height>0&&r.top>=0&&r.bottom<=innerHeight),toasts:__toasts}})()`);
+  assert.equal(marks.page,'2');assert.equal(marks.count,1,JSON.stringify(marks));assert.equal(marks.visible,true,JSON.stringify(marks));
+  assert.ok(!marks.toasts.some(text=>/未能唯一定位/.test(text)),JSON.stringify(marks));await shot('source-pdf-citation-marked');
+  // Turning the page drops the mark; a citation the page cannot match reports it.
+  await evaluate(`document.querySelector('[data-pdf-prev]').click()`);await until(()=>evaluate(`document.querySelector('[data-pdf-page]').value==='1'&&!document.querySelector('.pdf-citation-mark')`),'mark cleared on page turn');
+  assert.equal(await evaluate(`revealSourceExcerpt('import','qa-source-pdf',{page:1,excerpt:'Words that are not on this page'})`),false);
+ });
  await evaluate(`window.__peekAccess={projects:[{id:'guard-project'}],notes:[{id:'guard-note',title:'SECRET_TITLE',content:'SECRET_BODY',projectId:'guard-project'}],agentRuns:[{id:'guard-run',evidenceSources:[{type:'note',id:'guard-note',sourceId:'guard-source',title:'SECRET_TITLE',excerpt:'SECRET_BODY',path:'SECRET_PATH',url:'https://secret.example/',provided:true,number:1}]}]};window.__peekOpens=0;window.__peekPrivate=false;SourcePeek.init({state:()=>__peekAccess,isPrivate:()=>__peekPrivate,open:async()=>{__peekOpens++;}});ReadingPane.hide();const guarded=document.createElement('button');guarded.id='qa-guarded';guarded.dataset.citationRun='guard-run';guarded.dataset.citationSource='guard-source';guarded.textContent='Saved source';document.querySelector('#messageList').append(guarded);guarded.scrollIntoView({block:'center',behavior:'instant'});`);
  await step('source project archive is checked again at click time before opening the original',async()=>{
   await focus('qa-guarded');assert.equal(await hidden(),false);await evaluate(`__peekAccess.projects[0].archived=true;document.querySelector('#citationOpenOriginal').click()`);

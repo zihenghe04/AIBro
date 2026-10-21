@@ -61,12 +61,16 @@
     const chatHost = node('span', 'reading-chat-action'); chatHost.hidden = true;
     const chat = button('引用到对话', '引用到对话', event => referenceInChat(event)); chat.id = 'readingChat';
     chatHost.append(chat);
-    let chatIsland = null, referencing = false;
+    // "问 AI": the same reference routing, plus a prefilled prompt naming this document.
+    const askHost = node('span', 'reading-ask-action'); askHost.hidden = true;
+    const ask = button('问 AI', '就这份资料提问', event => referenceInChat(event, 'ask')); ask.id = 'readingAsk';
+    askHost.append(ask);
+    let chatIsland = null, askIsland = null, referencing = false;
     const maximize = button('↗', '放大阅读区', () => {
       expanded = !expanded; updateShell();
     }); maximize.id = 'readingExpand';
     const collapse = button('−', '收起阅读区，保留标签', () => hide()); collapse.id = 'readingCollapse';
-    toolbar.append(backHost, heading, caption, chatHost, maximize, collapse);
+    toolbar.append(backHost, heading, caption, askHost, chatHost, maximize, collapse);
     const tablist = node('div', 'reading-tabs'); tablist.id = 'readingTabs';
     tablist.setAttribute('role', 'tablist'); tablist.setAttribute('aria-label', '打开的资料');
     tablist.setAttribute('aria-orientation', 'horizontal');
@@ -185,41 +189,45 @@
         back.disabled = props.disabled || returning;
       }
     }
-    function chatAction(tab) {
-      return tab && hooks.onChat && hooks.getItem(tab.kind, tab.id) ? hooks.chatAction?.(tab) : null;
+    function chatAction(tab, mode = 'chat') {
+      const [action, handler] = mode === 'ask' ? [hooks.askAction, hooks.onAsk] : [hooks.chatAction, hooks.onChat];
+      return tab && handler && hooks.getItem(tab.kind, tab.id) ? action?.(tab) : null;
     }
     function updateChatAction(tab) {
-      const action = chatAction(tab);
-      chatHost.hidden = !action;
-      if (!action) return;
-      const label = action.label || '引用到对话';
-      const props = { id: 'readingChat', variant: 'ghost', size: 'sm', children: label,
-        title: action.title || label, 'aria-label': label, disabled: !!action.disabled,
-        loading: referencing, onClick: event => referenceInChat(event),
-        style: { height: 28, minHeight: 28, padding: '4px 7px', fontSize: 11, whiteSpace: 'nowrap' } };
-      const kit = env.HalaskaUI || globalThis.HalaskaUI;
-      if (kit?.mount) {
-        if (chatIsland) chatIsland.update(props);
-        else { chatHost.replaceChildren(); chatIsland = kit.mount(chatHost, 'Button', props); }
-      } else {
-        chat.textContent = label; chat.title = props.title; chat.setAttribute('aria-label', label);
-        chat.disabled = props.disabled || referencing;
+      for (const mode of ['ask', 'chat']) {
+        const action = chatAction(tab, mode), host = mode === 'ask' ? askHost : chatHost, fallback = mode === 'ask' ? ask : chat;
+        host.hidden = !action;
+        if (!action) continue;
+        const label = action.label || (mode === 'ask' ? '问 AI' : '引用到对话');
+        const props = { id: mode === 'ask' ? 'readingAsk' : 'readingChat', variant: 'ghost', size: 'sm', children: label,
+          title: action.title || label, 'aria-label': action.ariaLabel || label, disabled: !!action.disabled,
+          loading: referencing === mode, onClick: event => referenceInChat(event, mode),
+          style: { height: 28, minHeight: 28, padding: '4px 7px', fontSize: 11, whiteSpace: 'nowrap' } };
+        const kit = env.HalaskaUI || globalThis.HalaskaUI;
+        if (kit?.mount) {
+          const island = mode === 'ask' ? askIsland : chatIsland;
+          if (island) island.update(props);
+          else { host.replaceChildren(); const mounted = kit.mount(host, 'Button', props); if (mode === 'ask') askIsland = mounted; else chatIsland = mounted; }
+        } else {
+          fallback.textContent = label; fallback.title = props.title; fallback.setAttribute('aria-label', props['aria-label']);
+          fallback.disabled = props.disabled || !!referencing;
+        }
       }
     }
-    async function referenceInChat(event) {
-      const tab = tabs.find(entry => entry.key === activeKey), action = chatAction(tab);
+    async function referenceInChat(event, mode = 'chat') {
+      const tab = tabs.find(entry => entry.key === activeKey), action = chatAction(tab, mode);
       if (!visible || parked || !action || action.disabled || referencing) return false;
       // Capture before a menu takes focus. The hook owns routing and reference
       // persistence; this toolbar never closes or remounts the active editor.
       const version = navigationVersion, key = activeKey;
-      const anchor = event?.currentTarget || chatHost.querySelector('button');
+      const anchor = event?.currentTarget || (mode === 'ask' ? askHost : chatHost).querySelector('button');
       captureActive(); persist();
       const snapshot = { ...tab, origin: cleanOrigin(tab.origin), bookmark: cleanBookmark(tab.bookmark) };
-      referencing = true;
+      referencing = mode;
       try {
         // A menu must first accept an enabled anchor. Keep the in-flight guard
         // synchronous, then paint busy only when the host returns async work.
-        const result = hooks.onChat(snapshot, { anchor, event,
+        const result = (mode === 'ask' ? hooks.onAsk : hooks.onChat)(snapshot, { anchor, event,
           isCurrent: () => version === navigationVersion && activeKey === key && visible && !parked && !!hooks.getItem(tab.kind, tab.id) });
         if (result?.then) updateChatAction(tab);
         return await result;

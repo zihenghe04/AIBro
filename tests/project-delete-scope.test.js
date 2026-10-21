@@ -11,9 +11,10 @@ function harness(extra = {}, kind = 'project') {
     tasks: [], notes: [], papers: [], imports: [], attachments: [], agentRuns: [], links: [], trash: [],
     currentConversationId: 'research-chat', ...extra
   };
+  const undoOffers = [];
   const context = vm.createContext({ ProjectLifecycle: require('../app/project-lifecycle'), state, manageTarget: { kind, id: kind === 'project' ? 'course' : 'course-chat' },
     window: { confirm: () => true }, uid: () => 'generated-chat', save: noop, renderAll: noop, showView: noop,
-    ensureConversation: noop, repairRelationships: noop, normalizeStateShape: noop, purgeTrash: { pendingId: null }, $: () => ({ close: noop }), $$: () => []
+    ensureConversation: noop, repairRelationships: noop, normalizeStateShape: noop, purgeTrash: { pendingId: null }, undoTrashToast: (message, entry) => { undoOffers.push(entry); }, $: () => ({ close: noop }), $$: () => []
   });
   const helper = source.indexOf('function projectDeletionMembership(');
   const start = helper >= 0 ? helper : source.indexOf('function deleteManagedItem(');
@@ -22,7 +23,7 @@ function harness(extra = {}, kind = 'project') {
   vm.runInContext(source.slice(start, end), context);
   const restoreStart = source.indexOf('function restoreTrash(');
   vm.runInContext(source.slice(restoreStart, source.indexOf('async function purgeTrash(', restoreStart)), context);
-  return { state, remove: context.deleteManagedItem, restore: () => context.restoreTrash(0) };
+  return { state, undoOffers, remove: context.deleteManagedItem, restore: () => context.restoreTrash(0) };
 }
 const ids = list => Array.from(list, item => item.id).sort();
 
@@ -36,6 +37,7 @@ test('deleting a same-name course project cannot remove any explicitly research-
   assert.ok(fixture.state.conversations.includes(otherConversation));
   for (const [collection, id] of [['tasks','task'],['notes','note'],['imports','pdf'],['papers','paper']]) assert.deepEqual(ids(fixture.state[collection]), [id]);
   for (const collection of ['tasks','notes','imports','papers']) assert.equal(fixture.state.trash[0].data[collection].length, 0);
+  assert.deepEqual(fixture.undoOffers, [fixture.state.trash[0]], 'the undo toast is offered for exactly the new trash entry');
 });
 
 test('explicit project ID takes precedence over stale name and workspace, including duplicate names in one space', () => {

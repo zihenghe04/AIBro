@@ -142,7 +142,16 @@ const watchdog = setTimeout(() => { win?.destroy(); server?.kill(); app.exit(1);
    finally{AgentTransport.requestPlan=transport;ConversationModels.resolve=resolve;}
    return {rules:captured?.[0]?.content?.[0]?.text||'',user:captured?.[1]?.content?.[0]?.text||'',title:document.querySelector('#selectionTitle')?.textContent||''};})()`);
   assert.match(request.rules,/翻译选中片段/);assert.match(request.rules,/第 1 页/);assert.match(request.user,/Rotation0 selectable/);assert.match(request.title,/翻译/);
-  await evaluate(`SelectionExplain.close()`);
+  // The finished translation can be kept as a new note naming this PDF and page.
+  await until(()=>evaluate(`!document.querySelector('#selectionSave').hidden&&!document.querySelector('#selectionSave').disabled`),'save-as-note enabled');
+  const notesBefore=await evaluate(`state.notes.length`);
+  await evaluate(`document.querySelector('#selectionSave').click()`);
+  await until(()=>evaluate(`state.notes.length===${notesBefore}+1&&document.querySelector('#selectionPanel').hidden`),'note saved');
+  const saved=await evaluate(`(()=>{const n=state.notes.at(-1);return{kind:n.kind,title:n.title,content:n.content,sources:n.sourceAttachmentIds,page:n.sourcePage,projectId:n.projectId,preview:state.previewRecord}})()`);
+  assert.equal(saved.kind,'阅读笔记');assert.match(saved.title,/^翻译：Rotation0 selectable/);assert.match(saved.content,/^> 摘自《text-cases\.pdf》第 1 页/);assert.match(saved.content,/## 翻译\n\n合成译文/);
+  assert.deepEqual(saved.sources,['text-cases']);assert.equal(saved.page,1);assert.equal(saved.projectId,'text-project');assert.equal(saved.preview?.type,'note',JSON.stringify(saved));
+  measurements.push({case:'selection-save-note',saved});await screenshot('selection-saved-note');
+  await open('text-cases',1);
   // Private mode: the same selection is not offered to a model.
   await evaluate(`(()=>{window.__privateOn=PrivateMode.isOn;PrivateMode.isOn=()=>true;document.dispatchEvent(new Event('selectionchange'))})()`);await delay(60);
   assert.equal(await evaluate(`document.querySelector('#selectionBar').hidden`),true,'private mode hides selection actions on PDF text');
@@ -151,6 +160,47 @@ const watchdog = setTimeout(() => { win?.destroy(); server?.kill(); app.exit(1);
  await check('copy-page Kit action passes actual extracted page text to clipboard writeText', async () => {
   await open('text-cases', 1);await click('[data-pdf-copy]');await until(()=>evaluate(`window.__clipboardWrites.length===1`),'copy callback');
   assert.equal(await evaluate(`window.__clipboardWrites[0]`),'Rotation0 selectable\nNext line');
+ });
+ await check('ask-page references this PDF in the conversation beside the reader and quotes the page', async () => {
+  await open('text-cases', 2);await evaluate(`(()=>{const input=document.querySelector('#agentInput');input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  const before=await evaluate(`({view:document.body.dataset.view,refs:(currentConversation().draftFileReferences||[]).length,label:document.querySelector('[data-pdf-ask]')?.getAttribute('aria-label')})`);
+  assert.equal(before.label,'问 AI 第 2 页',JSON.stringify(before));
+  await click('[data-pdf-ask]');
+  if(before.view!=='agent'){await until(()=>evaluate(`!!document.querySelector('[role="menu"] [role="menuitem"]')`),'conversation chooser');await evaluate(`document.querySelector('[role="menu"] [role="menuitem"]').click()`);}
+  await until(()=>evaluate(`document.querySelector('#agentInput').value.includes('第 2 页')`),'page quote in composer');
+  const after=await evaluate(`({value:document.querySelector('#agentInput').value,refs:(currentConversation().draftFileReferences||[]).map(r=>r.type+':'+r.id),focused:document.activeElement?.id})`);
+  assert.equal(after.value,'关于《text-cases.pdf》第 2 页：');assert.ok(after.refs.includes('import:text-cases'),JSON.stringify(after));assert.equal(after.focused,'agentInput');
+  measurements.push({case:'ask-page',before,after});await screenshot('ask-page-staged');
+  await evaluate(`(()=>{const input=document.querySelector('#agentInput');input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+ });
+ await check('region drag crops the page image and stages it with the PDF in the conversation', async () => {
+  await open('text-cases', 1);await evaluate(`(()=>{const input=document.querySelector('#agentInput');input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  const importsBefore=await evaluate(`state.imports.length`);
+  await click('[data-pdf-region]');await until(()=>evaluate(`!!document.querySelector('.pdf-region-layer')`),'region layer');
+  assert.equal(await evaluate(`document.querySelector('[data-pdf-region]').getAttribute('aria-pressed')`),'true');
+  // Escape cancels without staging anything; a second press starts again.
+  await evaluate(`document.querySelector('.pdf-region-layer').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+  await until(()=>evaluate(`!document.querySelector('.pdf-region-layer')`),'region cancelled');
+  await click('[data-pdf-region]');await until(()=>evaluate(`!!document.querySelector('.pdf-region-layer')`),'region layer again');
+  const box=await evaluate(`(()=>{const r=document.querySelector('.pdf-sheet img').getBoundingClientRect();return{x1:Math.round(r.left+r.width*.1),y1:Math.round(r.top+r.height*.1),x2:Math.round(r.left+r.width*.6),y2:Math.round(r.top+r.height*.4),width:r.width,natural:document.querySelector('.pdf-sheet img').naturalWidth}})()`);
+  if(!win.webContents.debugger.isAttached())win.webContents.debugger.attach('1.3');
+  const mouse=(type,x,y,buttons)=>win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type,x,y,button:'left',buttons,clickCount:1});
+  await mouse('mouseMoved',box.x1,box.y1,0);await mouse('mousePressed',box.x1,box.y1,1);
+  for(let step=1;step<=5;step++){await mouse('mouseMoved',Math.round(box.x1+(box.x2-box.x1)*step/5),Math.round(box.y1+(box.y2-box.y1)*step/5),1);await delay(16);}
+  await screenshot('region-drag');
+  await mouse('mouseReleased',box.x2,box.y2,0);
+  await until(()=>evaluate(`document.querySelector('#agentInput').value.includes('框选的区域')`),'region quote in composer',20000);
+  const staged=await evaluate(`(()=>{const c=currentConversation(),ids=c.draftAttachmentIds||[],items=state.imports.filter(i=>ids.includes(i.id));return{value:document.querySelector('#agentInput').value,refs:(c.draftFileReferences||[]).map(r=>r.type+':'+r.id),images:items.filter(i=>/^image[/]/.test(i.mimeType||'')).map(i=>({name:i.name,type:i.mimeType,size:i.size})),chips:[...document.querySelectorAll('#stagedAttachments .staged-chip-name')].map(n=>n.textContent),layer:!!document.querySelector('.pdf-region-layer'),imports:state.imports.length}})()`);
+  assert.equal(staged.value,'关于《text-cases.pdf》第 1 页框选的区域：',JSON.stringify(staged));
+  assert.ok(staged.refs.includes('import:text-cases'),JSON.stringify(staged));
+  assert.equal(staged.images.length,1,JSON.stringify(staged));assert.equal(staged.images[0].type,'image/png');assert.match(staged.images[0].name,/text-cases-第1页-框选\.png/);
+  assert.ok(staged.chips.some(name=>/框选\.png/.test(name)),JSON.stringify(staged));assert.equal(staged.layer,false);assert.equal(staged.imports,importsBefore+1);
+  const crop=await evaluate(`(async()=>{const item=state.imports.find(i=>/框选\.png$/.test(i.name));const blob=await (await fetch('/__files/'+encodeURIComponent(item.id))).blob();const bitmap=await createImageBitmap(blob);return{width:bitmap.width,height:bitmap.height}})()`);
+  // Cropped from the 2x render: 2 px per PDF point (the page is 300 pt wide at 754 css px here).
+  const page={width:expected["1"].width},expectedWidth=Math.round((box.x2-box.x1)/box.width*page.width*2);
+  assert.ok(Math.abs(crop.width-expectedWidth)<=3,JSON.stringify({crop,expectedWidth,box}));
+  measurements.push({case:'region-ask',box,staged,crop});await screenshot('region-staged');
+  await evaluate(`(()=>{const c=currentConversation();c.draftAttachmentIds=[];c.attachments=[];const input=document.querySelector('#agentInput');input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));renderStagedAttachments();})()`);
  });
  await check('fit-width, zoom and sharper raster keep the same text nodes and browser Range', async () => {
   await open('text-tall',1);await click('[data-pdf-fit-page]');await delay(100);

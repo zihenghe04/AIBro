@@ -44,7 +44,7 @@ function fixture(options={}){
   const localRef={type:'local',candidateId:'folder-p',projectId:'p',path:'notes/topic.md',title:'topic.md'};
   let menu,saveInlineCalls=0,saveLocalCalls=0,selectCalls=0,persistCalls=0,openCalls=0,newCalls=0,focusCalls=0,switchCalls=0;
   const notifications=[],selected=[];
-  const input={value:'Unsent prompt stays intact',focus(){focusCalls++;}};
+  const input={value:'Unsent prompt stays intact',focus(){focusCalls++;},dispatchEvent(){},setSelectionRange(){}};
   const current=()=>state.conversations.find(item=>item.id===state.currentConversationId);
   const document={body:{dataset:{view:'agent'}}};
   function showView(view){document.body.dataset.view=view;showView.navigationVersion++;}
@@ -74,7 +74,7 @@ function fixture(options={}){
   };
   const context={window,document,state,structuredClone,AbortController,console,
     DocumentOrigin,PrivateMode:privateAPI,ContextWorkbench:workbench,
-    documentChatController:null,documentChatNavigating:false,documentChatRoute:null,
+    documentChatController:null,documentChatNavigating:false,documentChatRoute:null,documentChatQuiet:false,Event:class{constructor(type){this.type=type;}},
     workspaceRouteIntent:0,previewOpenIntent:0,
     storageHydrated:true,serverConflict:false,purgeTrash:{syncPaused:false},sendMessage:{preflight:false,preparingWiki:false},
     currentConversation:current,showView,
@@ -190,4 +190,88 @@ test('late preview-leave approval cannot open a conversation or create one after
     assert.equal(f.selectCalls,0);assert.equal(f.persistCalls,0);assert.equal(f.focusCalls,0);
     assert.equal(f.input.value,'Unsent prompt stays intact');
   });
+});
+
+test('ask about a PDF page beside the conversation references the PDF there and quotes the page once',async()=>{
+  const f=fixture();f.imported();
+  const conversation=f.state.conversations.find(item=>item.id==='current');
+  assert.equal(await f.context.askAboutDocument({type:'import',id:'pdf-a'},'关于《Source.pdf》第 3 页：'),true);
+  assert.equal(conversation.draftFileReferences.length,1);assert.equal(conversation.draftFileReferences[0].type,'import');assert.equal(conversation.draftFileReferences[0].id,'pdf-a');
+  assert.equal(f.input.value,'Unsent prompt stays intact\n\n关于《Source.pdf》第 3 页：');
+  assert.deepEqual(f.notifications,['已引用到对话，写下你的问题即可发送。']);
+  assert.equal(f.newCalls,0);
+  // Asking again does not duplicate the reference.
+  assert.equal(await f.context.askAboutDocument({type:'import',id:'pdf-a'},'关于《Source.pdf》第 4 页：'),true);
+  assert.equal(conversation.draftFileReferences.length,1);
+});
+
+test('ask about a document outside the conversation view lets the user pick the conversation first',async()=>{
+  const f=fixture();f.imported();f.showView('project');
+  assert.equal(await f.context.askAboutDocument({type:'import',id:'pdf-a'},'关于《Source.pdf》第 2 页：'),true);
+  assert.equal(f.input.value,'Unsent prompt stays intact');
+  assert.equal(await f.menu.items.find(item=>item.id==='conversation:recent').onSelect(),true);
+  assert.equal(f.state.currentConversationId,'recent');
+  assert.equal(f.state.conversations.find(item=>item.id==='recent').draftFileReferences[0].id,'pdf-a');
+  assert.equal(f.input.value,'Recent draft\n\n关于《Source.pdf》第 2 页：');
+  assert.deepEqual(f.notifications,['已引用到对话，写下你的问题即可发送。']);
+});
+
+test('ask about a document refuses private mode and only quotes a document the reader is not showing',async()=>{
+  const f=fixture();f.imported();f.setPrivate(true);
+  assert.equal(await f.context.askAboutDocument({type:'import',id:'pdf-a'},'关于《Source.pdf》第 1 页：'),false);
+  assert.equal(f.input.value,'Unsent prompt stays intact');assert.equal(f.selectCalls,0);
+  f.setPrivate(false);
+  assert.equal(await f.context.askAboutDocument({type:'note',id:'note-a'},'> 关于《A saved document》：\n> text\n\n'),false);
+  assert.equal(f.selectCalls,0);assert.ok(f.input.value.endsWith('> text\n\n'));
+  assert.equal(f.state.conversations.find(item=>item.id==='current').draftFileReferences,undefined);
+});
+
+test('reader "问 AI" stages the shown document into the same-project conversation and writes a prompt naming it',async()=>{
+  const f=fixture();f.imported();
+  const action=f.context.documentAskAction(f.reader.tabs[0]);
+  assert.equal(action.label,'Ask AI');assert.equal(action.disabled,false);
+  assert.equal(await f.context.askAboutReaderTab(f.reader.tabs[0],{anchor:{},isCurrent:()=>true}),true);
+  const conversation=f.state.conversations.find(item=>item.id==='current');
+  assert.deepEqual(conversation.draftFileReferences.map(ref=>ref.type+':'+ref.id),['import:pdf-a']);
+  assert.equal(f.input.value,'Unsent prompt stays intact\n\n关于《Source.pdf》：');
+  assert.equal(await f.context.askAboutReaderTab(f.reader.tabs[0],{isCurrent:()=>false}),false);
+  f.setPrivate(true);assert.equal(f.context.documentAskAction(f.reader.tabs[0]),null);
+});
+
+test('asking about a material of another project, or an unsaved document, goes through the chooser instead of the open chat',async t=>{
+  await t.test('other project',async()=>{
+    const f=fixture();f.imported();f.state.conversations.find(item=>item.id==='current').projectId='q';
+    assert.equal(await f.context.askAboutReaderTab(f.reader.tabs[0],{anchor:{}}),true);
+    assert.equal(f.selectCalls,0,'nothing staged before a choice');
+    assert.equal(f.state.conversations.find(item=>item.id==='current').draftFileReferences,undefined);
+    assert.ok(f.menu.items.some(item=>item.id==='conversation:recent')&&f.menu.items.some(item=>item.id==='new'));
+    assert.equal(await f.menu.items.find(item=>item.id==='new').onSelect(),true);
+    const created=f.state.conversations.find(item=>item.id==='created');
+    assert.equal(created.projectId,'p');assert.equal(created.draftFileReferences[0].id,'pdf-a');assert.equal(f.input.value,'关于《Source.pdf》：');
+  });
+  await t.test('dirty local file offers save and reference with the saved version',async()=>{
+    const f=fixture();f.local();f.localEditor.dirty=true;
+    assert.equal(await f.context.askAboutReaderTab(f.reader.tabs[0],{anchor:{}}),true);
+    assert.ok(f.menu.items.every(item=>item.label.startsWith('Save and reference')));
+    assert.equal(await f.menu.items.find(item=>item.id==='conversation:current').onSelect(),true);
+    assert.equal(f.saveLocalCalls,1);
+    const ref=f.state.conversations.find(item=>item.id==='current').draftFileReferences[0];
+    assert.equal(ref.type,'local');assert.equal(ref.path,'notes/topic.md');assert.equal(ref.version,'saved-filesystem-version');
+    assert.equal(f.input.value,'Unsent prompt stays intact\n\n关于《topic.md》：');
+  });
+});
+
+test('asking about a file row opens it in the reader first, then stages the reader version; unavailable rows do nothing',async()=>{
+  const f=fixture();f.reader.tabs=[];f.reader.activeKey=null;const opened=[];
+  f.context.openPreview=async(kind,id)=>{opened.push([kind,id]);f.reader.tabs=[{key:kind+':'+id,kind,id}];f.reader.activeKey=kind+':'+id;return true;};
+  f.context.window.ReadingPane.isActive=(kind,id)=>f.reader.activeKey===kind+':'+id;
+  f.context.window.ProjectFiles.localId=ref=>JSON.stringify([ref.projectId,ref.candidateId,ref.path]);
+  assert.equal(await f.context.askAboutFile({type:'note',id:'note-a'},{anchor:{}}),true);
+  assert.deepEqual(opened,[['note','note-a']]);
+  assert.deepEqual(f.state.conversations.find(item=>item.id==='current').draftFileReferences.map(ref=>ref.type+':'+ref.id),['note:note-a']);
+  assert.equal(f.input.value,'Unsent prompt stays intact\n\n关于《A saved document》：');
+  // Already showing: no second open.
+  assert.equal(await f.context.askAboutFile({type:'note',id:'note-a'}),true);assert.equal(opened.length,1);
+  assert.equal(await f.context.askAboutFile({type:'note',id:'missing'}),false);assert.equal(opened.length,1);
+  f.setPrivate(true);assert.equal(await f.context.askAboutFile({type:'import',id:'pdf-a'}),false);assert.equal(opened.length,1);
 });

@@ -1,8 +1,8 @@
 {
   "name": "ai-bro",
   "productName": "AI Bro",
-  "version": "0.9.5",
-  "nativeBuild": 914,
+  "version": "0.9.6",
+  "nativeBuild": 915,
   "private": true,
   "description": "AI native personal knowledge and task workstation",
   "main": "app/electron-main.js",

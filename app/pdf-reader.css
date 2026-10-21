@@ -12,7 +12,7 @@
 .pdf-reader .pdf-page-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:32px;text-align:center;line-height:1.7;color:var(--muted);font-size:13px;pointer-events:none;overflow-wrap:anywhere}.pdf-reader .pdf-page-status[hidden]{display:none}.pdf-reader .pdf-page-status[role=alert]{color:var(--text)}
 .pdf-reader-sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @container (max-width:660px){.pdf-reader-toolbar{gap:7px;padding:9px}.pdf-reader-document{flex-basis:100%}.pdf-reader-controls{justify-content:space-between;width:100%;gap:4px}.pdf-reader-document>strong{flex:1}}
-@container (max-width:410px){.pdf-reader-count,.pdf-reader-expand-text{display:none}.pdf-reader-toolbar{padding:7px}.pdf-reader-controls{gap:3px;justify-content:center}.pdf-reader-action button{padding:5px!important;gap:2px!important}.pdf-reader-fit-text{display:none}.pdf-reader-fit .pdf-reader-action button{padding:4px!important}.pdf-reader-zoom{width:33px}.pdf-reader input[data-pdf-page]{width:35px}.pdf-reader>.pdf-viewport,.reading-pane .pdf-reader>.pdf-viewport{padding:10px}}
+@container (max-width:410px){.pdf-reader-count,.pdf-reader-expand-text,.pdf-reader-ask-text{display:none}.pdf-reader-toolbar{padding:7px}.pdf-reader-controls{gap:3px;justify-content:center}.pdf-reader-action button{padding:5px!important;gap:2px!important}.pdf-reader-fit-text{display:none}.pdf-reader-fit .pdf-reader-action button{padding:4px!important}.pdf-reader-zoom{width:33px}.pdf-reader input[data-pdf-page]{width:35px}.pdf-reader>.pdf-viewport,.reading-pane .pdf-reader>.pdf-viewport{padding:10px}}
 @media(prefers-reduced-motion:reduce){.pdf-reader *{animation:none!important;transition:none!important}}
 
 /* Text coordinates share the raster's physical page space. Scaling this one
@@ -42,3 +42,12 @@ body.reading-pdf .pdf-reader-toolbar{padding:6px 10px;gap:4px}
    not draw a second rectangular focus box inside the Kit field. */
 .pdf-reader .pdf-find-controls input,.pdf-reader .pdf-find-controls input:focus,.pdf-reader .pdf-find-controls input:focus-visible{border:0!important;outline:none!important;box-shadow:none!important;background:transparent!important;padding:0!important}
 .pdf-reader .pdf-find-controls .kit-search-input:focus-within>div{border-color:var(--accent)!important;box-shadow:0 0 0 2px var(--accent-soft)}
+/* A cited excerpt: a brief glow on arrival, then a quiet tint while on this page.
+   PDF pages are always white, so the ink colour does not follow the app theme. */
+.pdf-citation-layer{z-index:2}.pdf-citation-mark{position:absolute;transform-origin:0 0;border-radius:2px;background:rgba(66,128,190,.16);box-shadow:inset 0 -1.5px 0 rgba(48,104,168,.72);animation:pdf-citation-arrive 1.6s cubic-bezier(.22,1,.36,1) both}
+@keyframes pdf-citation-arrive{0%{background:rgba(66,128,190,.42);box-shadow:0 0 0 3px rgba(66,128,190,.22),inset 0 -1.5px 0 rgba(48,104,168,.72)}100%{}}
+/* Region ask: a crosshair veil over the page; the drawn box keeps the page visible. */
+.pdf-region-layer{position:absolute;inset:0;z-index:3;cursor:crosshair;outline:none;background:rgba(15,23,32,.06);animation:pdf-region-in .18s ease-out both;touch-action:none}
+.pdf-region-box{position:absolute;border:1.5px solid rgba(48,104,168,.9);border-radius:3px;background:rgba(66,128,190,.10);box-shadow:0 0 0 9999px rgba(15,23,32,.18);pointer-events:none}
+.pdf-region-box[hidden]{display:none}
+@keyframes pdf-region-in{from{opacity:0}to{opacity:1}}

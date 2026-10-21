@@ -170,6 +170,8 @@
     if (stop) stop.hidden = !working;
     if (insert) insert.disabled = working || !status.trim();
     if (copy) copy.disabled = !status.trim();
+    const save = $('selectionSave');
+    if (save) { save.hidden = !(selection && selection.source && hooks.saveNote); save.disabled = working || !noteDraft(selection, status); }
   }
 
   function open(mode) {
@@ -258,6 +260,25 @@
     if (picked.source && hooks.askAbout) hooks.askAbout(text, picked.source); else hooks.insertToComposer?.(text);
   }
 
+  // "存为笔记": a document selection plus its finished result becomes a new
+  // note that names the source and page. No existing note is changed.
+  function noteDraft(picked, result) {
+    const doc = picked && picked.source, text = normalizeSelection(picked && picked.text), body = String(result || '').trim();
+    if (!doc || !text || !body || !['import', 'note', 'local'].includes(doc.type)) return null;
+    const where = '《' + doc.title + '》' + (doc.type === 'import' && doc.page ? '第 ' + doc.page + ' 页' : '');
+    const line = Array.from(text.replace(/\s+/g, ' ')), head = line.slice(0, 32).join('') + (line.length > 32 ? '…' : '');
+    return { title: (modes[picked.mode] || '解释') + '：' + head, source: doc,
+      content: '> 摘自' + where + '\n>\n> ' + text.slice(0, MAX_CHARS).replace(/\n/g, '\n> ') + '\n\n## ' + (modes[picked.mode] || '解释') + '\n\n' + body + '\n' };
+  }
+  async function saveNote() {
+    const draft = !controller && selection ? noteDraft(selection, status) : null;
+    if (!draft || !hooks.saveNote) { hooks.toast?.('还没有可保存的内容。'); return; }
+    const button = $('selectionSave');
+    if (button) button.disabled = true;
+    try { if (await hooks.saveNote(draft)) close(); }
+    finally { if (button && selection) paint(); }
+  }
+
   function insert() {
     const text = insertText(status);
     if (!text) { hooks.toast?.('还没有可插入的内容。'); return; }
@@ -300,7 +321,7 @@
     panel.setAttribute('role', 'complementary'); panel.setAttribute('aria-labelledby', 'selectionTitle');
     panel.innerHTML = '<header class="selection-heading"><h2 id="selectionTitle">解释</h2><button type="button" id="selectionClose" aria-label="关闭">×</button></header>'
       + '<div id="selectionOutput" class="selection-output" tabindex="0" role="status" aria-live="polite"></div>'
-      + '<footer class="selection-actions"><button type="button" id="selectionStop" hidden>停止</button><button type="button" id="selectionInsert" disabled>插入到输入框</button><button type="button" id="selectionCopy" class="secondary" disabled>复制</button></footer>';
+      + '<footer class="selection-actions"><button type="button" id="selectionStop" hidden>停止</button><button type="button" id="selectionSave" class="secondary" hidden disabled title="把选中原文与结果存为一篇新笔记，注明出处">存为笔记</button><button type="button" id="selectionInsert" disabled>插入到输入框</button><button type="button" id="selectionCopy" class="secondary" disabled>复制</button></footer>';
     doc.body.append(panel);
 
     bar.querySelectorAll('[data-selection-mode]').forEach(button => { button.onclick = () => open(button.dataset.selectionMode); });
@@ -310,6 +331,7 @@
     $('selectionStop').onclick = stop;
     $('selectionInsert').onclick = insert;
     $('selectionCopy').onclick = copy;
+    $('selectionSave').onclick = saveNote;
     doc.addEventListener('selectionchange', onSelectionChange);
     doc.addEventListener('pointerdown', event => {
       if (event.target.closest?.(SOURCE_ROOT)) suppressedSelection = null;
@@ -323,6 +345,6 @@
     doc.addEventListener('scroll', position, true);
   }
 
-  return { init, open, close, stop, insert, copy, generate, ask, claimToolbar, releaseToolbar,
-    buildInput, normalizeSelection, nearContext, canApply, insertText, quoteText, documentSource, modes, MAX_CHARS };
+  return { init, open, close, stop, insert, copy, generate, ask, saveNote, claimToolbar, releaseToolbar,
+    buildInput, normalizeSelection, nearContext, canApply, insertText, quoteText, noteDraft, documentSource, modes, MAX_CHARS };
 });

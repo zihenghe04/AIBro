@@ -30,7 +30,7 @@ test('unavailable project never renders stale plan or tasks', () => {
 
 test('week surface uses consecutive day sections with real counts and separately visible invalid/undated records', () => {
   const html = render({ available: true, range: '10 月 1 日 – 7 日', days: days(), weekCount: 1, openCount: 1, unscheduled: [task('none')], invalid: [task('bad', { invalidDate: '2026-02-31' })] });
-  assert.equal((html.match(/class="schedule-day"/g) || []).length, 7); assert.match(html, /本周 1 项 · 待完成 1 项/);
+  assert.equal((html.match(/class="schedule-day[ "]/g) || []).length, 7); assert.match(html, /本周 1 项 · 待完成 1 项/);
   assert.match(html, /aria-label="未安排"/); assert.match(html, /aria-label="待修正日期"/); assert.match(html, /2026-02-31/);
   assert.doesNotMatch(html, /schedule-grid|progressbar|%/); assert.equal((html.match(/data-schedule-task=/g) || []).length, 3);
 });
@@ -87,4 +87,17 @@ test('layout includes a one-column narrow fallback, wrapped titles and reduced-m
   const css = fs.readFileSync(require.resolve('../app/ui/project-schedule.css'), 'utf8');
   assert.match(css, /grid-template-columns: 112px minmax\(0, 1fr\)/); assert.match(css, /@container project-content \(max-width: 500px\)/);
   assert.match(css, /grid-template-columns: minmax\(0, 1fr\)/); assert.match(css, /overflow-wrap: anywhere/); assert.match(css, /prefers-reduced-motion/); assert.doesNotMatch(css, /repeat\(7/);
+});
+
+test('today marks the current time between timed tasks and the week carries a navigation direction', () => {
+  const later = task('later', { time: '23:59' }), earlier = task('early', { time: '00:00' }), untimed = task('free', { time: '' });
+  const today = [{ ts: 1, label: '周一', month: 10, day: 1, isToday: true, tasks: [earlier, later, untimed] }];
+  const html = render({ available: true, days: today });
+  assert.equal((html.match(/schedule-now-line/g) || []).length, 1);
+  assert.ok(html.indexOf('Task early') < html.indexOf('schedule-now-line') && html.indexOf('schedule-now-line') < html.indexOf('Task later'));
+  assert.doesNotMatch(render({ available: true, days: [{ ...today[0], tasks: [untimed] }] }), /schedule-now-line/, 'No invented time for untimed tasks');
+  assert.doesNotMatch(render({ available: true, days: [{ ...today[0], isToday: false }] }), /schedule-now-line/);
+  const { ProjectScheduleSurface } = load(), week = ts => nodes(ProjectScheduleSurface({ available: true, days: [{ ...today[0], ts }] }), node => node.props?.['data-week-direction'])[0].props['data-week-direction'];
+  assert.equal(week(100), 'none'); assert.equal(week(200), 'next'); assert.equal(week(200), 'next'); assert.equal(week(50), 'prev');
+  assert.match(html, /class="schedule-day is-today"/);
 });

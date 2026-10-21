@@ -57,6 +57,9 @@ final class Workbench { var hasSelection = false; func endTaskSelection() -> Boo
     func screenID(_ screen: FixtureScreen) -> UInt32? { screen.id }
     func ensurePanel() {}; func focusCaptureInput() {}; func updateStatusItem() {}
     func installOutsideClickMonitors() {}; func finishHomeModuleNavigation(_ value: Bool) {}; func removeOutsideClickMonitors() {}
+    var collapsedEntrySection: Section? { nil }
+    var islandCollapsedWidth: ((CGFloat, CGFloat) -> CGFloat)? { nil }
+    func markIslandOutcomesSeen() {}
     func transition(expanded: Bool) { _ = presentation.request(expanded: expanded, reducedMotion: false) }
     func settle() { finishTransition(presentation.generation) }
     // PRODUCTION_MEMBERS

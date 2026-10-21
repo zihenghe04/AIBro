@@ -101,6 +101,12 @@ check(externalVisible.contains(menu.expanded), "Menu panel clamps at right edge"
 let fullScreen = NativeQuickGeometry.resolve(screen: screen, visible: screen, safeTop: 37,
     leftArea: CGRect(x: 0, y: 945, width: 664, height: 37), rightArea: CGRect(x: 848, y: 945, width: 664, height: 37), placement: .island)
 check(fullScreen.safeTop == 37, "Auto-hidden menu bar never removes hardware clearance")
+let wide = notch.collapsedFrame(contentWidth: 320)
+check(wide.width == 320 && wide.midX == notch.collapsed.midX && wide.maxY == screen.maxY, "Content-driven island width stays centred on the notch")
+check(notch.collapsedFrame(contentWidth: 10) == notch.collapsed, "Island never shrinks below its base footprint")
+check(notch.collapsedFrame(contentWidth: 5000).width == notch.expanded.width, "Island width is bounded by the expanded canvas")
+check(notch.collapsedFrame(contentWidth: .nan) == notch.collapsed, "Invalid width keeps the base footprint")
+check(edge.collapsedFrame(contentWidth: 300) == edge.collapsed, "Edge tab keeps its fixed footprint")
 print("PASS: transition ownership, reduced motion and five display placements")
 `);
     const compiled = spawnSync('xcrun', ['swiftc', '-swift-version', '5', program, '-o', binary], { encoding: 'utf8', timeout: 60000 });

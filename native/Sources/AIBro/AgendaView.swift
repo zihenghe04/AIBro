@@ -57,7 +57,12 @@ struct AgendaView:View {
     @State private var settings=false
     @State private var trash=false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var modeSpace
+    @State private var travel:Edge = .trailing
     private var cal:Calendar {var c=Calendar.current;c.firstWeekday=2;return c}
+    // Period/day switching slides in the travel direction; reduced motion cross-cuts.
+    private var periodMotion:Animation? {reduceMotion ? nil:.timingCurve(0.22,1,0.36,1,duration:0.32)}
+    private var periodTransition:AnyTransition {reduceMotion ? .identity:.asymmetric(insertion:.offset(x:travel == .trailing ? 22:-22).combined(with:.opacity),removal:.opacity)}
     private var days:[Date] {
         let focus=store.focusDate
         if mode=="月" {let first=cal.dateInterval(of:.month,for:focus)!.start;let start=cal.date(byAdding:.day,value: -((cal.component(.weekday,from:first)+5)%7),to:first)!;return (0..<42).map{cal.date(byAdding:.day,value:$0,to:start)!}}
@@ -110,11 +115,14 @@ struct AgendaView:View {
                     }.padding().background(StudioPalette.amber.opacity(0.1),in:RoundedRectangle(cornerRadius:14))
                 }
                 if !model.agendaSyncStatus.isEmpty {Text(model.agendaSyncStatus).font(.caption).foregroundStyle(.secondary)}
-                HStack{ForEach(["今日","周","月"],id:\.self){value in Button{withAnimation(reduceMotion ? nil:.easeInOut(duration:0.18)){mode=value;if value=="今日"{store.focusDate=Date()}}}label:{Text(NativeL10n.agendaMode(value)).padding(.horizontal,18).padding(.vertical,9).background(mode==value ? StudioPalette.jade.opacity(0.15):.clear,in:Capsule())}.buttonStyle(.plain)};Spacer();Button{shift(-1)}label:{Image(systemName:"chevron.left")};Text(store.focusDate.nativeFormatted(.dateTime.year().month().day())).font(.headline).monospacedDigit();Button{shift(1)}label:{Image(systemName:"chevron.right")};Button(nativeUI("今天", "Today")){store.focusDate=Date()}}.buttonStyle(LiftStyle())
+                HStack{ForEach(["今日","周","月"],id:\.self){value in Button{withAnimation(reduceMotion ? nil:.easeInOut(duration:0.18)){mode=value;if value=="今日"{store.focusDate=Date()}}}label:{Text(NativeL10n.agendaMode(value)).fontWeight(mode==value ? .semibold:.regular).padding(.horizontal,18).padding(.vertical,9).background{if mode==value{Capsule().fill(StudioPalette.jade.opacity(0.15)).matchedGeometryEffect(id:"agenda-mode",in:modeSpace)}}.contentShape(Capsule())}.buttonStyle(.plain).accessibilityAddTraits(mode==value ? .isSelected:[])};Spacer();Button{shift(-1)}label:{Image(systemName:"chevron.left")};Text(store.focusDate.nativeFormatted(.dateTime.year().month().day())).font(.headline).monospacedDigit();Button{shift(1)}label:{Image(systemName:"chevron.right")};Button(nativeUI("今天", "Today")){jump(to:Date())}}.buttonStyle(LiftStyle())
                 HStack{AgendaChoice(title:nativeUI("日程类型", "Event type"),value:$kind,options:[("all",nativeUI("全部安排", "All events")),("course",nativeUI("课程", "Courses")),("meeting",nativeUI("会议", "Meeting")),("task",nativeUI("任务截止", "Task deadlines")),("event",nativeUI("其他日程", "Other events"))]).frame(width:155);TextField(nativeUI("搜索日程", "Search events"),text:$query).textFieldStyle(.roundedBorder);Button{trash=true}label:{Image(systemName:"archivebox")}.help(nativeUI("已取消日程", "Cancelled events"))}
-                if mode=="今日" {dayAgenda(store.focusDate)} else {
-                    LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:8),count:7),spacing:8){ForEach(["一","二","三","四","五","六","日"],id:\.self){Text(nativeUI("周"+$0, NativeL10n.weekday($0))).font(.caption).foregroundStyle(.secondary)};ForEach(days,id:\.self){day in dayCell(day)}}
-                    dayAgenda(store.focusDate)
+                if mode=="今日" {ZStack(alignment:.top){dayAgenda(store.focusDate).id(cal.startOfDay(for:store.focusDate)).transition(periodTransition)}} else {
+                    ZStack(alignment:.top){
+                        LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:8),count:7),spacing:8){ForEach(["一","二","三","四","五","六","日"],id:\.self){Text(nativeUI("周"+$0, NativeL10n.weekday($0))).font(.caption).foregroundStyle(.secondary)};ForEach(days,id:\.self){day in dayCell(day)}}
+                            .id(days.first).transition(periodTransition)
+                    }
+                    ZStack(alignment:.top){dayAgenda(store.focusDate).id(cal.startOfDay(for:store.focusDate)).transition(reduceMotion ? .identity:.opacity)}
                 }
                 HStack{Image(systemName:"bell");Text(NativeL10n.notificationStatus(store.notificationStatus));Spacer();Text(nativeUI("本机时间：\(TimeZone.current.identifier)", "Local time: \(TimeZone.current.identifier)"))}.font(.caption).foregroundStyle(.secondary)
             }.padding(30).frame(maxWidth:1400).frame(maxWidth:.infinity)
@@ -146,28 +154,48 @@ struct AgendaView:View {
         }.font(.system(size:14,weight:.semibold)).padding(.horizontal,14).frame(height:44).contentShape(Capsule())
     }
     private func dayCell(_ day:Date)->some View {
-        let entries=items(day),selected=cal.isDate(day,inSameDayAs:store.focusDate)
-        return VStack(alignment:.leading,spacing:6){Button{showDay(day)}label:{HStack{Text(day.nativeFormatted(.dateTime.day())).font(.system(size:14,weight:.semibold)).foregroundStyle(mode=="月" && !cal.isDate(day,equalTo:store.focusDate,toGranularity:.month) ? .secondary:.primary);Spacer();if cal.isDateInToday(day){Circle().fill(StudioPalette.jade).frame(width:5,height:5)}}.contentShape(Rectangle())}.buttonStyle(.plain).accessibilityLabel(nativeUI("查看 \(day.nativeFormatted(.dateTime.month().day().weekday())) 的安排", "View events for \(day.nativeFormatted(.dateTime.month().day().weekday()))"))
-            ForEach(entries.prefix(mode=="周" ? 8:3)){entry in Button{open(entry)}label:{HStack(spacing:4){RoundedRectangle(cornerRadius:2).fill(agendaTint(entry.event.kind)).frame(width:3,height:20);Text(entry.event.title).font(.system(size:11)).lineLimit(1).strikethrough(entry.isDone)}.padding(5).frame(maxWidth:.infinity,alignment:.leading).frame(height:30).background(agendaTint(entry.event.kind).opacity(0.10),in:RoundedRectangle(cornerRadius:6))}.buttonStyle(.plain).modifier(AgendaDrag(entry:entry))}
+        let entries=items(day),selected=cal.isDate(day,inSameDayAs:store.focusDate),today=cal.isDateInToday(day)
+        let outside=mode=="月" && !cal.isDate(day,equalTo:store.focusDate,toGranularity:.month),past = !today && day < cal.startOfDay(for:Date())
+        return VStack(alignment:.leading,spacing:6){Button{showDay(day)}label:{HStack{
+            // Today's date sits in a filled pill; past and outside-month dates recede.
+            Text(day.nativeFormatted(.dateTime.day())).font(.system(size:13,weight:.semibold)).monospacedDigit()
+                .foregroundStyle(today ? StudioPalette.canvas:outside || past ? Color.secondary:Color.primary)
+                .padding(.horizontal,6).frame(minWidth:24,minHeight:21).background{if today{Capsule().fill(StudioPalette.jade)}}
+            Spacer()
+            if !entries.isEmpty{Text("\(entries.count)").font(.system(size:10,weight:.medium)).monospacedDigit().foregroundStyle(.secondary)}
+        }.contentShape(Rectangle())}.buttonStyle(.plain).accessibilityLabel(nativeUI("查看 \(day.nativeFormatted(.dateTime.month().day().weekday())) 的安排", "View events for \(day.nativeFormatted(.dateTime.month().day().weekday()))"))
+            ForEach(entries.prefix(mode=="周" ? 8:3)){entry in Button{open(entry)}label:{HStack(spacing:5){RoundedRectangle(cornerRadius:2).fill(agendaTint(entry.event.kind)).frame(width:3,height:18);Text(entry.event.title).font(.system(size:11,weight:.medium)).lineLimit(1).strikethrough(entry.isDone)}.padding(.horizontal,5).frame(maxWidth:.infinity,alignment:.leading).frame(height:28).background(agendaTint(entry.event.kind).opacity(entry.isDone ? 0.06:0.12),in:RoundedRectangle(cornerRadius:8)).opacity(entry.isDone || past ? 0.62:1)}.buttonStyle(LiftStyle()).help(entry.event.title).modifier(AgendaDrag(entry:entry))}
             if entries.count>(mode=="周" ? 8:3){Button{showDay(day)}label:{Text(nativeUI("还有 \(entries.count-(mode=="周" ? 8:3)) 项", "\(entries.count-(mode=="周" ? 8:3)) more")).font(.caption2).foregroundStyle(.secondary)}.buttonStyle(.plain)};Spacer(minLength:0)
         }.padding(10).frame(height:mode=="周" ? 340:168,alignment:.topLeading).background {
             Button{showDay(day)}label:{
-                RoundedRectangle(cornerRadius:14).fill(selected ? StudioPalette.jade.opacity(0.08):StudioPalette.panel).contentShape(RoundedRectangle(cornerRadius:14))
+                RoundedRectangle(cornerRadius:12).fill(selected ? StudioPalette.jade.opacity(0.08):StudioPalette.panel.opacity(outside ? 0.55:1)).contentShape(RoundedRectangle(cornerRadius:12))
             }.buttonStyle(.plain).accessibilityLabel(nativeUI("查看 \(day.nativeFormatted(.dateTime.month().day().weekday())) 的全部安排", "View all events for \(day.nativeFormatted(.dateTime.month().day().weekday()))")).help(nativeUI("查看当天全部安排", "View all events for this day"))
-        }.overlay(RoundedRectangle(cornerRadius:14).stroke(selected ? StudioPalette.jade.opacity(0.45):StudioPalette.line,lineWidth:1).allowsHitTesting(false))
+        }.overlay(RoundedRectangle(cornerRadius:12).strokeBorder(selected ? StudioPalette.jade.opacity(0.45):StudioPalette.line.opacity(0.8),lineWidth:selected ? 1.5:1).allowsHitTesting(false))
+            .animation(reduceMotion ? nil:.easeOut(duration:0.18),value:selected)
             .dropDestination(for:String.self){values,_ in guard let id=values.first,let entry=store.occurrences(from:cal.date(byAdding:.year,value:-1,to:day)!,to:cal.date(byAdding:.year,value:1,to:day)!).first(where:{$0.id==id}),entry.taskID==nil else{return false};let parts=cal.dateComponents([.hour,.minute,.second],from:entry.start);let target=cal.date(bySettingHour:parts.hour ?? 0,minute:parts.minute ?? 0,second:parts.second ?? 0,of:day)!;perform{try store.move(entry,to:target)};return true}
     }
     private func dayAgenda(_ date:Date)->some View {
-        let entries=items(date)
+        let entries=items(date),now=Date()
+        // The "now" divider sits among today's timed events only; it never implies a time for all-day items.
+        let nowIndex=cal.isDateInToday(date) && entries.contains{!$0.event.allDay} ? (entries.firstIndex{!$0.event.allDay && $0.start>now} ?? entries.count):-1
         return DashboardCard {
             HStack{Text(date.nativeFormatted(.dateTime.month().day().weekday())).font(.title3.bold());Spacer();Text(nativeUI("\(entries.count) 项安排", "\(entries.count) events")).foregroundStyle(.secondary)}
             if entries.isEmpty {VStack(spacing:12){Image(systemName:"sun.max").font(.system(size:30)).foregroundStyle(StudioPalette.amber);Text(nativeUI("这一天还有留白", "A little room in the day")).font(.headline);Button(nativeUI("安排一件事", "Add an event")){newEvent()}}.frame(maxWidth:.infinity).padding(30)}
-            ForEach(entries){entry in Button{open(entry)}label:{HStack(spacing:14){RoundedRectangle(cornerRadius:3).fill(agendaTint(entry.event.kind)).frame(width:4,height:42);VStack(alignment:.leading,spacing:4){Text(entry.event.allDay ? nativeUI("全天", "All day"):entry.start.nativeFormatted(date:.omitted,time:.shortened)).font(.system(size:13,weight:.semibold)).monospacedDigit();Text(agendaKind(entry.event.kind)).font(.caption).foregroundStyle(.secondary)}.frame(width:65,alignment:.leading);VStack(alignment:.leading,spacing:5){Text(entry.event.title).font(.headline).strikethrough(entry.isDone);Text(entry.event.location.isEmpty ? (model.snapshot?.projects.first{$0.id==entry.event.projectID}?.title ?? nativeUI("独立日程", "Standalone event")):entry.event.location).font(.caption).foregroundStyle(.secondary)};Spacer();if entry.isDone{Image(systemName:"checkmark.circle.fill").foregroundStyle(StudioPalette.jade)};Image(systemName:"chevron.right").font(.caption).foregroundStyle(.secondary)}.padding(.vertical,8).contentShape(Rectangle())}.buttonStyle(LiftStyle()).modifier(AgendaDrag(entry:entry))}
+            ForEach(Array(entries.enumerated()),id:\.element.id){index,entry in if index==nowIndex{nowLine(now)};Button{open(entry)}label:{HStack(spacing:14){RoundedRectangle(cornerRadius:3).fill(agendaTint(entry.event.kind)).frame(width:4,height:42);VStack(alignment:.leading,spacing:4){Text(entry.event.allDay ? nativeUI("全天", "All day"):entry.start.nativeFormatted(date:.omitted,time:.shortened)).font(.system(size:13,weight:.semibold)).monospacedDigit();Text(agendaKind(entry.event.kind)).font(.caption).foregroundStyle(.secondary)}.frame(width:65,alignment:.leading);VStack(alignment:.leading,spacing:5){Text(entry.event.title).font(.headline).strikethrough(entry.isDone);Text(entry.event.location.isEmpty ? (model.snapshot?.projects.first{$0.id==entry.event.projectID}?.title ?? nativeUI("独立日程", "Standalone event")):entry.event.location).font(.caption).foregroundStyle(.secondary)};Spacer();if entry.isDone{Image(systemName:"checkmark.circle.fill").foregroundStyle(StudioPalette.jade)};Image(systemName:"chevron.right").font(.caption).foregroundStyle(.secondary)}.padding(.vertical,8).padding(.horizontal,6).contentShape(Rectangle()).opacity(entry.isDone ? 0.62:1)}.buttonStyle(LiftStyle()).modifier(AgendaDrag(entry:entry))}
+            if nowIndex==entries.count{nowLine(now)}
         }
     }
+    private func nowLine(_ now:Date)->some View {
+        HStack(spacing:8){
+            Text(now.nativeFormatted(date:.omitted,time:.shortened)).font(.system(size:10,weight:.semibold)).monospacedDigit().foregroundStyle(StudioPalette.coral).frame(width:65+18,alignment:.leading)
+            Circle().fill(StudioPalette.coral).frame(width:7,height:7)
+            Rectangle().fill(StudioPalette.coral.opacity(0.7)).frame(height:1.5)
+        }.padding(.vertical,-6).accessibilityElement(children:.ignore).accessibilityLabel(nativeUI("现在 \(now.nativeFormatted(date:.omitted,time:.shortened))", "Now \(now.nativeFormatted(date:.omitted,time:.shortened))"))
+    }
     private func showDay(_ day:Date){store.focusDate=day;selectedDay=AgendaDaySelection(date:day)}
+    private func jump(to day:Date){travel=day<store.focusDate ? .leading:.trailing;withAnimation(periodMotion){store.focusDate=day}}
     private func newEvent(){var e=AgendaEvent();let cal=Calendar.current;e.start=cal.date(bySettingHour:9,minute:0,second:0,of:store.focusDate)!;e.end=e.start.addingTimeInterval(3600);editor=e}
-    private func shift(_ n:Int){store.focusDate=cal.date(byAdding:mode=="月" ? .month:mode=="周" ? .weekOfYear:.day,value:n,to:store.focusDate)!}
+    private func shift(_ n:Int){jump(to:cal.date(byAdding:mode=="月" ? .month:mode=="周" ? .weekOfYear:.day,value:n,to:store.focusDate)!)}
     private func open(_ entry:AgendaOccurrence){if let id=entry.taskID {model.reveal("task",id)}else{detail=entry}}
     private func perform(_ action:()throws->Void){do{try action()}catch{store.error=error.localizedDescription}}
 }

@@ -1,27 +1,27 @@
-.project-overview-kit{container-type:inline-size;container-name:project-overview;min-width:0;width:100%;color:var(--text)}
+.project-overview-kit{--plan-ease:cubic-bezier(.22,1,.36,1);--plan-swift:cubic-bezier(.33,1,.68,1);container-type:inline-size;container-name:project-overview;min-width:0;width:100%;color:var(--text)}
 .project-overview-description{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
-.project-overview-counts{display:flex;flex-wrap:wrap;align-items:center;gap:4px 20px;padding:0 0 16px;border-bottom:1px solid var(--line)}
-.project-overview-counts>span{display:inline-flex;min-width:0;max-width:100%}
-.project-overview-counts button{height:auto!important;min-height:30px;padding:4px 0!important;text-align:left;max-width:100%;box-shadow:none!important}
-.project-overview-counts button>span{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;min-width:0;font-size:12px!important;white-space:normal;overflow-wrap:anywhere}
-.project-overview-counts strong{font-size:15px;font-weight:550;color:var(--text)}
-.project-overview-counts small{font-size:11px;color:var(--faint);margin-left:2px}
+.project-overview-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:0}
+.project-overview-counts>span{display:flex;min-width:0;max-width:100%}
+.project-overview-counts button{flex:1 1 auto;width:100%!important;height:auto!important;min-height:76px;padding:12px 14px!important;text-align:left;max-width:100%;justify-content:flex-start!important;align-items:flex-start!important;border:1px solid var(--line)!important;border-radius:12px!important;background:var(--panel-raised,var(--panel))!important;box-shadow:0 1px 1px color-mix(in srgb,var(--text) 3%,transparent)!important;transition:border-color 180ms var(--plan-swift),box-shadow 240ms var(--plan-ease),transform 240ms var(--plan-ease)!important}.project-overview-counts button:not(:disabled):hover{border-color:var(--line-strong)!important;box-shadow:0 8px 20px -12px color-mix(in srgb,var(--text) 24%,transparent)!important;transform:translateY(-1px)}
+.project-overview-counts button>span{display:grid!important;grid-template-columns:minmax(0,1fr);gap:2px;min-width:0;width:100%;font-size:12px!important;color:var(--muted);white-space:normal;overflow-wrap:anywhere}
+.project-overview-counts strong{order:-1;font-size:24px;line-height:1.2;font-weight:600;letter-spacing:-.02em;color:var(--text);font-variant-numeric:tabular-nums}
+.project-overview-counts small{font-size:11px;color:var(--faint)}
 .project-overview-review{color:var(--orange)!important}
-.project-overview-sections{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);column-gap:32px;row-gap:22px;margin-top:20px}
-.project-overview-section{min-width:0}
+.project-overview-sections{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px;margin-top:14px;align-items:start}
+.project-overview-section{min-width:0;padding:12px 16px 6px;border:1px solid var(--line);border-radius:18px;background:var(--panel-raised,var(--panel));box-shadow:0 1px 1px color-mix(in srgb,var(--text) 3%,transparent),0 6px 18px -12px color-mix(in srgb,var(--text) 16%,transparent)}
 .project-overview-section>header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:32px;margin-bottom:4px}
 .project-overview-section>header h3{margin:0!important;font-size:14px!important;font-weight:550!important;line-height:1.4;min-width:0;overflow-wrap:anywhere}
 .project-overview-section>header>button{flex:none;padding:4px 0!important;font-size:11px!important;height:auto!important;min-height:28px;box-shadow:none!important}
 .project-overview-list{list-style:none;margin:0;padding:0;min-width:0}
-.project-overview-row{min-width:0;border-bottom:1px solid var(--line)}
+.project-overview-row{min-width:0;border-bottom:1px solid var(--line);animation:project-overview-row-in 260ms var(--plan-ease) both}.project-overview-row:nth-child(2){animation-delay:30ms}.project-overview-row:nth-child(3){animation-delay:60ms}.project-overview-row:nth-child(4){animation-delay:90ms}@keyframes project-overview-row-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .project-overview-row:last-child{border-bottom:0}
-.project-overview-row>button{display:flex!important;justify-content:flex-start!important;width:100%;max-width:100%;min-width:0!important;height:auto!important;min-height:58px;padding:10px 0!important;text-align:left;white-space:normal;box-shadow:none!important;filter:none!important;color:var(--text)!important}
+.project-overview-row>button{display:flex!important;justify-content:flex-start!important;width:calc(100% + 16px);max-width:none;margin:0 -8px;min-width:0!important;height:auto!important;min-height:56px;padding:9px 8px!important;border-radius:10px!important;transition:background-color 180ms var(--plan-swift)!important;text-align:left;white-space:normal;box-shadow:none!important;filter:none!important;color:var(--text)!important}
 .project-overview-row>button>span{display:flex!important;align-items:center;gap:12px;min-width:0;flex:1;max-width:100%;white-space:normal}
 .project-overview-row-copy{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1}
 .project-overview-row-copy>strong{font-size:13px;line-height:1.45;font-weight:500;overflow-wrap:anywhere;word-break:normal}
 .project-overview-row-meta{display:flex;flex-wrap:wrap;gap:3px 8px;align-items:baseline;color:var(--faint);font-size:11px;line-height:1.5;font-weight:400;min-width:0;overflow-wrap:anywhere}
 .project-overview-row-meta:empty{display:none}
-.project-overview-row-arrow{flex:none;font-size:14px;color:var(--faint)}
+.project-overview-row-arrow{flex:none;font-size:14px;color:var(--faint);opacity:0;transform:translate(-3px,2px);transition:opacity 180ms var(--plan-swift),transform 240ms var(--plan-ease),color 180ms var(--plan-swift)}.project-overview-row>button:not(:disabled):hover{background:color-mix(in srgb,var(--panel-hover) 70%,transparent)!important}.project-overview-row>button:is(:hover,:focus-visible) .project-overview-row-arrow{opacity:1;transform:none}
 .project-overview-row>button:not(:disabled):hover .project-overview-row-arrow{color:var(--accent)}
 .project-overview-kit button:focus-visible{outline:2px solid var(--accent)!important;outline-offset:3px}
 .project-overview-empty>div{align-items:flex-start!important;text-align:left!important;padding:16px 0!important}
@@ -33,5 +33,6 @@
 .project-overview-start>div>div:first-child{font-size:15px!important;color:var(--text)!important}
 .project-overview-start-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
 .project-overview-start-actions>button{max-width:100%;flex:none}
-@container project-overview (max-width:650px){.project-overview-sections{grid-template-columns:minmax(0,1fr);gap:22px;margin-top:16px}.project-overview-counts{column-gap:16px}.project-overview-row>button{min-height:54px}}
+@container project-overview (max-width:650px){.project-overview-sections{grid-template-columns:minmax(0,1fr);gap:12px;margin-top:12px}.project-overview-counts{gap:8px}.project-overview-counts button{min-height:64px;padding:10px 12px!important}.project-overview-counts strong{font-size:20px}.project-overview-row>button{min-height:54px}}
+body.reduce-motion .project-overview-kit *{animation:none!important;transition:none!important}
 @media(prefers-reduced-motion:reduce){.project-overview-kit,.project-overview-kit *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

@@ -28,7 +28,9 @@
         { keys: ['⌘', 'Enter'], zh: '执行中：把输入注入下一个工具边界（不打断正在执行的工具）', en: 'While running: inject at the next tool boundary', verify: { file: 'app/app.js', token: 'injectComposer' } },
         { keys: ['Shift', 'Tab'], zh: '把「计划 / 目标」类表述转成对应模式', en: 'Turn “plan / goal” wording into that mode', verify: { file: 'app/app.js', token: 'ModeHint?.convert' } },
         { keys: ['@'], zh: '引用文件、笔记与本机文件', en: 'Reference files, notes and local files', verify: { file: 'app/file-context-ui.js', token: 'F.mention' } },
-        { keys: ['/'], zh: '打开技能与命令菜单', en: 'Open the skills and commands menu' }
+        { keys: ['/'], zh: '打开技能与命令菜单', en: 'Open the skills and commands menu' },
+        { keys: ['Esc'], zh: '生成中：停止当前回复（浮层打开时先关闭浮层）', en: 'While running: stop the current reply (open overlays close first)', verify: { file: 'app/app.js', token: 'function escapeStopsRun' } },
+        { keys: ['⌘', 'Enter'], zh: '编辑消息时：保存并重发；Esc 取消编辑', en: 'Editing a message: save and resend; Esc cancels', verify: { file: 'app/app.js', token: "event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); if (!save.disabled) form.requestSubmit()" } }
       ]
     },
     {

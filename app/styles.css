@@ -601,3 +601,7 @@ body.reduce-motion *::after {
    单独成规则，避免 ::backdrop 让整组选择器失效。 */
 body.reduce-motion ::backdrop { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
 @media (prefers-reduced-motion: reduce) { ::backdrop { animation: none !important; transition: none !important; } }
+/* Toast with one action (undo): the action must stay clickable. */
+#toast.has-action.visible{pointer-events:auto;display:flex;align-items:center;gap:10px}
+#toast .toast-action{height:24px;padding:0 10px;border:1px solid var(--line-strong);border-radius:7px;background:transparent;color:var(--accent,var(--text));font:inherit;font-weight:600;cursor:pointer}
+#toast .toast-action:hover,#toast .toast-action:focus-visible{background:var(--panel-hover)}

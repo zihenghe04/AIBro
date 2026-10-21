@@ -68,3 +68,14 @@ test('问 AI 把选区连同文档与页码引用到输入框',()=>{
  assert.equal(Explain.quoteText({text:'片段'}),'> 关于选中的内容：\n> 片段\n\n');
  assert.equal(Explain.quoteText({text:'  '}),'');
 });
+
+test('存为笔记：文档选区与结果组成新笔记，注明出处与页码；对话选区或空结果不提供', () => {
+  const picked = { text: '  Attention   is all\nyou need  ', mode: 'translate', source: { type: 'import', id: 'pdf-1', title: '论文', page: 7 } };
+  const draft = Explain.noteDraft(picked, '注意力就是你所需要的一切');
+  assert.equal(draft.title, '翻译：Attention is all you need');
+  assert.match(draft.content, /^> 摘自《论文》第 7 页\n>\n> Attention is all you need\n\n## 翻译\n\n注意力就是你所需要的一切\n$/);
+  assert.equal(draft.source.id, 'pdf-1');
+  assert.equal(Explain.noteDraft({ ...picked, source: null }, '结果'), null);
+  assert.equal(Explain.noteDraft(picked, '   '), null);
+  assert.match(Explain.noteDraft({ text: 'x'.repeat(40), mode: 'explain', source: { type: 'note', id: 'n', title: '笔记' } }, 'ok').title, /^解释：x{32}…$/);
+});

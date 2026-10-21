@@ -83,6 +83,19 @@ struct NativeQuickGeometry: Equatable {
     let hardwareWidth: CGFloat
     let placement: Placement
 
+    /// The island's status decides its collapsed width. It stays centred on
+    /// the camera housing, never narrower than the base footprint and never
+    /// wider than the expanded canvas. Other placements keep a fixed tab.
+    func collapsedFrame(contentWidth: CGFloat) -> CGRect {
+        guard placement == .island, contentWidth.isFinite else { return collapsed }
+        let width = min(expanded.width, max(collapsed.width, contentWidth.rounded(.up)))
+        return CGRect(x: collapsed.midX - width / 2, y: collapsed.minY, width: width, height: collapsed.height)
+    }
+
+    func withCollapsed(_ frame: CGRect) -> Self {
+        .init(collapsed: frame, expanded: expanded, safeTop: safeTop, hardwareWidth: hardwareWidth, placement: placement)
+    }
+
     static func resolve(screen: CGRect, visible: CGRect, safeTop: CGFloat,
                         leftArea: CGRect? = nil, rightArea: CGRect? = nil,
                         placement: Placement, menuAnchor: CGRect? = nil) -> Self {

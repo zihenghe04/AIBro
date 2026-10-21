@@ -89,13 +89,29 @@
     clear.dataset.sessionTaskAction = 'clear';
     clear.textContent = T('清除任务清单', 'Clear task list');
     clear.onclick = () => { hooks.clear?.(); render(); };
+    // A thin progress meter mirrors the counted title; it is presentation only.
+    const { done, total } = progress(list);
+    const meter = doc.createElement('span');
+    meter.className = 'session-task-meter';
+    meter.setAttribute('aria-hidden', 'true');
+    const fill = doc.createElement('span');
+    fill.style.width = `${total ? Math.round(done / total * 100) : 0}%`;
+    meter.append(fill);
+    title.append(meter);
     head.append(title, clear);
     const items = doc.createElement('ul');
     items.className = 'session-task-items';
     for (const item of list.items) {
       const row = doc.createElement('li');
       row.className = item.done ? 'session-task-item done' : 'session-task-item';
-      row.textContent = `${item.done ? '☑' : '☐'} ${item.text}`;
+      // The glyph stays in the text for copy and assistive tech; CSS draws the box.
+      const mark = doc.createElement('span');
+      mark.className = 'session-task-mark';
+      mark.textContent = item.done ? '☑' : '☐';
+      const text = doc.createElement('span');
+      text.className = 'session-task-text';
+      text.textContent = ` ${item.text}`;
+      row.append(mark, text);
       items.append(row);
     }
     strip.append(head, items);

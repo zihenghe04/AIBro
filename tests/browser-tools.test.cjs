@@ -229,3 +229,21 @@ test('manual browser policy uses the current conversation and never copies model
   h.state.conversations[0].permissionMode='smart';await B.open();assert.equal(h.calls.at(-1).browserPermission,'auto');
  }finally{h.restore();}
 });
+
+test('a later run in the same conversation continues the page an earlier run left open',async()=>{
+ const h=fixture(async data=>session({snapshotId:'snapshot-2',text:'signed in',elements:[]}));
+ try{
+  h.run.browserSession={runId:'run-1',conversationId:'chat',projectId:'project',browserOwner:'conversation:chat:project',sessionId:'session',tabId:'tab',status:'ready',url:'https://example.com/',title:'Example',history:[]};
+  const earlier={id:'run-1',conversationId:'chat',projectId:'project',browserSession:h.run.browserSession};
+  h.run.browserSession=undefined;h.state.agentRuns.unshift(earlier);
+  const result=await h.execute({type:'browser_snapshot'});
+  assert.equal(result.text,'signed in');
+  assert.equal(h.calls[0].sessionId,'session');assert.equal(h.calls[0].tabId,'tab');
+  assert.equal(h.calls[0].runId,'run');assert.equal(h.calls[0].browserOwner,'conversation:chat:project');
+  assert.equal(h.run.browserSession.sessionId,'session');
+  // A closed earlier session is not adopted: the new run must open its own page.
+  const fresh=fixture(async()=>session());
+  fresh.state.agentRuns.unshift({id:'run-0',conversationId:'chat',projectId:'project',browserSession:{runId:'run-0',browserOwner:'conversation:chat:project',status:'closed',conversationId:'chat',projectId:'project'}});
+  await assert.rejects(fresh.execute({type:'browser_snapshot'}),/browser_open/);fresh.restore();
+ }finally{h.restore();}
+});

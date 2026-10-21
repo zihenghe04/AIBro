@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Button, EmptyState } from './halaska-kit.jsx';
 import { KitSelect, KitSegmentedControl } from './kit-controls.jsx';
-import { Plus, GripVertical, Circle, CircleDot, PauseCircle, CheckCircle2 } from 'lucide-react';
+import { Plus, GripVertical, Circle, CircleDot, PauseCircle, CheckCircle2, ArrowUpRight } from 'lucide-react';
 import styles from './project-board.css';
+import { layoutMotion } from './planning-motion.js';
 
 const t = (zh, en) => /^en(?:-|$)/i.test(document.documentElement.lang || '') ? en : zh;
 const states = ['todo', 'in_progress', 'blocked', 'done'];
@@ -25,31 +26,47 @@ function parseDue(value) {
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? { date, dateOnly } : null;
 }
-function DueDate({ value }) {
+// Presentation only: the chip tone never changes or reorders a task.
+function dueTone(parsed, done, now = new Date()) {
+  if (!parsed || done) return '';
+  const day = new Date(now); day.setHours(0, 0, 0, 0);
+  const due = parsed.dateOnly ? new Date(parsed.date.getUTCFullYear(), parsed.date.getUTCMonth(), parsed.date.getUTCDate()) : parsed.date;
+  if (parsed.dateOnly ? due < day : due < now) return 'is-overdue';
+  const dueDay = new Date(due); dueDay.setHours(0, 0, 0, 0);
+  const days = Math.round((dueDay - day) / 864e5);
+  return days === 0 ? 'is-today' : days > 0 && days <= 2 ? 'is-soon' : '';
+}
+function DueDate({ value, done }) {
   if (!value) return <span className="project-task-undated">{t('未排期', 'Unscheduled')}</span>;
   const parsed = parseDue(value);
-  if (!parsed) return <span>{t('日期待修正', 'Check date')}</span>;
-  const { date, dateOnly } = parsed;
+  if (!parsed) return <span className="project-task-due-chip is-invalid">{t('日期待修正', 'Check date')}</span>;
+  const { date, dateOnly } = parsed, tone = dueTone(parsed, done);
   // Calendar-only deadlines must not shift to the previous day in US timezones.
   const shown = dateOnly ? new Date(`${value}T12:00:00`) : date;
-  return <time dateTime={dateOnly ? value : date.toISOString()} title={t('截止日期', 'Due date')}>{shown.toLocaleDateString([], { month: 'short', day: 'numeric' })}</time>;
+  const label = shown.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return <time className={`project-task-due-chip${tone ? ' ' + tone : ''}`} dateTime={dateOnly ? value : date.toISOString()} title={t('截止日期', 'Due date')}>
+    {tone === 'is-overdue' ? t(`已逾期 · ${label}`, `Overdue · ${label}`) : tone === 'is-today' ? t(`今天 · ${label}`, `Today · ${label}`) : label}</time>;
 }
 
 function TaskRow({ task, board, busy, onOpen, onStatus, onDragStart, onDragEnd }) {
-  const [dragging, setDragging] = useState(false), Icon = statusIcons[task.status] || Circle;
-  return <li className={`project-task-item${board ? ' is-board-item' : ''}${dragging ? ' is-dragging' : ''}`} data-board-task={task.id} data-task-status={task.status} aria-busy={busy || undefined}
+  const [dragging, setDragging] = useState(false), Icon = statusIcons[task.status] || Circle, done = task.status === 'done';
+  return <li className={`project-task-item${board ? ' is-board-item' : ''}${dragging ? ' is-dragging' : ''}`} data-board-task={task.id} data-task-status={task.status} data-motion-done={done ? 'true' : 'false'} aria-busy={busy || undefined}
     draggable={!!board && !busy} onDragStart={event => {
       if (!board || busy || onDragStart?.(task.id) !== true) { event.preventDefault(); return; }
       event.dataTransfer.setData('text/plain', task.id); event.dataTransfer.effectAllowed = 'move'; setDragging(true);
     }} onDragEnd={() => { setDragging(false); onDragEnd?.(); }}>
-    <span className={`project-task-state-icon status-${task.status}`} aria-hidden="true"><Icon size={17} /></span>
+    {/* The same guarded status action as the selector; done reopens to To do. */}
+    <button type="button" className={`project-task-state-icon status-${task.status}`} disabled={busy || typeof onStatus !== 'function'} aria-pressed={done}
+      aria-label={done ? t(`标记为未完成：${task.title}`, `Mark incomplete: ${task.title}`) : t(`标记为已完成：${task.title}`, `Mark complete: ${task.title}`)}
+      onClick={() => onStatus?.(task.id, done ? 'todo' : 'done')}><Icon size={17} aria-hidden="true" /></button>
     <div className="project-task-copy">
       <Button variant="ghost" size="sm" style={{ padding: 0, height: 'auto', justifyContent: 'flex-start', textAlign: 'left' }} onClick={event => onOpen?.(task.id, event.currentTarget)} title={task.title}>
         <span className="project-task-title" data-user-content>{task.title}</span>
+        <ArrowUpRight className="project-task-open-hint" size={13} aria-hidden="true" />
       </Button>
       {task.prerequisitesIncomplete && <span className="project-task-prerequisite">{t('前置任务未就绪', 'Prerequisites not ready')}</span>}
     </div>
-    <span className="project-task-due"><DueDate value={task.dueAt} /></span>
+    <span className="project-task-due"><DueDate value={task.dueAt} done={done} /></span>
     <div className="project-task-status-select"><KitSelect value={task.status} options={states.map(value => ({ value, label: labels()[value] }))} disabled={busy}
       label={t(`更改任务状态：${task.title}`, `Change task status: ${task.title}`)} attributes={{ 'data-task-status-select': task.id }} onChange={status => onStatus?.(task.id, status)} /></div>
     {board && <span className="project-task-drag-hint" aria-hidden="true"><GripVertical size={14} /></span>}
@@ -62,7 +79,7 @@ function Column({ status, tasks, busyIds, canDrop, onDrop, ...actions }) {
     onDragOver={event => { if (canDrop?.()) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setOver(true); } }}
     onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOver(false); }}
     onDrop={event => { event.preventDefault(); setOver(false); if (canDrop?.()) onDrop?.(status); }}>
-    <h3><span>{labels()[status]}</span><span className="project-board-column-count">{tasks.length}</span></h3>
+    <h3><span className="project-board-column-title"><span className={`project-board-column-dot status-${status}`} aria-hidden="true" />{labels()[status]}</span><span className="project-board-column-count">{tasks.length}</span></h3>
     <ul className="project-task-items">{tasks.map(task => <TaskRow key={task.id} task={task} board busy={busyIds.includes(task.id)} {...actions} />)}</ul>
     {!tasks.length && <p className="project-board-empty-column">{t('暂无任务', 'No tasks')}</p>}
   </section>;
@@ -70,7 +87,7 @@ function Column({ status, tasks, busyIds, canDrop, onDrop, ...actions }) {
 
 export function ProjectBoardPanel({ available = true, tasks = [], mode = 'list', busyIds = [], onMode, onOpen, onStatus, onCreate, onDragStart, onDragEnd, canDrop, onDrop }) {
   const actions = { onOpen, onStatus, onDragStart, onDragEnd };
-  return <section className="project-tasks-kit" aria-label={t('项目任务', 'Project tasks')}>
+  return <section className="project-tasks-kit" aria-label={t('项目任务', 'Project tasks')} ref={layoutMotion('data-board-task')} data-motion-mode={mode}>
     <style>{styles}</style>
     {available && <div className="project-tasks-toolbar">
       <KitSegmentedControl value={mode} onChange={onMode} label={t('任务显示方式', 'Task view')} options={[

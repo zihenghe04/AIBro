@@ -31,6 +31,15 @@
     return JSON.stringify(parts);
   }
 
+  // A page observation whose content differs from the previous identical one
+  // (page finished loading, user logged in or acted during a handoff) is progress.
+  const OBSERVATIONS = ['browser_snapshot', 'browser_screenshot'];
+  function pageFingerprint(result) {
+    if (!result || typeof result !== 'object') return '';
+    const text = typeof result.text === 'string' ? result.text : '';
+    return JSON.stringify([result.url || '', result.title || '', Array.isArray(result.elements) ? result.elements.length : 0, text.length, text.slice(0, 200), text.slice(-200)]);
+  }
+
   function tally(toolCalls) {
     const counts = new Map();
     for (const call of Array.isArray(toolCalls) ? toolCalls : []) {
@@ -44,6 +53,11 @@
       const key = signature(call.request);
       if (!key) continue;
       const current = counts.get(key) || { key, type: call.request.type, count: 0, ids: [] };
+      if (call.status === 'completed' && OBSERVATIONS.includes(call.request.type)) {
+        const fingerprint = pageFingerprint(call.result);
+        if (fingerprint && current.fingerprint && fingerprint !== current.fingerprint) { current.count = 0; current.ids = []; }
+        if (fingerprint) current.fingerprint = fingerprint;
+      }
       current.count += 1;
       if (current.ids.length < 3) current.ids.push(call.id);
       counts.set(key, current);

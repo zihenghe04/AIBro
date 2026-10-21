@@ -98,3 +98,9 @@ body.light-mode {
 
 /* 公式前的变量名与符号之间留一点气：避免 ∑_{i}^{n} 之类的上下限贴到前一个字符上。 */
 .math-op + sup, .math-op + sub { margin-left: -.02em; }
+
+/* Floating "copy code" for settled conversation code blocks (code-copy.js). */
+.code-copy-float { position: fixed; z-index: 23; transform: translateX(-100%); height: 26px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel, var(--bg)); color: var(--muted); font-size: 11px; cursor: pointer; }
+.code-copy-float:hover, .code-copy-float:focus-visible { color: var(--text); background: var(--panel-hover); }
+.code-copy-float[hidden] { display: none !important; }
+body:has(dialog[open]) .code-copy-float { display: none !important; }

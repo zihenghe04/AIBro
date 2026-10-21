@@ -29,6 +29,7 @@ var presentation = NativeQuickPresentation()
 var usesTopIslandPresentation: Bool { mode == .island || presentation.temporaryTopEntry }
 var geometry = NativeQuickGeometry.resolve(screen: CGRect(x:0,y:0,width:1440,height:900), visible: CGRect(x:0,y:0,width:1440,height:900), safeTop:0, placement:.menu)
 func screenID(_ screen: FixtureScreen) -> UInt32? { screen.id }
+var islandCollapsedWidth: ((CGFloat, CGFloat) -> CGFloat)?
 ${method}
 }
 `);

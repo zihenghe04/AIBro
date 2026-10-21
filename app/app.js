@@ -937,6 +937,8 @@ function deleteManagedItem() {
     ? `确定将“${title}”移入回收站？已归入项目的资料与成果会保留；仅本对话及未归属、未共享的内容会移入回收站，可恢复。`
     : `确定将“${title}”移入回收站？该项目的内容会一起隐藏。已移入其他项目的成果会保留；仍被其他内容引用的原件会保留到待归类。可从回收站恢复。`;
   if (!window.confirm(deletionMessage)) return;
+  const wasCurrent = kind === 'conversation' ? state.currentConversationId === id : state.currentProjectId === id;
+  let undoEntry = null;
   if (kind === 'conversation') {
     const runIds = new Set(state.agentRuns.filter(run => run.conversationId === id).map(run => run.id));
     const conversation = state.conversations.find(entry => entry.id === id);
@@ -961,8 +963,8 @@ function deleteManagedItem() {
     const attachmentIds = new Set(conversationAttachments.map(entry => entry.id));
     const conversationEntityIds = new Set([id, ...runIds, ...conversationTasks.map(entry => entry.id), ...conversationNotes.map(entry => entry.id), ...conversationPapers.map(entry => entry.id), ...removableImportIds]);
     const conversationLinks = state.links.filter(link => conversationEntityIds.has(link.sourceId) || conversationEntityIds.has(link.targetId));
-    const bundle = { type: 'conversation', title, deletedAt: Date.now(), data: { conversations: state.conversations.filter(entry => entry.id === id), attachments: conversationAttachments, runs: state.agentRuns.filter(run => run.conversationId === id), tasks: conversationTasks, notes: conversationNotes, papers: conversationPapers, imports: removableImports, links: conversationLinks } };
-    state.trash.push(bundle);
+    const bundle = { id: uid('trash'), type: 'conversation', title, deletedAt: Date.now(), data: { conversations: state.conversations.filter(entry => entry.id === id), attachments: conversationAttachments, runs: state.agentRuns.filter(run => run.conversationId === id), tasks: conversationTasks, notes: conversationNotes, papers: conversationPapers, imports: removableImports, links: conversationLinks } };
+    state.trash.push(bundle); undoEntry = bundle;
     state.conversations = state.conversations.filter(entry => entry.id !== id);
     state.attachments = state.attachments.filter(entry => !attachmentIds.has(entry.id));
     state.agentRuns = state.agentRuns.filter(run => run.conversationId !== id);
@@ -989,7 +991,7 @@ function deleteManagedItem() {
       const trashKey = key === 'agentRuns' ? 'runs' : key;
       if (Array.isArray(outcome.entry.data[trashKey])) outcome.entry.data[trashKey] = outcome.entry.data[trashKey].map(row => existing(key, row));
     }
-    state.trash.push(outcome.entry);
+    state.trash.push(outcome.entry); undoEntry = outcome.entry;
     state.currentConversationId = outcome.state.currentConversationId;
     state.currentProjectId = outcome.state.currentProjectId;
     state.lastResults = outcome.state.lastResults;
@@ -1001,6 +1003,10 @@ function deleteManagedItem() {
   repairRelationships();
   manageTarget = null; save(); $('#manageDialog').close(); renderAll();
   if (kind === 'project') showView('dashboard', '全局驾驶舱');
+  const reopen = !wasCurrent ? null : kind === 'conversation'
+    ? () => { if (state.conversations.some(entry => entry.id === id)) openConversation(id); }
+    : () => { if (state.projects.some(entry => entry.id === id)) openProject(id); };
+  undoTrashToast(`已将“${title}”移入回收站`, undoEntry, reopen);
 }
 // Immutable render inputs, not mutable-object equality. Retain only the current
 // transcript's snapshots; nothing is written to storage. Comparing string values
@@ -2682,6 +2688,13 @@ async function mountPdfPreview(container, item, originalBlob, requestedPage = 1,
     },
     onOriginalAvailability: (available, localOriginal) => { if (current()) onOriginalAvailability?.(available, localOriginal); },
     onPage: page => window.ReadingPane?.setPage('import', item.id, page),
+    onAskPage: ({ page, anchor }) => { if (current()) askAboutDocument({ type: 'import', id: item.id }, `关于《${item.name || item.originalName || 'PDF'}》第 ${page} 页：`, { anchor }); },
+    onAskRegion: ({ page, blob, anchor }) => {
+      if (!current()) return;
+      const name = String(item.name || item.originalName || 'PDF').replace(/\.pdf$/i, '');
+      const file = new File([blob], `${name}-第${page}页-框选.png`, { type: 'image/png' });
+      askAboutDocument({ type: 'import', id: item.id }, `关于《${item.name || item.originalName || 'PDF'}》第 ${page} 页框选的区域：`, { anchor, files: [file] });
+    },
     isExpanded: () => !!window.ReadingPane?.snapshot()?.expanded,
     onExpand: () => { window.ReadingPane?.setExpanded(!window.ReadingPane?.snapshot()?.expanded); pdfReaderHandle?.refresh(); },
     onValid: current
@@ -3365,6 +3378,11 @@ async function openGlobalSearchResult(value, selection = {}) {
   const opened = await pending;
   if (!current() || ['note', 'import'].includes(selected.row.type) && readerIntent !== previewOpenIntent
     || !opened && routeVersion !== (showView.navigationVersion || 0)) return { status: 'obsolete' };
+  // A conversation found by its message text opens with find on that text,
+  // so the match is highlighted instead of leaving the user at the bottom.
+  const literal = query.trim();
+  const conversation = opened && selected.row.type === 'conversation' && literal && !normalize(selected.row.title).includes(normalize(literal)) ? currentConversation() : null;
+  if (conversation?.id === selected.row.id && (conversation.messages || []).some(message => String(message.text || '').toLowerCase().includes(literal.toLowerCase()))) window.FindInConversation?.open(literal);
   return opened;
 }
 async function openSearchResult(value, canOpen, navigation = {}) {
@@ -3555,7 +3573,7 @@ function requestContentDelete(selections, scope = {}) {
         if (fresh.entries.length !== selection.length || fresh.entries.some(item => { const old = versions.find(entry => entry.type === item.type && entry.id === item.id); return !old || item.projectId !== old.projectId || item.workspace !== old.workspace; })) throw new Error('所选内容的范围已变化，请重新选择。');
         const outcome = ContentLifecycle.remove(state, selection, scope, { uid });
         if (!outcome.entry) throw new Error('没有可以删除的内容。');
-        commitContentState(outcome.state); succeeded = true; dialog.close(); toast(`已将 ${outcome.counts.total} 项内容移入回收站`);
+        commitContentState(outcome.state); succeeded = true; dialog.close(); undoTrashToast(`已将 ${outcome.counts.total} 项内容移入回收站`, state.trash.find(entry => entry.id === outcome.entry.id));
       } catch (failure) { error.textContent = failure.message; remove.disabled = false; }
     };
     actions.append(cancel, remove); dialog.append(heading, help, list, warning, error, actions);
@@ -5819,6 +5837,12 @@ function openMessageEditor(messageId) {
   const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'secondary'; cancel.dataset.cancelEdit = ''; cancel.textContent = '取消';
   actions.append(save, cancel); form.append(area, actions); wrapper.appendChild(form);
   area.focus(); area.setSelectionRange(area.value.length, area.value.length);
+  // ⌘/Ctrl+Enter resends and Escape cancels, like the composer; IME input keeps both keys.
+  area.addEventListener('keydown', event => {
+    if (event.isComposing || event.keyCode === 229) return;
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); if (!save.disabled) form.requestSubmit(); }
+    else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!cancel.disabled) { form.remove(); wrapper.querySelector('[data-edit-message]')?.focus(); } }
+  });
   form.addEventListener('submit', async event => {
     event.preventDefault(); const text = area.value.trim();
     if (!text) { toast('消息内容不能为空。'); return; }
@@ -6461,7 +6485,17 @@ function fillModelOptions(ids) {
   list.replaceChildren(...ids.map(id => { const option = document.createElement('option'); option.value = id; return option; }));
 }
 let toastTimer = null;
-function toast(message) { let box = $('#toast'); if (!box) { box = document.createElement('div'); box.id = 'toast'; box.className = 'toast'; box.setAttribute('role', 'status'); document.body.appendChild(box); } box.textContent = message; box.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => box.classList.remove('visible'), 2300); }
+function toast(message, action) { let box = $('#toast'); if (!box) { box = document.createElement('div'); box.id = 'toast'; box.className = 'toast'; box.setAttribute('role', 'status'); document.body.appendChild(box); } box.textContent = message; box.classList.toggle('has-action', !!action); if (action) { const button = document.createElement('button'); button.type = 'button'; button.className = 'toast-action'; button.textContent = action.label; button.onclick = () => { box.classList.remove('visible', 'has-action'); button.remove(); action.run(); }; box.append(' ', button); } box.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => { box.classList.remove('visible', 'has-action'); box.querySelector('.toast-action')?.remove(); }, action ? 6000 : 2300); }
+// Moving something to the trash offers one undo while that exact trash entry
+// still exists; afterwards the trash view remains the way back.
+function undoTrashToast(message, entry, reopen) {
+  const id = entry?.id; if (!id) { toast(message); return; }
+  toast(message, { label: '撤销', run: () => {
+    if (!state.trash.some(item => item.id === id)) { toast('这条记录已不在回收站，无法撤销。'); return; }
+    try { restoreTrash(id); } catch (error) { toast(`撤销失败：${error.message}，可在回收站恢复。`); return; }
+    if (!state.trash.some(item => item.id === id)) { reopen?.(); toast('已撤销，内容已恢复。'); }
+  } });
+}
 
 // 执行过程段的“呼吸”状态：只记录用户显式开合的段。不能用 toggle 事件——渲染层为了
 // 呈现流式片段会用 open 属性渲染 details（浏览器解析时同样派发 toggle），会把自动展开
@@ -6674,6 +6708,17 @@ function openWorkspaceFind() {
   if (reader?.visible && (reader.expanded || !inConversation) && pdfReaderHandle?.openFind?.()) return true;
   return document.body.dataset.view === 'agent' && !!window.FindInConversation?.open();
 }
+// Esc stops the current reply (the stop button is the same action). It only
+// applies on the conversation when no layer above it still owns Escape:
+// overlays close first and an Escape they consumed never stops a run.
+function escapeStopsRun(event) {
+  if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false;
+  if (!sendMessage.busy || document.body.dataset.view !== 'agent') return false;
+  if (document.querySelector('dialog[open], .message-edit, .message-action-menu[open], #composerExtraTools:not([hidden]), #findBar:not([hidden]), #sourcePeek:not([hidden]), #skillPicker:not([hidden]), #modelPicker:not([hidden]), #polishDialog:not([hidden]), #selectionPanel:not([hidden])')) return false;
+  const focused = document.activeElement;
+  return !focused || focused === document.body || focused.id === 'agentInput' || !!$('#messageList')?.contains(focused);
+}
+window.addEventListener('keydown', event => { if (!escapeStopsRun(event)) return; event.preventDefault(); stopCurrentRun(); });
 window.addEventListener('keydown', event => { if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || !(event.metaKey || event.ctrlKey)) return; if (event.key.toLowerCase() === 'k') { event.preventDefault(); openSearchDialog(); } else if (event.key.toLowerCase() === 'n') { event.preventDefault(); void navigateWorkspaceNewConversation(); } else if (event.key.toLowerCase() === 'f') { if (document.querySelector('dialog[open]')) return; event.preventDefault(); openWorkspaceFind(); } });
 $('#saveSettings').onclick = saveApiSettings;
 $('#testApi').onclick = testConnection;
@@ -6822,7 +6867,7 @@ hydratePersistentState();
 window.OpenAIAuth?.init({ getState: () => state, save, toast, onChange: () => { OpenAIAuth.render(); syncComposerModel(); window.ContextWorkbench?.refresh(); } });
 window.ClaudeAuth?.init({ getState: () => state, save: saveDocumentDurably, toast, onChange: () => { syncComposerModel(); window.ContextWorkbench?.refresh(); } });
 window.ConversationModels?.init({ getState: () => state, getConversation: currentConversation, getDefaults: defaultModelConfiguration, getResolvedConfig: resolveRunModel, canSave: () => !sendMessage.preflight && !sendMessage.preparingWiki && !window.ProjectAutomation?.isStarting?.() && !window.ResearchQueue?.isStarting?.(), save: async () => { await saveDocumentDurably(); window.ContextWorkbench?.refresh(); }, toast, openSettings: () => { showView('settings', '设置'); window.SettingsWorkspace?.reveal('models'); } });
-let documentChatController = null, documentChatNavigating = false, documentChatRoute = null;
+let documentChatController = null, documentChatNavigating = false, documentChatRoute = null, documentChatQuiet = false;
 window.ReadingPane?.init({
   getItem: previewItem,
   onSelect: (kind, id, page, navigation) => openPreview(kind, id, page, sourcePreviewGuards.get(JSON.stringify([kind, id])), undefined, navigation),
@@ -6836,6 +6881,8 @@ window.ReadingPane?.init({
   onReturn: returnToDocumentOrigin,
   chatAction: tab => documentChatAction(tab),
   onChat: (tab, options) => openDocumentChat(tab, options),
+  askAction: tab => documentAskAction(tab),
+  onAsk: (tab, options) => askAboutReaderTab(tab, options),
   onError: error => toast(error?.message || '无法返回，当前文档和草稿已保留。')
 });
 window.WorkspaceLayout?.init({ getState: () => state, save, stageDroppedFiles, stageProjectFiles, onTheme: toggleTheme, toast, isImportBusy: () => !!importMaterials.busy, onLayout: updateProjectHeading });
@@ -6915,8 +6962,9 @@ window.SelectionExplain?.init({ getConversation: currentConversation, getCurrent
   // Document selections (PDF pages, notes, local files) are sent only when the record is still readable and not private.
   isPrivateMode: () => !!window.PrivateMode?.isOn?.(),
   canRead: (type, id) => !!window.CitationEvidence?.recordFor?.(state, type, id),
-  askAbout: text => { const input = $('#agentInput'); if (!input) return; const existing = String(input.value || '').replace(/\s+$/, ''); input.value = existing ? existing + '\n\n' + text : text; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); toast('已引用到输入框，写下你的问题即可发送。'); },
-  insertToComposer: text => { const input = $('#agentInput'); if (!input) return; const existing = String(input.value || '').replace(/\s+$/, ''); input.value = existing ? existing + '\n\n' + text : text; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); } });
+  askAbout: (text, source) => askAboutDocument(source, text),
+  saveNote: saveSelectionNote,
+  insertToComposer: insertComposerText });
 for (const [viewId, selector, scope] of [['dashboard', '#dashboard .hero-actions', {}], ['courses', '#courses .page-heading', {workspace:'课程'}], ['research', '#research .page-heading', {workspace:'科研'}], ['project', '#project .page-heading-actions', null]]) {
   const host = $(selector); if (!host || $(`#${viewId}AddTask`)) continue;
   const button = document.createElement('button'); button.id = `${viewId}AddTask`; button.type = 'button'; button.className = 'secondary manual-task-entry'; button.innerHTML = `${uiIcon('plus')}<span>添加任务</span>`;
@@ -7102,6 +7150,17 @@ function refreshComparisonReaderEntry(kind, item) {
     onClick: () => openSourceComparison(undefined, { noteId: item.id })
   });
 }
+// Mark a cited excerpt in the document just opened. A PDF marks the words on
+// the cited page once that page's text arrives; other documents search the
+// rendered text. Resolves false when the excerpt cannot be located uniquely.
+async function revealSourceExcerpt(kind, id, source) {
+  if (!source?.excerpt) return true;
+  if (kind === 'import' && pdfReaderHandle?.id === id && pdfReaderHandle.highlight) {
+    const timeout = new Promise(resolve => setTimeout(() => resolve(null), 10000));
+    return Promise.race([pdfReaderHandle.highlight({ page: source.page || 1, excerpt: source.excerpt }), timeout]);
+  }
+  return !!window.CitationEvidence?.reveal(source, $(kind === 'local-file' ? '.local-document-preview' : '#previewContent'));
+}
 async function openComparisonTarget(target, canOpen = () => true) {
   const permitted = () => storageHydrated && !serverConflict && !window.PrivateMode?.isOn?.() && canOpen();
   if (!permitted()) return false;
@@ -7116,7 +7175,7 @@ async function openComparisonTarget(target, canOpen = () => true) {
   await openPreview(kind, id, page, { type: kind, id, provided: false }, permitted);
   if (!permitted() || state.previewRecord?.type !== kind || state.previewRecord?.id !== id ||
       (window.ReadingPane && !ReadingPane.isActive(kind, id))) return false;
-  if (evidence?.quote && !window.CitationEvidence?.reveal({ excerpt: evidence.quote }, $('#previewContent'))) {
+  if (evidence?.quote && await revealSourceExcerpt(kind, id, { excerpt: evidence.quote, page }) === false) {
     toast(window.WorkstationI18n?.getLanguage?.() === 'en'
       ? (hasPage ? 'Opened the evidence page. The quote could not be highlighted in this view.' : 'Source opened. This view could not locate the quote uniquely; the frozen quote remains in your research draft.')
       : (hasPage ? '已打开证据所在页；当前视图未能高亮这段原文。' : '已打开来源；当前视图未能唯一定位引文，冻结原文仍保留在研究草稿中。'));
@@ -7282,7 +7341,7 @@ function documentChatAction(tab) {
       : (english ? 'Choose a conversation; your draft stays intact' : '选择目标对话，保留原输入内容'),
     disabled: !documentChatController || !documentChatReady() || documentChatController.isBusy() };
 }
-function openDocumentChat(tab, { anchor, isCurrent } = {}) {
+function openDocumentChat(tab, { anchor, isCurrent, onStaged } = {}) {
   if (!documentChatController || isCurrent?.() === false) return false;
   const { source, targets, busy } = documentChatController.describe();
   if (busy || !source || source.id !== tab.id || source.kind !== tab.kind) return false;
@@ -7294,7 +7353,10 @@ function openDocumentChat(tab, { anchor, isCurrent } = {}) {
       description: target.description,
       onSelect: async () => {
         documentChatRoute = captureDocumentChatRoute();
-        const result = await documentChatController.prepare(target.key, { save: source.dirty });
+        documentChatQuiet = !!onStaged;
+        let result;
+        try { result = await documentChatController.prepare(target.key, { save: source.dirty }); } finally { documentChatQuiet = false; }
+        if (result.status === 'staged' && result.focused !== false) await onStaged?.();
         if (result.status === 'error') { toast(result.message); throw result.error; }
         if (result.status === 'cancelled' && !result.staged && result.reason !== 'cancelled' && documentChatRouteCurrent()) {
           const message = english ? 'The document or destination changed. Select it again; your draft is retained.' : '文档或目标已变化，请重新选择。原草稿仍保留。';
@@ -7303,6 +7365,101 @@ function openDocumentChat(tab, { anchor, isCurrent } = {}) {
         return result.status === 'staged' || result.staged === true;
       }
     })) });
+}
+// A document selection's explanation / translation / annotation saved as a new
+// note in the source's project, linked to the source record. Then opened for editing.
+async function saveSelectionNote(draft) {
+  const source = draft?.source;
+  if (window.PrivateMode?.isOn?.()) { toast('无痕模式下不保存笔记。'); return false; }
+  const record = source && source.type !== 'local' ? window.CitationEvidence?.recordFor?.(state, source.type, source.id) : null;
+  if (!source || (source.type !== 'local' && !record)) { toast('来源已不可用，未保存笔记。'); return false; }
+  const project = record?.projectId ? state.projects.find(item => item.id === record.projectId && !item.archived && !item.deletedAt) : null;
+  const now = Date.now();
+  const note = { id: uid('note'), kind: '阅读笔记', title: draft.title, content: draft.content,
+    workspace: ['日常', '课程', '科研'].includes(record?.workspace) ? record.workspace : project?.workspace ? workspaceName(project.workspace) : '日常',
+    projectId: project?.id || null, tags: [], createdAt: now, updatedAt: now,
+    sourceAttachmentIds: source.type === 'import' ? [source.id] : [], ...(source.type === 'note' ? { sourceNoteIds: [source.id] } : {}),
+    ...(source.type === 'import' && source.page ? { sourcePage: source.page } : {}) };
+  state.notes.push(note);
+  if (await saveDocumentDurably() === false) {
+    const at = state.notes.indexOf(note); if (at >= 0 && JSON.stringify(state.notes[at]) === JSON.stringify(note)) state.notes.splice(at, 1);
+    save(); renderAll(); toast('笔记尚未保存，请重试。结果仍保留在面板里。'); return false;
+  }
+  renderAll();
+  await openNote(note.id);
+  toast('已存为笔记，注明了出处；可直接编辑。');
+  return true;
+}
+function insertComposerText(text) {
+  const input = $('#agentInput'); if (!input) return;
+  const existing = String(input.value || '').replace(/\s+$/, '');
+  input.value = existing ? existing + '\n\n' + text : text;
+  input.dispatchEvent(new Event('input', { bubbles: true })); input.focus();
+  input.setSelectionRange?.(input.value.length, input.value.length);
+}
+// "问这一页" and the selection bar's "问 AI": reference the document open in
+// the reader in the conversation beside it (or one the user picks), then put
+// the page or selection quote in the composer. Nothing is sent yet.
+async function askAboutDocument(doc, text, { anchor, files } = {}) {
+  if (window.PrivateMode?.isOn?.()) { toast('无痕模式下不会把资料发给模型。'); return false; }
+  const source = documentChatController?.describe().source;
+  const kind = doc?.type === 'local' ? 'local-file' : doc?.type;
+  // A region crop joins the same conversation as an image attachment, after the
+  // document reference, so the model sees both the picture and the page text.
+  const finish = async () => {
+    if (files?.length) await importMaterials({ preventDefault() {} }, { files, conversationId: state.currentConversationId });
+    insertComposerText(text); toast(files?.length ? '已把框选区域与这份资料加入对话，写下你的问题即可发送。' : '已引用到对话，写下你的问题即可发送。');
+  };
+  // A selection outside the reader (e.g. a note page) has no reference to stage.
+  if (!source || source.kind !== kind || ((kind !== 'local-file' || doc.id) && source.id !== doc.id)) {
+    insertComposerText(text); toast('已引用到输入框，写下你的问题即可发送。'); return false;
+  }
+  // Stage directly only into the conversation beside the reader when it can hold
+  // this project's material; an unsaved document or another project's chat
+  // goes through the chooser (save-and-reference, project chats, new chat).
+  const conversation = currentConversation();
+  const sameProject = !source.projectId || !conversation?.projectId || conversation.projectId === source.projectId;
+  if (!source.dirty && sameProject && document.body.dataset.view === 'agent' && state.currentConversationId && !documentChatController.isBusy()) {
+    documentChatRoute = captureDocumentChatRoute(); documentChatQuiet = true;
+    let result;
+    try { result = await documentChatController.prepare(`conversation:${state.currentConversationId}`, { save: false }); }
+    finally { documentChatQuiet = false; }
+    if (result.status === 'staged') { if (result.focused !== false) await finish(); return true; }
+    if (result.status === 'error') toast(result.message);
+    return false;
+  }
+  return openDocumentChat({ kind: source.kind, id: source.id }, { anchor, onStaged: finish });
+}
+const documentAskPrompt = source => `关于《${source.title}》：`;
+function documentAskAction(tab) {
+  const reference = documentChatAction(tab);
+  if (!reference) return null;
+  const english = window.WorkstationI18n?.getLanguage?.() === 'en';
+  return { label: english ? 'Ask AI' : '问 AI', ariaLabel: english ? 'Ask AI about this document' : '就这份资料提问',
+    title: english ? 'Reference this document and start a question about it' : '引用这份资料，并在输入框写好提问开头', disabled: reference.disabled };
+}
+function askAboutReaderTab(tab, { anchor, isCurrent } = {}) {
+  const source = documentChatController?.describe().source;
+  if (isCurrent?.() === false || !source || source.kind !== tab.kind || source.id !== tab.id) return false;
+  return askAboutDocument({ type: source.ref.type, id: tab.id }, documentAskPrompt(source), { anchor });
+}
+// "问 AI" from a file row (project 资料, local folder, conversation files): open
+// the file in the reader first, so the reference is built from the version
+// the user sees (saved note body, local editor version, attachment identity).
+async function askAboutFile(ref, { anchor } = {}) {
+  if (window.PrivateMode?.isOn?.()) { toast('无痕模式下不会把资料发给模型。'); return false; }
+  const kind = ref?.type === 'local' ? 'local-file' : ref?.type;
+  const id = kind === 'local-file' ? window.ProjectFiles?.localId?.(ref) : ref?.id;
+  if (!['note', 'import', 'local-file'].includes(kind) || !id || !previewItem(kind, id)) { toast('这份资料已不可用。'); return false; }
+  const showing = () => { const source = documentChatController?.describe().source; return source?.kind === kind && source.id === id ? source : null; };
+  if (!showing() || !window.ReadingPane?.isActive?.(kind, id)) {
+    if (await openPreview(kind, id, undefined, undefined, undefined, { anchor }) === false) return false;
+  }
+  const source = showing();
+  if (!source) { toast('资料尚未载入完成，请在阅读区点“问 AI”。'); return false; }
+  const reader = $('#readingAsk');
+  const visible = node => node?.isConnected && node.getClientRects().length > 0;
+  return askAboutDocument({ type: source.ref.type, id }, documentAskPrompt(source), { anchor: visible(reader) ? reader : anchor });
 }
 documentChatController = window.DocumentChat?.create({
   getSource: documentChatSource, targets: documentChatTargets, getTarget: documentChatTarget,
@@ -7327,7 +7484,7 @@ documentChatController = window.DocumentChat?.create({
   selectRef: (ref, options) => window.FileContextUI.selectRef(ref, options),
   stage: command => contextSelection.mutate(command), getConversationId: () => state.currentConversationId,
   canFocus: () => document.body.dataset.view === 'agent' && documentChatRouteCurrent(),
-  focusComposer: () => $('#agentInput')?.focus(), notify: message => toast(message),
+  focusComposer: () => $('#agentInput')?.focus(), notify: message => { if (!documentChatQuiet) toast(message); },
   onChange: () => window.ReadingPane?.reconcile()
 });
 window.FileContextUI?.init({ getState: () => state, getConversation: currentConversation, save: saveDocumentDurably, toast,
@@ -7481,7 +7638,7 @@ window.FileReview?.init({getState:()=>state,open:(id,fileId,options={})=>openPre
 window.LocalFileEdits?.init({getState:()=>state,isBusy:()=>!!sendMessage.busy,open:(id,editId,options={})=>openPreview('local-review',id,editId,undefined,undefined,options),openFile:openPreview,openReview:(id,fileId,options={})=>openPreview('review',id,fileId,undefined,undefined,options),markdown:renderRichText,
   fileChanged:(run,edit,action)=>LocalFileEdits.followUp(state,run,edit,action),
   save:()=>{save();renderConversation();window.FileContextUI?.render();},toast});
-window.FileActions?.init({getState:()=>state,toast});
+window.FileActions?.init({getState:()=>state,toast,canAsk:()=>!window.PrivateMode?.isOn?.(),ask:(ref,anchor)=>askAboutFile(ref,{anchor})});
 
 window.LocalFileEdits?.tray(currentConversation());
 
@@ -7523,6 +7680,7 @@ async function refreshWikiVault(enable = false) {
 window.ProjectBoard?.init({getState:()=>state,getProjectId:()=>state.currentProjectId,persist:saveDocumentDurably,renderAll,toast,open:openTask,onCreate:(projectId,guard)=>{if(guard?.()===false)return false;return window.PlanningWorkbench?.createTask({projectId});}});
 // 页内查找只读对话 DOM；查找栏打开期间流式重绘会触发重新计算（见模块 watch()）。
 window.FindInConversation?.init({getRoot:()=>$('#messageList')});
+window.CodeCopy?.init({getRoot:()=>$('#messageList'),announce:toast});
 window.ModeHint?.init({});
 window.SafePreview?.init({});
 window.SessionTasks?.init({getConversation: currentConversation, clear: () => { const conversation = currentConversation(); delete conversation.taskList; save(); renderConversation(); }});
@@ -7609,7 +7767,7 @@ window.WorkspaceNavigation?.init({getState:()=>state,save,showView,navigateLocat
 window.InteractionSystem?.init();
 initSpeechComposer();
 
-window.SourcePeek?.init({ state: () => state, toast, open: (type, id, page, source, navigation) => {
+window.SourcePeek?.init({ state: () => state, toast, reveal: revealSourceExcerpt, open: (type, id, page, source, navigation) => {
   if (type === 'paper') return openPaper(id);
   if (type === 'task') return openTask(id);
   if (type === 'local') return openPreview('local-file', ProjectFiles.localId(source), page, source, undefined, navigation);

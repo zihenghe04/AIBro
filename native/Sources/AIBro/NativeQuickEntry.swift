@@ -116,6 +116,16 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
     @Published private(set) var presentation = NativeQuickPresentation()
     @Published private(set) var geometry = NativeQuickGeometry.resolve(screen: CGRect(x: 0, y: 0, width: 1440, height: 900), visible: CGRect(x: 0, y: 0, width: 1440, height: 876), safeTop: 0, placement: .island)
     private var motionTask: Task<Void, Never>?
+    /// One derived collapsed state; see NativeQuickIslandStatus for priority.
+    @Published private(set) var islandStatus = NativeQuickIslandStatus.derive(.init())
+    private var islandInputs = NativeQuickIslandInputs(since: Date().timeIntervalSince1970 * 1000)
+    private var islandFrameTask: Task<Void, Never>?
+    /// A state that needs the user widens the island briefly, then returns
+    /// to the existing collapsed footprint while keeping its glyph and tint.
+    @Published private(set) var islandPeeking = false
+    private var islandPeekTask: Task<Void, Never>?
+    static let islandPeekDuration: UInt64 = 4_500_000_000
+    private var islandRunsSubscription: AnyCancellable?
     var keepRunning: Bool { mode != .off }
     var isEnabled: Bool { mode != .off }
     var preferredEnabledMode: Mode { mode == .off ? entryPreferences.preferredEnabledMode : mode }
@@ -151,6 +161,10 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         super.init()
         shortcutStore.onInvoke = { [weak self] in self?.togglePanel() }
         shortcutSubscription = shortcutStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        // @Published delivers the incoming value before it is stored.
+        islandRunsSubscription = workbench.$runs.sink { [weak self] runs in
+            MainActor.assumeIsolated { self?.acceptIslandRuns(runs) }
+        }
         panelPreferenceSubscription = panelPreferences.$configuration.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in
             MainActor.assumeIsolated { self?.reconcilePanelPreferences() }
         }
@@ -192,6 +206,8 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         guard voiceStatus != status else { return }
         voiceStatus = status
         if status == nil, voicePresented { dismissVoice(returnFocus: false) }
+        islandInputs.voice = status.map { .init(title: $0.title, symbol: $0.symbol, isProcessing: $0.isProcessing) }
+        refreshIsland()
         updateStatusItem()
     }
     @discardableResult func showVoice(screenIntent: NativeQuickScreenSelection.Intent = .pointerSummon) -> Bool {
@@ -263,7 +279,116 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         if self.busy != busy { self.busy = busy }
         if self.unread != count { self.unread = count }
         if self.ready != ready { self.ready = ready }
+        islandInputs.busy = busy; islandInputs.unread = count; islandInputs.ready = ready
+        refreshIsland()
         updateStatusItem()
+    }
+
+    /// Ambient activity owned by other stores. Elapsed time is whole seconds
+    /// so a 10 Hz recorder clock republishes the island once per second.
+    func updateIslandActivity(recording: NativeQuickIslandInputs.Recording?, music: NativeQuickIslandInputs.Music?) {
+        let normalized: NativeQuickIslandInputs.Recording?
+        switch recording {
+        case .recording(let elapsed): normalized = .recording(elapsed.isFinite ? elapsed.rounded(.down) : 0)
+        case .paused(let elapsed): normalized = .paused(elapsed.isFinite ? elapsed.rounded(.down) : 0)
+        default: normalized = recording
+        }
+        guard islandInputs.recording != normalized || islandInputs.music != music else { return }
+        islandInputs.recording = normalized; islandInputs.music = music
+        refreshIsland()
+    }
+
+    /// Clear-on-read: opening the panel or a run acknowledges its outcome.
+    func markIslandOutcomesSeen(runID: String? = nil) {
+        // Opening the panel ends a peek; the panel now shows the details.
+        islandPeekTask?.cancel(); islandPeekTask = nil
+        if islandPeeking { islandPeeking = false; if let screen = screenForEntry() { updateGeometry(on: screen) } }
+        let outcomes = NativeQuickIslandStatus.unseenOutcomes(islandInputs).filter { runID == nil || $0.id == runID }
+        guard !outcomes.isEmpty else { return }
+        outcomes.forEach { islandInputs.seen.insert(NativeQuickIslandStatus.outcomeKey($0)) }
+        refreshIsland()
+    }
+
+    /// A run waiting for the user or an unread failure opens the panel where
+    /// it can be handled. A success only clears; it never moves the user's tab.
+    var collapsedEntrySection: Section? {
+        guard islandStatus.runID != nil, islandStatus.attention,
+              visibleSections.contains(.runs) else { return nil }
+        return .runs
+    }
+
+    private func acceptIslandRuns(_ runs: [NativeQuickRunItem]) {
+        let projected = runs.map { NativeQuickIslandInputs.Run(id: $0.id, title: $0.title, status: $0.status ?? "unknown",
+                                                              finishedAt: $0.finishedAt, notificationReady: $0.notificationReady == true) }
+        guard projected != islandInputs.runs else { return }
+        islandInputs.runs = projected
+        // Keep read receipts across a temporary empty projection (hydration,
+        // private mode); only bound the set once it grows large.
+        if islandInputs.seen.count > 400, !projected.isEmpty {
+            islandInputs.seen.formIntersection(projected.map(NativeQuickIslandStatus.outcomeKey))
+        }
+        // An outcome that lands while the user is reading the panel is read.
+        if presentation.contentVisible {
+            NativeQuickIslandStatus.unseenOutcomes(islandInputs).forEach { islandInputs.seen.insert(NativeQuickIslandStatus.outcomeKey($0)) }
+        }
+        refreshIsland()
+    }
+
+    /// Base footprint unless a state is peeking; never narrower than base.
+    var islandCollapsedWidth: ((CGFloat, CGFloat) -> CGFloat)? {
+        guard islandPeeking else { return nil }
+        let status = islandStatus
+        return { gap, base in status.peekWidth(notchGap: gap, base: base, measure: NativeQuickIslandCollapsedLabel.measure) }
+    }
+
+    private func refreshIsland() {
+        let next = NativeQuickIslandStatus.derive(islandInputs)
+        guard next != islandStatus else { return }
+        let previousKind = islandStatus.kind
+        let newAttention = next.peeks && (next.kind != previousKind || next.runID != islandStatus.runID || next.title != islandStatus.title)
+        relayoutIsland {
+            islandStatus = next
+            if newAttention { islandPeeking = true } else if !next.peeks { islandPeeking = false }
+        }
+        if newAttention {
+            islandPeekTask?.cancel()
+            islandPeekTask = Task { @MainActor [weak self] in
+                do { try await Task.sleep(nanoseconds: Self.islandPeekDuration) } catch { return }
+                guard let self, self.islandPeeking else { return }
+                self.relayoutIsland { self.islandPeeking = false }
+            }
+        } else if !next.peeks { islandPeekTask?.cancel(); islandPeekTask = nil }
+        if next.kind != previousKind, [.awaiting, .failed, .completed].contains(next.kind) {
+            NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested, userInfo: [
+                .announcement: "AI Bro · \(next.accessibilityValue)",
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+        }
+        updateStatusItem()
+    }
+
+    private func relayoutIsland(_ change: () -> Void) {
+        // No global withAnimation: it would put every view observing this
+        // coordinator in an animated transaction, including the workspace window,
+        // whose hosting view then animates the window size into a layout loop.
+        // The island view animates its own changes (see NativeQuickEntryView).
+        change()
+        if configured, mode != .off, let screen = screenForEntry() { updateGeometry(on: screen) }
+        applyIslandFrame()
+    }
+
+    /// The window only changes at shape boundaries: it grows before a wider
+    /// shell animates in and shrinks after a narrower shell has settled.
+    private func applyIslandFrame() {
+        islandFrameTask?.cancel(); islandFrameTask = nil
+        guard let panel, presentation.phase == .collapsed, mode == .island else { return }
+        let target = geometry.collapsed
+        guard panel.frame != target else { return }
+        if target.width >= panel.frame.width || reduceMotion { panel.setFrame(target, display: true); return }
+        islandFrameTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: 560_000_000) } catch { return }
+            guard let self, self.presentation.phase == .collapsed, self.geometry.collapsed == target else { return }
+            self.panel?.setFrame(target, display: true)
+        }
     }
 
     func configureCapture(directory: URL, save: @escaping (NativeQuickCapturePayload) async throws -> String) {
@@ -315,7 +440,8 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         if let requestedSection, availableSections.contains(requestedSection) {
             select(requestedSection)
         } else if !presentation.wantsExpanded {
-            select(panelPreferences.defaultSection(available: availableSections))
+            // A waiting run or an unread outcome opens where it is handled.
+            select(collapsedEntrySection ?? panelPreferences.defaultSection(available: availableSections))
         }
         openPanel(screenIntent: screenIntent)
     }
@@ -344,6 +470,7 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         if showingCapture && !voicePresented { NSApp.activate(ignoringOtherApps: true) }
         installOutsideClickMonitors()
         transition(expanded: true)
+        markIslandOutcomesSeen()
     }
 
     /// Opens the existing module detail without changing the user's home layout.
@@ -602,6 +729,8 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         dismiss(returnFocus: false)
         configured = false
         motionTask?.cancel(); motionTask = nil; presentation.reset()
+        islandFrameTask?.cancel(); islandFrameTask = nil
+        islandPeekTask?.cancel(); islandPeekTask = nil; islandPeeking = false
         removeEntryWindows()
         unregisterHotkey()
         observers.forEach(NotificationCenter.default.removeObserver)
@@ -651,9 +780,11 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
 
     fileprivate var statusDescription: String {
         if let voiceStatus { return voiceStatus.title }
-        if busy { return nativeUI("正在执行", "Working") }
-        if unread > 0 { return nativeUI("\(unread) 项新变化", "\(unread) new updates") }
-        return ready ? nativeUI("准备就绪", "Ready") : nativeUI("正在准备工作区", "Preparing workspace")
+        switch islandStatus.kind {
+        case .idle: return nativeUI("准备就绪", "Ready")
+        case .preparing: return nativeUI("正在准备工作区", "Preparing workspace")
+        default: return islandStatus.accessibilityValue
+        }
     }
 
     @objc private func statusItemPressed(_ sender: Any?) { togglePanel() }
@@ -692,7 +823,14 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
 
     private func updateStatusItem() {
         guard let button = statusItem?.button else { return }
-        let symbol = voiceStatus?.symbol ?? (busy ? "circle.dotted.circle" : unread > 0 ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+        let symbol: String
+        switch islandStatus.kind {
+        case .voice: symbol = islandStatus.symbol
+        case .awaiting: symbol = "exclamationmark.bubble"
+        case .running: symbol = "circle.dotted.circle"
+        case .failed: symbol = "exclamationmark.triangle"
+        default: symbol = unread > 0 ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right"
+        }
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "AI Bro")
         image?.isTemplate = true
         button.image = image
@@ -728,9 +866,11 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
                   menuID == screenID(screen) else { return nil }
             return window.frame
         }
-        return NativeQuickGeometry.resolve(screen: screen.frame, visible: screen.visibleFrame, safeTop: screen.safeAreaInsets.top,
+        let base = NativeQuickGeometry.resolve(screen: screen.frame, visible: screen.visibleFrame, safeTop: screen.safeAreaInsets.top,
             leftArea: screen.auxiliaryTopLeftArea, rightArea: screen.auxiliaryTopRightArea,
             placement: placement, menuAnchor: menuAnchor)
+        guard let width = islandCollapsedWidth?(base.hardwareWidth, base.collapsed.width) else { return base }
+        return base.withCollapsed(base.collapsedFrame(contentWidth: width))
     }
     private func updateGeometry(on screen: NSScreen) {
         let next = resolvedGeometry(on: screen)
@@ -864,6 +1004,10 @@ private struct NativeQuickEntryView: View {
     private var alignment: Alignment { coordinator.geometry.placement == .edge ? .trailing : .top }
     private var shellWidth: CGFloat { coordinator.presentation.shellExpanded ? coordinator.geometry.expanded.width : coordinator.geometry.collapsed.width }
     private var shellHeight: CGFloat { coordinator.presentation.shellExpanded ? coordinator.geometry.expanded.height : coordinator.geometry.collapsed.height }
+    private var islandAnimation: Animation? {
+        coordinator.reduceMotion || coordinator.presentation.phase != .collapsed ? nil : .spring(response: 0.44, dampingFraction: 0.74)
+    }
+    private var collapsedRadius: CGFloat { island ? min(16, coordinator.geometry.collapsed.height / 2) : 12 }
     init(coordinator: NativeQuickEntryCoordinator) {
         self.coordinator = coordinator; self.preferences = coordinator.panelPreferences
     }
@@ -872,7 +1016,7 @@ private struct NativeQuickEntryView: View {
         GeometryReader { proxy in
             ZStack(alignment: alignment) {
                 shell.fill(island ? Color.black : Color(nsColor: .windowBackgroundColor))
-                    .overlay(shell.strokeBorder(Color.primary.opacity(island ? 0.13 : 0.1), lineWidth: 0.5))
+                    .overlay(shell.strokeBorder(collapsedEdge, lineWidth: 0.5))
                     .frame(width: shellWidth, height: shellHeight)
                 expandedContent
                     .frame(width: coordinator.geometry.expanded.width, height: coordinator.geometry.expanded.height)
@@ -892,6 +1036,9 @@ private struct NativeQuickEntryView: View {
                 .frame(width: coordinator.geometry.expanded.width, height: coordinator.geometry.expanded.height, alignment: alignment))
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: alignment)
         }
+        .animation(islandAnimation, value: coordinator.islandStatus)
+        .animation(islandAnimation, value: coordinator.islandPeeking)
+        .animation(islandAnimation, value: coordinator.geometry)
         .environment(\.colorScheme, island ? .dark : systemColorScheme)
         .transaction { if coordinator.reduceMotion { $0.disablesAnimations = true } }
         .tint(island ? Color(red: 0.66, green: 0.85, blue: 0.72) : Color(red: 0.17, green: 0.45, blue: 0.37))
@@ -900,27 +1047,43 @@ private struct NativeQuickEntryView: View {
     }
 
     private var shell: UnevenRoundedRectangle {
-        let radius: CGFloat = coordinator.presentation.shellExpanded ? 24 : 12
+        let radius: CGFloat = coordinator.presentation.shellExpanded ? 24 : collapsedRadius
         return UnevenRoundedRectangle(topLeadingRadius: island ? 0 : radius,
             bottomLeadingRadius: radius, bottomTrailingRadius: radius, topTrailingRadius: island ? 0 : radius, style: .continuous)
     }
 
+    /// A tinted hairline marks states that need the user without changing
+    /// the black shell; ordinary states keep the neutral edge.
+    private var collapsedEdge: Color {
+        let base = Color.primary.opacity(island ? 0.13 : 0.1)
+        guard island, !coordinator.presentation.shellExpanded, coordinator.islandStatus.attention else { return base }
+        return NativeQuickIslandCollapsedLabel.color(coordinator.islandStatus.tint).opacity(0.55)
+    }
+
     private var collapsedContent: some View {
         Button { coordinator.openCollapsedEntry() } label: {
-            HStack(spacing: 8) {
-                Image(systemName: coordinator.voiceStatus?.symbol ?? "square.stack.3d.up").font(.system(size: 12, weight: .medium))
-                if coordinator.geometry.hardwareWidth > 0 {
-                    Spacer(minLength: coordinator.geometry.hardwareWidth)
-                } else { Text(coordinator.voiceStatus?.title ?? "AI Bro").font(.system(size: 11, weight: .semibold)).lineLimit(1) }
-                if coordinator.voiceStatus?.isProcessing ?? coordinator.busy {
-                    ProgressView().controlSize(.mini).frame(width: 12, height: 12)
+            Group {
+                if island {
+                    NativeQuickIslandCollapsedLabel(status: coordinator.islandStatus, notchGap: coordinator.geometry.hardwareWidth,
+                                                    width: coordinator.geometry.collapsed.width, reduceMotion: coordinator.reduceMotion,
+                                                    peeking: coordinator.islandPeeking, menuBand: coordinator.geometry.safeTop)
                 } else {
-                    Circle().fill(coordinator.unread > 0 ? Color.accentColor : Color.primary.opacity(0.38)).frame(width: 5, height: 5)
+                    HStack(spacing: 8) {
+                        Image(systemName: coordinator.islandStatus.symbol).font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(coordinator.islandStatus.kind == .idle ? Color.primary : NativeQuickIslandCollapsedLabel.color(coordinator.islandStatus.tint))
+                        Text(coordinator.voiceStatus?.title ?? "AI Bro").font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                        if coordinator.islandStatus.busy {
+                            ProgressView().controlSize(.mini).frame(width: 12, height: 12)
+                        } else {
+                            Circle().fill(coordinator.islandStatus.kind == .idle ? Color.primary.opacity(0.38) : Color.accentColor).frame(width: 5, height: 5)
+                        }
+                    }.padding(.horizontal, 12)
                 }
-            }.padding(.horizontal, 12).frame(maxWidth: .infinity, maxHeight: .infinity)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
-            .accessibilityLabel(coordinator.voiceStatus == nil ? nativeUI("展开 AI Bro 工作台", "Expand AI Bro workspace") : nativeUI("查看语音指令", "View voice command"))
+            .accessibilityLabel(coordinator.voiceStatus != nil ? nativeUI("查看语音指令", "View voice command")
+                : coordinator.collapsedEntrySection == .runs ? nativeUI("查看执行记录", "View runs") : nativeUI("展开 AI Bro 工作台", "Expand AI Bro workspace"))
             .accessibilityValue(coordinator.statusDescription)
             .help("AI Bro · \(coordinator.statusDescription) · \(coordinator.shortcutStore.shortcut.label)")
     }

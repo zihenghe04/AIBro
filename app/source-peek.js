@@ -58,7 +58,11 @@
     // legitimately closes this popover; still reveal the requested excerpt if
     // this exact source is now active. Never highlight a subsequently opened file.
     const preview=hooks.state()?.previewRecord,expectedType=value.type==='local'?'local-file':value.type,expectedId=value.type==='local'?root.ProjectFiles?.localId(value):value.id;
-    if(value.excerpt&&preview?.type===expectedType&&preview.id===expectedId&&!root.CitationEvidence?.reveal(value,doc.querySelector(value.type==='local'?'.local-document-preview':'#previewContent')))hooks.toast?.(t('已打开原文；未能唯一定位这段旧摘录。','Original opened; the saved excerpt could not be located uniquely.'));
+    if(value.excerpt&&preview?.type===expectedType&&preview.id===expectedId){
+     // The host marks PDF words on the cited page once that page's text loads.
+     const shown=hooks.reveal?await hooks.reveal(expectedType,expectedId,value):root.CitationEvidence?.reveal(value,doc.querySelector(value.type==='local'?'.local-document-preview':'#previewContent'));
+     if(shown===false&&!privateMode())hooks.toast?.(t('已打开原文；未能唯一定位这段旧摘录。','Original opened; the saved excerpt could not be located uniquely.'));
+    }
     if(version===generation)close();
    }catch(reason){if(version!==generation)return;if(privateMode()||visibility(value).kind==='private'){close();return;}busy=false;error=reason?.message||String(reason);paint();}
   }

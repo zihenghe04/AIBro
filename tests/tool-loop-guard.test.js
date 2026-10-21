@@ -64,3 +64,11 @@ test('changed budgets and argv boundaries are distinct while default cursors are
  assert.deepEqual(Guard.inspect(unstarted).repeated,[],'queued cancellations are not actual attempts');
  assert.equal(Guard.inspect(unstarted.map(c=>({...c,startedAt:1}))).repeated.length,1);
 });
+
+test('repeated snapshots count as spinning only while the page content is unchanged', () => {
+  const snap = (text, id) => ({ id, type: 'browser_snapshot', request: { type: 'browser_snapshot' }, status: 'completed', result: { url: 'https://x.test/', title: 'T', elements: [1, 2], text } });
+  const same = [1, 2, 3, 4].map(n => snap('same page', 's' + n));
+  assert.equal(Guard.inspect(same, 4).repeated.length, 1, 'identical content still trips the guard');
+  const changing = [snap('loading', 's1'), snap('loading', 's2'), snap('login form', 's3'), snap('signed in', 's4')];
+  assert.equal(Guard.inspect(changing, 4).repeated.length, 0, 'content that changed is progress');
+});

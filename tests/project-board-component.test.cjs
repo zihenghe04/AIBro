@@ -8,6 +8,7 @@ function fixture(lang='zh'){
     if(name.endsWith('.css'))return '';
     if(name.includes('halaska-kit'))return {Button:'Kit:Button',EmptyState:'Kit:EmptyState'};
     if(name.includes('kit-controls'))return {KitSelect:'Kit:Select',KitSegmentedControl:'Kit:SegmentedControl'};
+    if(name.includes('planning-motion'))return {layoutMotion:()=>undefined};
     return new Proxy({},{get:(_,key)=>`Icon:${String(key)}`});
   }});
   const render=props=>{const all=[];function visit(node){if(Array.isArray(node)){node.forEach(visit);return;}if(!React.isValidElement(node))return;if(typeof node.type==='function'){visit(node.type(node.props));return;}all.push(node);visit(node.props.children);}visit(module.exports.ProjectBoardPanel(props));return all;};
@@ -59,4 +60,17 @@ test('task metadata stays compact and prerequisite state never includes hidden o
   const nodes=fixture().render({tasks:[task({prerequisitesIncomplete:true,title:'Long title '.repeat(90)})]});
   assert.equal(text(byClass(nodes,'project-task-prerequisite')[0]),'前置任务未就绪');assert.equal(text(byClass(nodes,'project-task-title')[0]),'Long title '.repeat(90));
   assert.equal(nodes.some(node=>String(node.props.className||'').includes('project-board-toolbar')),false);
+});
+
+test('status icon is a labelled shortcut to the same guarded status action and due chips state urgency in words',()=>{
+  const moves=[],today=new Date(),iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const past=new Date(today);past.setDate(past.getDate()-3);
+  const nodes=fixture().render({tasks:[task({dueAt:iso(today)}),task({id:'late',dueAt:iso(past)}),task({id:'done',status:'done',dueAt:iso(past)})],onStatus:(...args)=>moves.push(args)});
+  const toggles=byClass(nodes,'project-task-state-icon');assert.equal(toggles.length,3);assert.ok(toggles.every(node=>node.type==='button'));
+  assert.match(toggles[0].props['aria-label'],/标记为已完成/);assert.equal(toggles[2].props['aria-pressed'],true);
+  toggles[0].props.onClick();toggles[2].props.onClick();assert.deepEqual(moves,[['t','done'],['done','todo']]);
+  const chips=nodes.filter(node=>node.type==='time').map(node=>[node.props.className,text(node)]);
+  assert.match(chips[0][0],/is-today/);assert.match(chips[0][1],/^今天/);assert.match(chips[1][0],/is-overdue/);assert.match(chips[1][1],/^已逾期/);
+  assert.doesNotMatch(chips[2][0],/is-overdue/,'Completed work is never flagged overdue');
+  assert.equal(fixture().render({tasks:[task()],busyIds:['t'],onStatus(){}}).find(node=>String(node.props.className||'').includes('project-task-state-icon')).props.disabled,true);
 });

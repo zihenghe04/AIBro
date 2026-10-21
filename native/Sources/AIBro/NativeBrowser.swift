@@ -40,7 +40,7 @@ struct BrowserFailure: LocalizedError {
     var onChanged: (() -> Void)?
 
     init(owner:[String:Any],root:URL) {
-        runID=owner["runId"] as? String ?? "manual"
+        runID=owner["browserOwner"] as? String ?? owner["runId"] as? String ?? "manual"
         conversationID=owner["conversationId"] as? String ?? ""
         projectID=owner["projectId"] as? String ?? ""
         // Set only by the trusted workspace host when a task creates its tab.
@@ -83,7 +83,7 @@ struct BrowserFailure: LocalizedError {
     func check(_ request:[String:Any]) throws {
         guard !closed else {throw BrowserFailure(code:"TAB_CLOSED",message:"网页标签已关闭")}
         guard !cancelled else {throw BrowserFailure(code:"CANCELLED",message:"浏览器任务已停止")}
-        guard request["runId"] as? String == runID,request["conversationId"] as? String ?? "" == conversationID,request["projectId"] as? String ?? "" == projectID else {throw BrowserFailure(code:"WRONG_OWNER",message:"此网页不属于当前任务")}
+        guard (request["browserOwner"] as? String ?? request["runId"] as? String) == runID,request["conversationId"] as? String ?? "" == conversationID,request["projectId"] as? String ?? "" == projectID else {throw BrowserFailure(code:"WRONG_OWNER",message:"此网页不属于当前任务")}
     }
     func payload(_ extra:[String:Any]=[:]) -> [String:Any] {
         var result:[String:Any] = ["sessionId":sessionID,"tabId":id,"url":web.url?.absoluteString ?? address,"title":web.title ?? title,"status":closed ? "closed":cancelled ? "cancelled":paused ? "paused":status,"snapshotId":snapshotID,"browserOnly":true,"approvalPolicy":asksPermission ? "ask":"auto"]
@@ -196,7 +196,7 @@ struct BrowserFailure: LocalizedError {
         }
     }
     func checkOwner(_ request:[String:Any]) throws {
-        guard request["runId"] as? String == runID,request["conversationId"] as? String ?? "" == conversationID,request["projectId"] as? String ?? "" == projectID else {throw BrowserFailure(code:"WRONG_OWNER",message:"此网页不属于当前任务")}
+        guard (request["browserOwner"] as? String ?? request["runId"] as? String) == runID,request["conversationId"] as? String ?? "" == conversationID,request["projectId"] as? String ?? "" == projectID else {throw BrowserFailure(code:"WRONG_OWNER",message:"此网页不属于当前任务")}
     }
     func takeOver() {paused=true;status="paused";snapshotID="";if approve != nil {decide(false)};notice="你正在操作此网页。完成后点击继续，AI 会重新读取页面。";changed()}
     func resume() {guard !cancelled && !closed else{return};paused=false;status="ready";snapshotID="";notice="";let waiters=handoffWaiters;handoffWaiters.removeAll();waiters.values.forEach{$0.resume()};changed()}
@@ -245,7 +245,7 @@ struct BrowserFailure: LocalizedError {
         if action == "status",request["tabId"] == nil {return ["available":true,"backend":"native-webkit","browserOnly":true,"tabs":tabs.map{$0.payload()},"status":"ready"]}
         if action == "cancel",request["tabId"] == nil {
             cancelledOwners.insert(ownerKey(request))
-            let owned=tabs.filter{$0.runID == request["runId"] as? String && $0.conversationID == (request["conversationId"] as? String ?? "") && $0.projectID == (request["projectId"] as? String ?? "")}
+            let owned=tabs.filter{$0.runID == (request["browserOwner"] as? String ?? request["runId"] as? String) && $0.conversationID == (request["conversationId"] as? String ?? "") && $0.projectID == (request["projectId"] as? String ?? "")}
             owned.forEach{$0.stop()};return ["status":"cancelled","cancelledTabs":owned.count]
         }
         let tab:NativeBrowserTab

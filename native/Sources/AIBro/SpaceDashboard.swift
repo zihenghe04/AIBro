@@ -14,10 +14,13 @@ struct DashboardCard<Content:View>:View {
     let content:Content
     init(tint:Color=StudioPalette.jade,@ViewBuilder content:()->Content){self.tint=tint;self.content=content()}
     var body:some View {
-        VStack(alignment:.leading,spacing:18) { content }.padding(22).frame(maxWidth:.infinity,alignment:.leading)
-            .background(StudioPalette.panel,in:RoundedRectangle(cornerRadius:22))
-            .overlay(RoundedRectangle(cornerRadius:22).strokeBorder(StudioPalette.line.opacity(0.7),lineWidth:1).allowsHitTesting(false))
-            .shadow(color:.black.opacity(scheme == .dark ? 0.08:0.025),radius:14,y:5)
+        // Solid content layer: hairline border plus a short contact shadow and a soft
+        // ambient one (radius scale 8/12/18/24), instead of one wide blur.
+        VStack(alignment:.leading,spacing:18) { content }.padding(20).frame(maxWidth:.infinity,alignment:.leading)
+            .background(StudioPalette.panel,in:RoundedRectangle(cornerRadius:18,style:.continuous))
+            .overlay(RoundedRectangle(cornerRadius:18,style:.continuous).strokeBorder(StudioPalette.line.opacity(scheme == .dark ? 0.9:0.75),lineWidth:1).allowsHitTesting(false))
+            .shadow(color:.black.opacity(scheme == .dark ? 0.18:0.04),radius:1,y:1)
+            .shadow(color:.black.opacity(scheme == .dark ? 0.12:0.035),radius:12,y:6)
     }
 }
 struct SpaceDashboard:View {
@@ -159,7 +162,16 @@ struct SpaceDashboard:View {
     private var taskList:some View {
         DashboardCard(tint:tint) {
             HStack{heading(filter.map{statusTitle($0)} ?? nativeUI("任务清单", "Tasks"),nativeUI("点击任务编辑 · 点击圆环状态筛选", "Select a task to edit · Filter by completion status"));Spacer();if filter != nil{Button(nativeUI("全部", "All")){withAnimation{filter=nil}}.buttonStyle(.plain).font(.caption).foregroundStyle(tint)}}
-            ScrollView{LazyVStack(spacing:0){ForEach(filtered){task in HStack(spacing:4){TaskCompletionButton(model:model,task:task);Button{model.reveal("task",task.id)} label:{HStack(spacing:10){VStack(alignment:.leading,spacing:5){Text(task.title).font(.system(size:11,weight:.medium)).lineLimit(2);Text(date(task.due).map{$0.nativeFormatted(.dateTime.month().day())} ?? nativeUI("未设置日期", "No date set")).font(.system(size:9)).foregroundStyle(.secondary)};Spacer();Circle().fill(projectTint(task.projectId)).frame(width:5,height:5)}.frame(maxWidth:.infinity,alignment:.leading).padding(.vertical,13).contentShape(Rectangle())}.buttonStyle(LiftStyle())};Divider().opacity(0.3)}}}.frame(maxHeight:250).padding(.top,14)
+            ScrollView{LazyVStack(spacing:0){ForEach(filtered){task in
+                let done=task.status=="done",overdue = !done && OverviewTaskSummary(tasks:[task],now:Date()).isOverdue(task)
+                HStack(spacing:4){TaskCompletionButton(model:model,task:task);Button{model.reveal("task",task.id)} label:{HStack(spacing:10){VStack(alignment:.leading,spacing:5){
+                    Text(task.title).font(.system(size:11,weight:.medium)).lineLimit(2).strikethrough(done).foregroundStyle(done ? Color.secondary:Color.primary)
+                    // The deadline label states urgency in words; the tint only reinforces it.
+                    Text(date(task.due).map{(overdue ? nativeUI("已逾期 · ", "Overdue · "):"")+$0.nativeFormatted(.dateTime.month().day())} ?? nativeUI("未设置日期", "No date set")).font(.system(size:9,weight:overdue ? .semibold:.regular))
+                        .foregroundStyle(overdue ? StudioPalette.coral:Color.secondary).padding(.horizontal,overdue ? 6:0).padding(.vertical,overdue ? 2:0).background{if overdue{Capsule().fill(StudioPalette.coral.opacity(0.12))}}
+                };Spacer();Circle().fill(projectTint(task.projectId)).frame(width:5,height:5)}.frame(maxWidth:.infinity,alignment:.leading).padding(.vertical,12).contentShape(Rectangle())}.buttonStyle(LiftStyle())}
+                    .opacity(done ? 0.66:1).transition(reduceMotion ? .identity:.opacity.combined(with:.move(edge:.top)))
+                Divider().opacity(0.3)}}.animation(reduceMotion ? nil:.timingCurve(0.22,1,0.36,1,duration:0.3),value:filtered.map{$0.id+$0.status})}.frame(maxHeight:250).padding(.top,14)
             if filtered.isEmpty{empty(nativeUI("这里暂时没有任务。", "No tasks here yet."),"checkmark.circle")}
         }
     }

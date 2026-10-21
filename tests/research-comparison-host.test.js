@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require.resolve('../app/app.js'), 'utf8');
-const body = source.slice(source.indexOf('async function openComparisonTarget('), source.indexOf('\nwindow.SourceComparison?.init'));
+const body = source.slice(source.indexOf('// Mark a cited excerpt in the document just opened.'), source.indexOf('\nwindow.SourceComparison?.init'));
 function fixture() {
   let release, allowed = true;
   const calls = [], toasts = [], context = vm.createContext({
-    storageHydrated: true, serverConflict: false, state: {previewRecord: null},
+    storageHydrated: true, serverConflict: false, state: {previewRecord: null}, pdfReaderHandle: null,
     window: {PrivateMode: {isOn: () => false}, NoteConsolidation: {resolveId: (_, id) => id},
       WorkstationI18n: {getLanguage: () => 'zh'}, CitationEvidence: {reveal: ({excerpt}) => {calls.push(['quote', excerpt]); return true;}}},
     document: {dispatchEvent: event => calls.push(['event', event.type])}, CustomEvent: class {constructor(type) {this.type = type;}},

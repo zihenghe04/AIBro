@@ -15,11 +15,12 @@ function ScheduleAction({ marker, children, ...props }) {
   useLayoutEffect(() => { if (marker) ref.current?.querySelector('button')?.setAttribute(marker, ''); }, [marker]);
   return <span className="schedule-action" ref={ref}><Button {...props}>{children}</Button></span>;
 }
+const tone = status => ['todo', 'progress', 'done', 'blocked'].includes(status) ? status : 'todo';
 function ScheduleTask({ task, onTask }) {
-  return <li className="schedule-task-row" data-schedule-task={task.id}>
+  return <li className={`schedule-task-row tone-${tone(task.status)}`} data-schedule-task={task.id}>
     <Button variant="ghost" size="sm" disabled={typeof onTask !== 'function'} title={text(task.title)}
       onClick={typeof onTask === 'function' ? event => onTask(task.id, event.currentTarget) : undefined}>
-      <span className={`schedule-task-dot tone-${['todo', 'progress', 'done', 'blocked'].includes(task.status) ? task.status : 'todo'}`} aria-hidden="true" />
+      <span className={`schedule-task-dot tone-${tone(task.status)}`} aria-hidden="true" />
       <span className="schedule-task-copy"><strong data-user-content>{text(task.title) || t('未命名任务', 'Untitled task')}</strong>
         <span className="schedule-task-meta"><span>{text(task.statusLabel)}</span>{text(task.time) && <time>{task.time}</time>}
           {text(task.invalidDate) && <span data-user-content>{task.invalidDate}</span>}</span></span>
@@ -27,7 +28,24 @@ function ScheduleTask({ task, onTask }) {
     </Button>
   </li>;
 }
-const taskList = (tasks, onTask) => <ul className="schedule-task-list">{list(tasks).map(task => <ScheduleTask key={task.id} task={task} onTask={onTask} />)}</ul>;
+// Today's timed tasks get a "now" divider; untimed tasks stay where they are.
+function nowIndex(tasks, now = new Date()) {
+  const clock = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  if (!tasks.some(task => text(task.time))) return -1;
+  const index = tasks.findIndex(task => text(task.time) && task.time > clock);
+  return index < 0 ? tasks.length : index;
+}
+const taskList = (tasks, onTask, now = -1) => <ul className="schedule-task-list">{list(tasks).flatMap((task, index) => [
+  index === now ? <li key="now" className="schedule-now-line" aria-hidden="true"><span>{t('现在', 'Now')}</span></li> : null,
+  <ScheduleTask key={task.id} task={task} onTask={onTask} />])}
+  {now === list(tasks).length && <li key="now" className="schedule-now-line" aria-hidden="true"><span>{t('现在', 'Now')}</span></li>}</ul>;
+// Week navigation direction is presentation-only; it is derived from the first
+// day shown, so the island stays a plain function of its props.
+let shownWeek = { ts: null, direction: 'none' };
+function weekDirection(ts) {
+  if (ts !== shownWeek.ts) shownWeek = { ts, direction: shownWeek.ts == null || ts == null ? 'none' : ts > shownWeek.ts ? 'next' : 'prev' };
+  return shownWeek.direction;
+}
 
 function SchedulePlan({ plan = {}, onPlanChange, onPlanComposition, onPlanToggle, onPlanPreview, onPlanSave, onPlanResolve }) {
   const inputRef = useRef(null), inputId = useId(), helpId = useId(), composing = useRef(false);
@@ -83,10 +101,13 @@ export function ProjectScheduleSurface({ available = false, range = '', currentW
       <div className="schedule-toolbar-tail"><span className="schedule-note">{t(`本周 ${count(weekCount)} 项 · 待完成 ${count(openCount)} 项`, `${count(weekCount)} this week · ${count(openCount)} open`)}</span>
         <ScheduleAction marker="data-schedule-today" variant="ghost" size="sm" disabled={currentWeek || typeof onWeek !== 'function'} onClick={() => onWeek?.(0)}>{t('回到本周', 'This week')}</ScheduleAction></div>
     </header>
-    <div className="schedule-week-list">{list(days).map(day => <section key={day.ts} className={`schedule-day${day.isToday ? ' is-today' : ''}`} aria-label={`${day.label} ${day.month}/${day.day}`}>
-      <header className="schedule-day-head"><strong>{day.label}</strong><time>{day.month}/{day.day}</time>{day.isToday && <small>{t('今天', 'Today')}</small>}</header>
-      <div className="schedule-day-body">{list(day.tasks).length ? taskList(day.tasks, onTask) : <p className="schedule-day-empty">{t('无安排', 'No tasks')}</p>}</div>
-    </section>)}</div>
+    <div className="schedule-week-list" key={list(days)[0]?.ts ?? 'week'} data-week-direction={weekDirection(list(days)[0]?.ts ?? null)}>{list(days).map(day => {
+      const past = !day.isToday && Number.isFinite(day.ts) && day.ts < Date.now(), tasks = list(day.tasks);
+      return <section key={day.ts} className={`schedule-day${day.isToday ? ' is-today' : ''}${past ? ' is-past' : ''}${tasks.length ? '' : ' is-empty'}`} aria-label={`${day.label} ${day.month}/${day.day}`}>
+        <header className="schedule-day-head"><strong>{day.label}</strong><time className="schedule-day-date">{day.month}/{day.day}</time>{day.isToday && <small>{t('今天', 'Today')}</small>}</header>
+        <div className="schedule-day-body">{tasks.length ? taskList(tasks, onTask, day.isToday ? nowIndex(tasks) : -1) : <p className="schedule-day-empty">{t('无安排', 'No tasks')}</p>}</div>
+      </section>;
+    })}</div>
     {!!list(unscheduled).length && <section className="schedule-extra" aria-label={t('未安排', 'Unscheduled')}><header><h3>{t('未安排', 'Unscheduled')}</h3><span className="schedule-note">{list(unscheduled).length}</span></header>{taskList(unscheduled, onTask)}</section>}
     {!!list(invalid).length && <section className="schedule-extra schedule-invalid" aria-label={t('待修正日期', 'Dates to correct')}><header><h3>{t('待修正日期', 'Dates to correct')}</h3><span className="schedule-note">{list(invalid).length}</span></header><p className="schedule-note">{t('这些任务的日期无法识别，打开任务即可修正。', 'These dates could not be read. Open a task to correct it.')}</p>{taskList(invalid, onTask)}</section>}
     <SchedulePlan plan={plan} {...planActions} />
