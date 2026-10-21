@@ -319,3 +319,37 @@ test('unreadable link reaches model as explicit missing evidence without failing
  assert.match(h.requests[0].input,/DOCUMENT_UNAVAILABLE/);assert.match(h.requests[0].input,/正文未读取/);
  assert.equal(run.attachmentIds.length,0);
 });
+
+test('send paints the user message before the full-workspace save and run preparation',async()=>{
+ const h=harness(),order=[];let frame=null;
+ h.c.requestAnimationFrame=callback=>{frame=callback;};
+ h.c.renderConversation=()=>order.push('render');h.c.save=()=>{order.push('save');h.saved.push(clone(h.state));};
+ const sending=h.send();await flush();
+ assert.deepEqual(order,['render'],'the first frame must not wait for save()');
+ assert.equal(h.state.conversations[0].messages.filter(m=>m.role==='user').length,1);
+ assert.equal(h.state.agentRuns.length,0,'run preparation waits for the paint');
+ frame();await sending;
+ assert.equal(order[1],'save','the sent message is saved right after the paint');
+ assert.equal(h.saved[0].conversations[0].messages.filter(m=>m.role==='user').length,1);
+ assert.equal(h.requests.length,1);assert.equal(h.state.agentRuns.length,1);
+});
+test('hidden pages and hosts without animation frames still save before continuing',async()=>{
+ const h=harness(),order=[];
+ h.c.requestAnimationFrame=()=>{};h.c.document.hidden=true;
+ h.c.renderConversation=()=>order.push('render');h.c.save=()=>{order.push('save');};
+ await h.send();
+ assert.deepEqual(order.slice(0,2),['save','render']);assert.equal(h.requests.length,1);
+ const fallback=harness(),seen=[];
+ fallback.c.requestAnimationFrame=()=>{};
+ fallback.c.renderConversation=()=>seen.push('render');fallback.c.save=()=>seen.push('save');
+ await fallback.send();
+ assert.deepEqual(seen.slice(0,2),['render','save'],'a frame that never arrives falls back to the timeout');assert.equal(fallback.requests.length,1);
+});
+test('streaming replies checkpoint the workspace at most every five seconds',()=>{
+ const body=cut('async function sendMessage(','\nasync function ');
+ assert.match(body,/const LIVE_SAVE_INTERVAL_MS = 5000;/);
+ assert.match(body,/Date\.now\(\) - lastLiveSave > LIVE_SAVE_INTERVAL_MS\) \{ save\(\); lastLiveSave = Date\.now\(\); \}/);
+ assert.doesNotMatch(body,/lastLiveSave > 1200/);
+ // Completion still saves at once, outside the throttle.
+ assert.match(body,/refreshLive\(true\);\n\s+save\(\);/);
+});

@@ -37,6 +37,7 @@ SERVER_TESTS = (
     'tests/office-documents.test.py',
     'tests/content-purge.test.py',
     'tests/sync-store.test.py',
+    'tests/workspace-backup.test.py',
     'tests/artifact-provenance-persistence.test.py',
     'tests/research-comparison-persistence.test.py',
     'tests/comparison-drafts-persistence.test.py',

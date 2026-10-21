@@ -10,7 +10,7 @@ struct SpeechHostDocument {var id="",title="",projectId="",kind=""}
 struct SpeechHostSnapshot {var privateMode:Bool?=false;var modalOpen:Bool?=false;var projects:[SpeechHostProject]=[];var documents:[SpeechHostDocument]=[]}
 struct BrowserFailure:Error {var details:[String:Any]=[:];var code=""}
 @MainActor final class SpeechHostBrowser {func request(_ request:[String:Any],root:URL,workspaceOrigin:URL?)async throws->[String:Any]{[:]}}
-final class NativeVectorStore {enum Failure:Error{case invalidRecord};init(folder:URL){};func load(_ profile:String)throws->[String:Any]{[:]};func write(_ profile:String,puts:[[String:Any]],removes:[String])throws{}}
+final class NativeVectorStore {enum Failure:Error{case invalidRecord};init(folder:URL){};func load(_ profile:String)throws->[String:Any]{[:]};func summary(_ profile:String)throws->[[String:Any]]{[]};func search(_ profile:String,query:[Double],entries:[String:String])throws->[[String:Any]]{[]};func write(_ profile:String,puts:[[String:Any]],removes:[String])throws{}}
 @MainActor final class Workspace {
  var origin:URL?,snapshot:SpeechHostSnapshot?
  @Published var ready=false

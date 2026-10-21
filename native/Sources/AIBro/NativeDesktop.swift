@@ -245,7 +245,11 @@ import Combine
                 vectorQueue.async {
                     do {
                         let result:Any
-                        if action=="load" {result=try store.load(profile)}
+                        if action=="summary" {result=try store.summary(profile)}
+                        else if action=="search",let query=body["query"] as? [Double],let entries=body["entries"] as? [String:String] {
+                            result=try store.search(profile,query:query,entries:entries)
+                        }
+                        else if action=="load" {result=try store.load(profile)}
                         else if action=="write",let puts=body["puts"] as? [[String:Any]],let removes=body["removes"] as? [String] {
                             try store.write(profile,puts:puts,removes:removes);result=["ok":true]
                         } else {throw NativeVectorStore.Failure.invalidRecord}

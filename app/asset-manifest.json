@@ -293,6 +293,7 @@
     "stream_event_buffer.py",
     "local_projects.py",
     "sync_store.py",
+    "workspace_backup.py",
     "sync_merge.py",
     "cloud_sync.py",
     "cloud_session_file.py",

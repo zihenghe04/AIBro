@@ -66,6 +66,16 @@
   }
   function create({getState,store,embed,onProgress=()=>{},queryTimeoutMs=8000}) {
     const queryCache=new Map();let updating=false;
+    // Stores that can summarise and score in place (the native app) never hand
+    // whole vectors to the page; plain load/write stores (IndexedDB) still do.
+    const rows=async id=>store.summary?store.summary(id):store.load(id);
+    const dimensionsOf=row=>row?.dimensions??row?.vector?.length;
+    async function similarities(id,vector,eligible,stored) {
+      if(!store.search)return eligible.map(e=>({...e,similarity:cosine(vector,stored.get(e.id).vector)}));
+      const scored=new Map((await store.search(id,vector,Object.fromEntries(eligible.map(e=>[e.id,e.hash])))).map(x=>[x.id,x]));
+      if(eligible.some(e=>scored.has(e.id)&&scored.get(e.id).dimensions!==vector.length))throw Error('查询向量与索引维度不匹配，请检查模型或重建索引');
+      return eligible.map(e=>({...e,similarity:scored.get(e.id)?.similarity??null}));
+    }
     // A query is on the conversation's critical path. Index batches keep their
     // own lifetime, but an optional semantic lookup must not hold local search
     // indefinitely. Race as well as abort: native credential bridges and some
@@ -85,18 +95,18 @@
       finally {clearTimeout(timer);signal?.removeEventListener('abort',onAbort);}
     }
     async function status(cfg) {
-      const id=await profile(cfg),[items,stored]=await Promise.all([snapshot(getState()),store.load(id)]),byId=new Map(stored.map(x=>[x.id,x]));
+      const id=await profile(cfg),[items,stored]=await Promise.all([snapshot(getState()),rows(id)]),byId=new Map(stored.map(x=>[x.id,x]));
       const live=new Set(items.map(e=>e.id)),ready=items.filter(e=>byId.get(e.id)?.hash===e.hash).length;
       return {total:items.length,ready,pending:items.length-ready,obsolete:stored.filter(v=>!live.has(v.id)).length,updatedAt:stored.reduce((n,x)=>Math.max(n,x.updatedAt||0),0)};
     }
     async function update(cfg,{signal}={}) {
       if(updating)throw Error('向量索引正在更新');updating=true;
       try {
-        check(signal);const id=await profile(cfg),items=await snapshot(getState()),stored=await store.load(id),old=new Map(stored.map(x=>[x.id,x]));
+        check(signal);const id=await profile(cfg),items=await snapshot(getState()),stored=await rows(id),old=new Map(stored.map(x=>[x.id,x]));
         const live=new Set(items.map(e=>e.id)),removed=stored.filter(x=>!live.has(x.id)).map(x=>x.id);
         check(signal);await store.write(id,[],removed);
         const pending=items.filter(e=>old.get(e.id)?.hash!==e.hash),complete=items.length-pending.length;
-        let done=0,dimensions=cfg.dimensions||stored[0]?.vector.length||null;
+        let done=0,dimensions=cfg.dimensions||dimensionsOf(stored[0])||null;
         onProgress({total:items.length,ready:complete,pending:pending.length,phase:'updating'});
         for(let offset=0;offset<pending.length;offset+=16){
           check(signal);const batch=pending.slice(offset,offset+16),vectors=await embed(cfg,batch.map(e=>e.input),signal);
@@ -110,14 +120,14 @@
     }
     async function search(cfg,query,scope={},offset=0,{signal}={}) {
       check(signal);if(!Number.isSafeInteger(offset)||offset<0)throw Error('Invalid knowledge cursor');
-      const id=await profile(cfg),items=await snapshot(getState(),{...scope,query}),stored=new Map((await store.load(id)).map(v=>[v.id,v]));
+      const id=await profile(cfg),items=await snapshot(getState(),{...scope,query}),stored=new Map((await rows(id)).map(v=>[v.id,v]));
       const eligible=items.filter(e=>stored.get(e.id)?.hash===e.hash);
       let semantic=[],semanticStatus=eligible.length?'ready':'not-indexed';
       if(eligible.length&&query.trim()){
         const key=id+':'+query;let vector=queryCache.get(key);
         if(!vector){const values=await embedQuery(cfg,query,signal);check(signal);validate(values,1,cfg.dimensions);vector=values[0];queryCache.set(key,vector);if(queryCache.size>100)queryCache.delete(queryCache.keys().next().value);}
-        if(eligible.some(e=>stored.get(e.id).vector.length!==vector.length))throw Error('查询向量与索引维度不匹配，请检查模型或重建索引');
-        semantic=eligible.map(e=>({...e,similarity:cosine(vector,stored.get(e.id).vector)})).filter(e=>e.similarity>0).sort((a,b)=>b.similarity-a.similarity||a.id.localeCompare(b.id));
+        if(eligible.some(e=>dimensionsOf(stored.get(e.id))!==vector.length))throw Error('查询向量与索引维度不匹配，请检查模型或重建索引');
+        check(signal);semantic=(await similarities(id,vector,eligible,stored)).filter(e=>e.similarity>0).sort((a,b)=>b.similarity-a.similarity||a.id.localeCompare(b.id));
       }
       // Tags are lexical metadata, deliberately absent from embedding input/hash.
       // Rank their current saved values after the provider wait so removing a

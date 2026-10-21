@@ -76,7 +76,10 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     override init() {
         production=Bundle.main.object(forInfoDictionaryKey:"AIBroProduction") as? Bool == true
         root = ProcessInfo.processInfo.environment["AIBRO_SOURCE_ROOT"].map{URL(fileURLWithPath:$0)} ?? (production ? Bundle.main.resourceURL! : URL(fileURLWithPath:FileManager.default.currentDirectoryPath))
-        if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] != nil {
+        if let isolated=ProcessInfo.processInfo.environment["AIBRO_NATIVE_DATA_DIR"], isolated.hasPrefix("/") {
+            // Manual GUI checks on disposable data that must survive a relaunch.
+            dataDirectory=URL(fileURLWithPath:isolated,isDirectory:true)
+        } else if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] != nil {
             dataDirectory=FileManager.default.temporaryDirectory.appendingPathComponent("aibro-native-qa-"+UUID().uuidString)
         } else if production {
             dataDirectory=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ai-workstation")
@@ -2095,7 +2098,11 @@ struct NativeDraftQuitGate {
     }
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {
         let workspaceVisible=workspaceWindows.values.contains{$0.window?.isVisible == true && $0.window?.isMiniaturized != true}
-        if !workspaceVisible {restoreWorkspaceWindow()}
+        // The Workspace owns one WebView that can live in a single window. When
+        // the parked window is restored here, returning true would also let
+        // SwiftUI spawn a second WindowGroup window that steals the WebView and
+        // leaves the restored one blank.
+        if !workspaceVisible,restoreWorkspaceWindow() != nil {return false}
         return true
     }
     func applicationDidFinishLaunching(_ notification:Notification){NSApp.setActivationPolicy(.regular);NSApp.activate(ignoringOtherApps:true)}

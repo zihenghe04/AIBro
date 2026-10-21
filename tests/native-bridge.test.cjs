@@ -702,3 +702,12 @@ test('native privacy rechecks project ancestry after the real route controllers 
   assert.equal(commits,accepted?1:0,`${type}: ${ancestry} cannot commit after becoming private`);
  }
 });
+
+test('reopening a parked workspace window must not let SwiftUI spawn a second window over the single WebView',()=>{
+ const swift=fs.readFileSync('native/Sources/AIBro/AIBro.swift','utf8');
+ const reopen=swift.match(/func applicationShouldHandleReopen\([^\n]*\{([\s\S]*?)\n    \}/)[1];
+ // Restoring the existing window must suppress the default reopen (return false);
+ // otherwise the WindowGroup adds a window that steals the WebView (B2: blank chat).
+ assert.match(reopen,/restoreWorkspaceWindow\(\) != nil\s*\{return false\}/);
+ assert.match(reopen,/return true\s*$/);
+});

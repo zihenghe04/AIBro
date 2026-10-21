@@ -4726,7 +4726,9 @@ async function sendMessage(options = {}) {
   // newly staged files, and a failed response never puts old text back there.
   conversation.updatedAt = Date.now();
   if (conversation.title === '新对话' && !conversation.titleEdited) conversation.title = goal.slice(0, 32);
-  save(); renderConversation();
+  const paintFirst = !options.background && !options.voiceRequestId && typeof requestAnimationFrame === 'function' && !globalThis.document?.hidden;
+  if (!paintFirst) save();
+  renderConversation();
   // Presentation only: the sent message rises from the composer into place.
   // It starts partly visible: the send handler can hold the main thread for a
   // moment, and a fully transparent first frame would read as input lag.
@@ -4734,6 +4736,13 @@ async function sendMessage(options = {}) {
   if (submittedMessage && !options.retry && !options.background) {
     const sent = $('#messageList')?.querySelector?.(`[data-message-id="${submittedMessage.id}"]`);
     window.ActivityMotion?.animate(sent, [{ opacity: .4, transform: 'translateY(16px) scale(.985)' }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'cubic-bezier(.2,.1,.15,1)' });
+  }
+  if (paintFirst) {
+    // Let the sent message paint before the full-workspace save and run
+    // preparation hold the main thread. Hidden pages skip animation frames;
+    // the timeout keeps them moving.
+    await new Promise(resolve => { requestAnimationFrame(() => setTimeout(resolve, 0)); setTimeout(resolve, 100); });
+    save();
   }
   const connectionInput = captureApiConnection();
   let base = connectionInput.base, token = '';
@@ -4771,6 +4780,10 @@ async function sendMessage(options = {}) {
     try { options.onAccepted?.({runId: run.id, userMessageId: submittedMessage.id}); } catch {}
   }
   const ownsRun = () => state.agentRuns.find(item => item.id === run.id) === run && state.conversations.find(item => item.id === conversation.id) === conversation && conversation.messages.find(item => item.id === liveMessage.id) === liveMessage;
+  // Each save posts the whole workspace and the backend writes a full
+  // snapshot, so a streaming reply checkpoints at most this often. Terminal
+  // steps and run completion still save immediately.
+  const LIVE_SAVE_INTERVAL_MS = 5000;
   let lastLiveSave = 0;
   const refreshLive = immediate => {
     const render = () => {
@@ -4799,7 +4812,7 @@ async function sendMessage(options = {}) {
         if (readingPosition) window.ConversationReading.afterRender(list, readingPosition);
         else if (followOutput) list.scrollTop = list.scrollHeight;
       }
-      if (Date.now() - lastLiveSave > 1200) { save(); lastLiveSave = Date.now(); }
+      if (Date.now() - lastLiveSave > LIVE_SAVE_INTERVAL_MS) { save(); lastLiveSave = Date.now(); }
     };
     // Throttle instead of debounce: a steady stream must still repaint while
     // tokens arrive, without rebuilding the transcript and sidebar each time.

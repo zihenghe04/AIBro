@@ -36,6 +36,33 @@ IDENTIFIER = re.compile(r'^[A-Za-z0-9_-]{1,200}$')
 DIGEST = re.compile(r'^[a-f0-9]{64}$')
 MESSAGE_PROCESS_FIELDS = ('pendingPlan', 'reasoning', 'toolEvents', 'status', 'error', 'capabilities')
 MESSAGE_ENTITY_BYTES = 4 * 1024 * 1024
+# Snapshot history serves as the three-way merge base for stale windows and as
+# a short in-database rollback. Restore points beyond that live in the
+# VACUUM INTO backups (workspace_backup.py), so history stays small:
+#   - the newest HISTORY_RECENT baselines are kept (merge window);
+#   - with HISTORY_DAILY_DAYS > 0, older baselines also keep the newest one per
+#     local calendar day for that many days (0 = none, the default);
+#   - over HISTORY_MAX_BYTES, daily ones go first (oldest first), then recent
+#     ones, but never below HISTORY_MIN_KEEP.
+HISTORY_RECENT = 4
+HISTORY_DAILY_DAYS = 0
+HISTORY_MAX_BYTES = 80 * 1024 * 1024
+HISTORY_MIN_KEEP = 3
+
+
+def history_retained(entries, now_ms, recent=HISTORY_RECENT, days=HISTORY_DAILY_DAYS, max_bytes=HISTORY_MAX_BYTES, minimum=HISTORY_MIN_KEEP):
+    """entries: (key, archived_at_ms or None, size) newest first. Returns kept keys."""
+    def day(at): return time.strftime('%Y-%m-%d', time.localtime(at / 1000))
+    newest = list(entries[:recent])
+    seen = {day(at) for _, at, _ in newest if at}
+    daily = []
+    for key, at, size in entries[recent:]:
+        if not at or now_ms - at >= days * 86400000 or day(at) in seen: continue
+        seen.add(day(at)); daily.append((key, at, size))
+    total = sum(size for *_, size in newest + daily)
+    while total > max_bytes and daily: total -= daily.pop()[2]
+    while total > max_bytes and len(newest) > minimum: total -= newest.pop()[2]
+    return {key for key, *_ in newest + daily}
 
 # json.dumps() with non-default options builds a new JSONEncoder per call, and
 # a capture dumps every entity. One shared encoder gives identical bytes; it
@@ -489,12 +516,45 @@ class SyncStore:
         # Only archiving a baseline adds history, so only then can it exceed
         # the retention limits (capture's second checkpoint never archives).
         if not archived: return serialized
-        size=0
-        rows=db.execute(f"SELECT key,{self._HISTORY_BYTES} AS size FROM meta WHERE key LIKE 'history:%' ORDER BY CAST(substr(key,9) AS INTEGER) DESC").fetchall()
-        for index,row in enumerate(rows):
-            size+=row['size']
-            if index>=30 or size>64*1024*1024: db.execute('DELETE FROM meta WHERE key=?',(row['key'],))
+        times = self._get(db, 'historyTimes', {})
+        times['history:'+str(revision)] = int(time.time() * 1000)
+        self._prune_history(db, times)
         return serialized
+    def _prune_history(self, db, times=None):
+        """Apply history_retained. `historyTimes` records when each baseline
+        was superseded; legacy rows fall back to their own _savedAt once."""
+        times = self._get(db, 'historyTimes', {}) if times is None else times
+        rows=db.execute(f"SELECT key,{self._HISTORY_BYTES} AS size FROM meta WHERE key LIKE 'history:%' ORDER BY CAST(substr(key,9) AS INTEGER) DESC").fetchall()
+        for row in rows:
+            if row['key'] not in times:
+                at = db.execute("SELECT json_extract(value,'$._savedAt') FROM meta WHERE key=?", (row['key'],)).fetchone()[0]
+                times[row['key']] = at if isinstance(at, int) else None
+        kept = history_retained([(row['key'], times.get(row['key']), row['size']) for row in rows], int(time.time() * 1000))
+        for row in rows:
+            if row['key'] not in kept: db.execute('DELETE FROM meta WHERE key=?',(row['key'],))
+        self._put(db, 'historyTimes', {key: at for key, at in times.items() if key in kept})
+        return len(rows) - len(kept)
+    def meta(self, key, default=None):
+        if not self.path.exists(): return default
+        with self.db() as db: return self._get(db, key, default)
+    def set_meta(self, key, value):
+        with self.db() as db: self._put(db, key, value)
+    def prune_history(self):
+        if not self.path.exists(): return 0
+        with self.db() as db: return self._prune_history(db)
+    @contextmanager
+    def maintenance(self):
+        """A plain connection under the coordination lock, outside any
+        transaction, for VACUUM, VACUUM INTO and integrity checks."""
+        self.directory.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(self.directory / '.sqlite.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            if self.path.is_symlink(): raise ValueError('工作站数据库不能是符号链接。')
+            connection = sqlite3.connect(self.path, timeout=15, isolation_level=None)
+            try: yield connection
+            finally: connection.close()
+        finally: os.close(descriptor)
     def bind_target(self, target):
         with self.db() as db:
             old = self._get(db, 'target')

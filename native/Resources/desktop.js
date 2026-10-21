@@ -181,5 +181,5 @@
   }
  };
  window.workstationDesktop.browser={request:request=>rpc({command:'browser',request})};
- window.workstationDesktop.vectorIndex={load:profile=>rpc({command:'vector-index',action:'load',profile}),write:(profile,puts=[],removes=[])=>rpc({command:'vector-index',action:'write',profile,puts,removes})};
+ window.workstationDesktop.vectorIndex={load:profile=>rpc({command:'vector-index',action:'load',profile}),summary:profile=>rpc({command:'vector-index',action:'summary',profile}),search:(profile,query,entries)=>rpc({command:'vector-index',action:'search',profile,query,entries}),write:(profile,puts=[],removes=[])=>rpc({command:'vector-index',action:'write',profile,puts,removes})};
 })();

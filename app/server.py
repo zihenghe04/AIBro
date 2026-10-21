@@ -20,6 +20,7 @@ from wiki_bundle import WikiBundle
 from wiki_vault import WikiVault, WikiVaultError
 from project_jobs import ProjectJobs
 from sync_store import SyncStore, all_imports, DIGEST
+import workspace_backup
 from sync_merge import merge_local_snapshot, MergeConflict
 from cloud_sync import CloudSync, CloudSyncError
 from comparison_drafts import ComparisonDraftStore, DraftError, MAX_BYTES as MAX_COMPARISON_DRAFT_BYTES
@@ -412,6 +413,37 @@ class WorkspaceStore:
         destination = self.directory / 'workspace.pre-sqlite.json'
         if self.path.exists() and not destination.exists() and not self.sync.has_snapshot():
             self.atomic_write(destination, self.path.read_bytes())
+    def startup_check(self):
+        """PRAGMA quick_check before first use. A restored backup is older
+        than the last save, so replay the workspace.json mirror (written with
+        every commit) when it is newer and well-formed."""
+        result = workspace_backup.check_and_recover(self)
+        if result['status'] != 'restored': return result
+        try: mirror = json.loads(self.path.read_text())
+        except (OSError, ValueError): mirror = None
+        restored = self.sync.snapshot() or {}
+        if isinstance(mirror, dict) and all(isinstance(mirror.get(key), list) for key in ('projects', 'tasks', 'notes', 'imports', 'conversations', 'trash', 'agentRuns')) \
+                and isinstance(mirror.get('_revision'), int) and mirror['_revision'] > int(restored.get('_revision', 0)):
+            with self.lock(): self.sync.capture(mirror)
+            result['replayedMirrorRevision'] = mirror['_revision']
+            workspace_backup.log(f'replayed workspace.json revision {mirror["_revision"]} over the restored backup')
+        return result
+    def upkeep(self):
+        """Background upkeep: the one-time history cleanup (only after a
+        verified pre-migration backup) and the daily rotated backup."""
+        if not self.sync.path.exists(): return
+        try:
+            if not self.sync.meta('maintenance:historyRetentionV1'):
+                before = self.sync.path.stat().st_size
+                backup = workspace_backup.create(self, workspace_backup.PERMANENT)
+                removed = self.sync.prune_history()
+                with self.sync.maintenance() as db: db.execute('VACUUM')
+                self.sync.set_meta('maintenance:historyRetentionV1', {'at': int(time.time() * 1000), 'backup': backup.name, 'removedHistory': removed})
+                workspace_backup.log(f'history cleanup: removed {removed} snapshots, database {before >> 20} MB -> {self.sync.path.stat().st_size >> 20} MB, backup {backup.name}')
+            created = workspace_backup.automatic(self)
+            if created: workspace_backup.log(f'created {created.name}')
+        except Exception as error:
+            workspace_backup.log(f'maintenance skipped: {type(error).__name__}: {error}')
     def ensure_sync(self):
         with self.lock():
             current = self.load()
@@ -845,7 +877,8 @@ class WorkspaceStore:
                     recovery = self.preserve_conflict(payload, revision)
                     raise ConflictError('同一内容在另一窗口或设备上也被修改。当前修改已保留，请比较版本后继续。', revision, recovery)
             self.migrate_files(payload); self.materialize_papers(payload); payload.pop('_apiKey', None); payload.pop('_pendingLocalSave', None); payload['_revision'] = revision + 1; payload['_savedAt'] = int(time.time() * 1000)
-            if self.path.exists(): self.atomic_write(self.directory / 'workspace.previous.json', self.path.read_bytes())
+            # No per-save workspace.previous.json copy: SQLite history keeps
+            # the previous revisions and backups/ keeps verified daily copies.
             self._backup_legacy()
             payload['_wikiEnabled'] = bool(current.get('_wikiEnabled') or enable_wiki)
             payload.pop('_wikiError', None)
@@ -2147,7 +2180,13 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as exc:
             self.send_json({'error': str(exc)}, 400)
 
+BACKUP_DELAY_SECONDS = 20  # after startup, so backups never compete with the first load
+
 if __name__ == '__main__':
+    workspace_backup.LOG_PATH = DATA_DIR / workspace_backup.BACKUP_DIRECTORY / 'backup.log'
+    try: STORE.startup_check()
+    except Exception as error: workspace_backup.log(f'startup check failed: {type(error).__name__}: {error}')
+    upkeep = threading.Timer(BACKUP_DELAY_SECONDS, STORE.upkeep); upkeep.daemon = True; upkeep.start()
     http_server = LoopbackHTTPServer(('127.0.0.1', PORT), Handler)
     PORT = http_server.server_port
     if os.environ.get('AI_WORKSTATION_PARENT_PIPE') == '1':

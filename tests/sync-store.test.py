@@ -11,7 +11,7 @@ import uuid
 from unittest.mock import patch
 
 sys.path.insert(0, str((Path(__file__).resolve().parents[1] / 'app')))
-from sync_store import COLLECTIONS, SyncStore, clean, copy, project, public_key, dump, wire_id, _cached_wire_id
+from sync_store import COLLECTIONS, HISTORY_RECENT, SyncStore, clean, copy, project, public_key, dump, wire_id, _cached_wire_id
 
 
 def workspace(**values):
@@ -45,7 +45,7 @@ class SyncStoreTests(unittest.TestCase):
         self.directory = Path(temporary.name)
         self.store = SyncStore(self.directory / 'device-a')
 
-    def test_history_keeps_the_newest_thirty_baselines_and_unchanged_checkpoints_add_none(self):
+    def test_history_keeps_the_recent_merge_window_and_unchanged_checkpoints_add_none(self):
         for size in ('octet_length(value)', 'length(CAST(value AS BLOB))'):
             with self.subTest(size=size), patch.object(SyncStore, '_HISTORY_BYTES', size):
                 store = SyncStore(self.directory / ('history-' + str(len(size))))
@@ -53,13 +53,15 @@ class SyncStoreTests(unittest.TestCase):
                     store.capture(workspace(notes=[note('body %d' % revision)], _revision=revision))
                 with store.db() as db:
                     keys = [row['key'] for row in db.execute("SELECT key FROM meta WHERE key LIKE 'history:%'")]
-                self.assertEqual(sorted(int(key[8:]) for key in keys), list(range(6, 36)))
+                # Every baseline was superseded today, so only the merge window remains.
+                self.assertEqual(sorted(int(key[8:]) for key in keys), list(range(36 - HISTORY_RECENT, 36)))
                 self.assertEqual(store.snapshot_at(35)['notes'][0]['content'], 'body 35')
-                self.assertIsNone(store.snapshot_at(5))
+                self.assertIsNone(store.snapshot_at(36 - HISTORY_RECENT - 1))
                 # Re-saving the same revision archives nothing and keeps every baseline.
                 store.capture(workspace(notes=[note('body 36 again')], _revision=36))
                 with store.db() as db:
-                    self.assertEqual(db.execute("SELECT count(*) FROM meta WHERE key LIKE 'history:%'").fetchone()[0], 30)
+                    self.assertEqual(db.execute("SELECT count(*) FROM meta WHERE key LIKE 'history:%'").fetchone()[0], HISTORY_RECENT)
+                    self.assertEqual(set(store._get(db, 'historyTimes')), set(keys))
                 self.assertEqual(store.snapshot()['notes'][0]['content'], 'body 36 again')
 
     def test_cached_privacy_filter_keeps_nested_secrets_off_wire_after_eviction(self):

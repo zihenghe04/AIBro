@@ -95,8 +95,14 @@ class DocumentMediaTests(unittest.TestCase):
     def test_note_parent_private_lifecycle_and_duplicates_block_upload(self):
         original = self.store.load()
         for field, value in (("archived", True), ("archivedAt", 1), ("deleted", True), ("deletedAt", 1), ("status", "deleted"), ("private", True)):
-            state = copy.deepcopy(original); state["notes"][0][field] = value; self.store.save(state)
+            # Start from the live state each time: history keeps only the newest four
+            # baselines, so a writer six saves behind would rightly conflict.
+            state = copy.deepcopy(self.store.load()); state["notes"][0][field] = value; self.store.save(state)
             with self.assertRaises(media.MediaError): self.upload()
+            state = copy.deepcopy(self.store.load())
+            if field in original["notes"][0]: state["notes"][0][field] = original["notes"][0][field]
+            else: state["notes"][0].pop(field, None)
+            self.store.save(state)
         for variant in ("private", "archived", "duplicate", "missing"):
             state = copy.deepcopy(original)
             if variant == "duplicate": state["projects"].append(copy.deepcopy(state["projects"][0]))
