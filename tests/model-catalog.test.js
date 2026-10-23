@@ -109,6 +109,20 @@ test('context budgets keep the current fixed values when no window is set and sc
   assert.equal(Catalog.budgets('abc').configured, false);
 });
 
+test('kernel budgets (evidence input, run compaction) keep the fixed values without a window and scale with one', () => {
+  const none = Catalog.kernelBudgets(null);
+  assert.equal(none.configured, false);
+  assert.deepEqual({ ...none, configured: undefined }, { ...Catalog.KERNEL_DEFAULTS, configured: undefined });
+  assert.deepEqual([none.evidenceInputTokens, none.runCompactTokens, none.runRetainTokens], [24000, 32000, 8000]);
+  const reference = Catalog.kernelBudgets(128000);
+  for (const key of Object.keys(Catalog.KERNEL_DEFAULTS)) assert.equal(reference[key], Catalog.KERNEL_DEFAULTS[key], key);
+  const small = Catalog.kernelBudgets(16000), huge = Catalog.kernelBudgets(1050000);
+  assert.ok(small.runCompactTokens < 32000 && small.evidenceInputTokens < 24000 && small.runCompactTokens < 16000);
+  assert.ok(small.runRetainTokens <= small.runCompactTokens / 2);
+  assert.ok(huge.runCompactTokens > 32000 && huge.runCompactTokens <= 160000 && huge.evidenceInputTokens <= 96000);
+  assert.equal(Catalog.kernelBudgets('abc').configured, false);
+});
+
 test('hints are specific to the row and service', () => {
   const relay = Catalog.hints({ model: 'gpt-6.1-sol', contextWindow: 1050000, efforts: [] }, { base: 'https://relay.invalid/v1' });
   assert.deepEqual(relay.map(h => h.code), ['relay-gpt-window']);

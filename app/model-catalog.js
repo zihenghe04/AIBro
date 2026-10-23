@@ -22,6 +22,10 @@
   const REFERENCE_WINDOW = 128000;
   const DEFAULT_BUDGETS = Object.freeze({ historyTokens: 3500, compactThreshold: 12000, keepRecentTokens: 4000, batchTokens: 8000 });
   const LIMITS = { historyTokens: [1200, 14000], compactThreshold: [3000, 48000], keepRecentTokens: [1000, 16000], batchTokens: [2000, 16000] };
+  // 内核循环的截断/压缩：主窗口证据输入预算（24000）、run 内压缩阈值与保留量（32000/8000，见 kernel-compaction.js）。
+  // 同样按 128K 标定；没填窗口时沿用这些固定值。
+  const KERNEL_DEFAULTS = Object.freeze({ evidenceInputTokens: 24000, runCompactTokens: 32000, runRetainTokens: 8000 });
+  const KERNEL_LIMITS = { evidenceInputTokens: [6000, 96000], runCompactTokens: [6000, 160000], runRetainTokens: [1500, 40000] };
 
   const text = (value, max) => String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 
@@ -136,6 +140,18 @@
     return out;
   }
 
+  function kernelBudgets(windowTokens) {
+    const size = contextWindow(windowTokens);
+    if (!size) return { ...KERNEL_DEFAULTS, configured: false };
+    const scale = size / REFERENCE_WINDOW, out = { configured: true, contextWindow: size };
+    for (const [key, base] of Object.entries(KERNEL_DEFAULTS)) {
+      const [min, max] = KERNEL_LIMITS[key];
+      out[key] = Math.round(Math.min(max, Math.max(min, base * scale)));
+    }
+    out.runRetainTokens = Math.min(out.runRetainTokens, Math.floor(out.runCompactTokens / 2));
+    return out;
+  }
+
   function officialOpenAI(base) { const key = serviceKey(base); return key.startsWith('https://api.openai.com'); }
 
   // 针对具体填写给出提示，不做泛泛的提醒。返回中英文两份文案。
@@ -166,5 +182,5 @@
     return list.length > 2 && last - first + 1 === list.length ? `${list[0]} → ${list[list.length - 1]}` : list.join(', ');
   }
 
-  return Object.freeze({ VERSION, EFFORTS, DEFAULT_BUDGETS, serviceKey, protocolEfforts, contextWindow, normalizeEntry, normalizeList, has, read, write, migrate, find, label, ensureModel, addModels, effortsFor, budgets, hints, summarizeEfforts });
+  return Object.freeze({ VERSION, EFFORTS, DEFAULT_BUDGETS, KERNEL_DEFAULTS, serviceKey, protocolEfforts, contextWindow, normalizeEntry, normalizeList, has, read, write, migrate, find, label, ensureModel, addModels, effortsFor, budgets, kernelBudgets, hints, summarizeEfforts });
 }));

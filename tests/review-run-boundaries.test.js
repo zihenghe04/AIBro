@@ -21,6 +21,7 @@ function executionContext() {
   c.window.ApprovalIntent = require('../app/approval-intent');
   c.queueMicrotask = queueMicrotask;
   c.KnowledgeAccess = c.window.KnowledgeAccess = require('../app/knowledge-access');
+  c.window.AIBroRunLoop = require('../app/kernel-run-loop'); c.window.ApprovalBroker ??= require('../app/approval-broker');
   c.window.ReadTools = require('../app/read-tools');
   installRunCheckpointHost(c);
   c.prepareApproval = () => {

@@ -17,6 +17,13 @@
     'create_link', 'link_items', 'link_local_project'
   ]);
   const destructive = type => /(?:^|_)(?:delete|merge|remove|archive|purge)(?:_|$)/.test(type);
+  // Deletions that move the record to the trash, show an undo toast and can be
+  // restored from the trash (workstation-core: ProjectLifecycle / ContentLifecycle /
+  // state.trash). Under full access these run without a stop. Every other
+  // destructive operation (permanent deletion, emptying the trash, credentials,
+  // merges, anything without an undo path) is irreversible and always asks.
+  const REVERSIBLE_DELETES = new Set(['delete_project', 'delete_task', 'delete_note', 'delete_attachment']);
+  const irreversible = type => destructive(type) && !REVERSIBLE_DELETES.has(type);
   const modeOf = mode => MODES.has(mode) ? mode : 'legacy';
 
   function effectiveMode(conversation) {
@@ -33,6 +40,7 @@
     // Returning true here does not make them supported: the host must still
     // validate every action and reject unsupported capabilities before commit.
     if (actions.some(action => !action || !WORKSTATION_ACTIONS.has(action.type))) return true;
+    if (actions.some(action => irreversible(action.type))) return true;
     if (effective === 'full') return false;
     if (actions.some(action => destructive(action.type))) return true;
     if (effective === 'smart') return false;
@@ -88,5 +96,5 @@
       .map(action => action.type))];
   }
 
-  return Object.freeze({ effectiveMode, needsApproval, requiresLocalAccessConfirmation, canDelegateReview, canSessionAllow, allowableTypes });
+  return Object.freeze({ effectiveMode, needsApproval, destructive, irreversible, REVERSIBLE_DELETES, requiresLocalAccessConfirmation, canDelegateReview, canSessionAllow, allowableTypes });
 }));

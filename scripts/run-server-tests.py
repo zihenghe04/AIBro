@@ -55,6 +55,8 @@ SERVER_TESTS = (
     'tests/server-sync.test.py',
     'tests/cloud-recovery.test.py',
     'tests/url-fetch.test.py',
+    'tests/event-log.test.py',
+    'tests/kernel-runs.test.py',
 )
 
 

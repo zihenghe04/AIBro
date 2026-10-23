@@ -21,7 +21,7 @@ function harness(request) {
   const el=key=>{if(!nodes.has(key))nodes.set(key,{value:'',textContent:'',disabled:false,scrollHeight:0,scrollTop:0,clientHeight:0,classList:{remove(){},add(){}},setAttribute(){},querySelector(){return null},appendChild(){},firstElementChild:{}});return nodes.get(key);};
   const state={projects:[{id:'project',name:'材料准备',workspace:'日常'}],tasks:[],notes:[],papers:[],imports:[],links:[],trash:[],agentRuns:[],conversations:[{id:'conversation',title:'Existing conversation',workspace:'日常',projectId:'project',messages:[],attachments:[]}],currentConversationId:'conversation',settings:{permissions:{'日常':'auto','科研':'approval'}}};
   const models={configuration:()=>({provider:'api',model:'frozen-model',effort:'high'}),resolve:async value=>value};
-  const c=vm.createContext({apiProfiles:null,structuredClone,state,Core,AttachmentContext,AttachmentDelivery,AttachmentAnalysis,KnowledgeAccess,$:el,window:{ConversationModels:models,AttachmentAnalysis,ApprovalIntent,TaskWorkflow,KnowledgeAccess,ReadTools:require('../app/read-tools')},ConversationModels:models,localStorage:{getItem:()=>''},document:{createElement:()=>el('holder')},AbortController,URL,setTimeout,clearTimeout,
+  const c=vm.createContext({apiProfiles:null,structuredClone,state,Core,AttachmentContext,AttachmentDelivery,AttachmentAnalysis,KnowledgeAccess,$:el,window:{AIBroRunLoop:require('../app/kernel-run-loop'),ApprovalBroker:require('../app/approval-broker'),ConversationModels:models,AttachmentAnalysis,ApprovalIntent,TaskWorkflow,KnowledgeAccess,ReadTools:require('../app/read-tools')},ConversationModels:models,localStorage:{getItem:()=>''},document:{createElement:()=>el('holder')},AbortController,URL,setTimeout,clearTimeout,
     uid:prefix=>`${prefix}-${++next}`,workspaceName:value=>value==='科研'||value==='课程'?value:'日常',classifyWorkspace:()=> '日常',currentConversation:()=>state.conversations[0],currentAttachments:()=>[],defaultModelConfiguration:()=>({provider:'api',model:'frozen-model',effort:'high'}),
     normalizeStateShape(){},save(){},renderAll(){},renderConversation(){},renderMessage(){},toast:message=>toasts.push(String(message)),visiblePaper:()=>true,actionSummary:()=> '待批准的动作',addRunStep:(run,text,status)=>run.steps.push({text,status}),
     AgentTransport:{requestPlan:async options=>{requests.push(options);return request(options,requests.length)}},activeRunController:null,liveRenderTimer:null,
@@ -44,9 +44,9 @@ test('one invalid priority is repaired then committed exactly once with frozen m
   for(const request of h.requests){assert.equal(request.model,'frozen-model');assert.equal(request.effort,'high');assert.equal(request.provider,'api');assert.equal(request.signal,h.requests[0].signal)}
 });
 
-test('two invalid plans stop after one repair and never commit even their valid preceding action',{timeout:4000},async()=>{
+test('invalid plans stop after two consecutive repairs and never commit even their valid preceding action',{timeout:4000},async()=>{
   const h=harness(async()=>plan('普通'));await h.send();
-  assert.equal(h.requests.length,2);assert.equal(h.commits,0);
+  assert.equal(h.requests.length,3);assert.equal(h.commits,0);
   assert.equal(h.state.tasks.length,0);assert.equal(h.state.notes.length,0);
   assert.equal(h.state.agentRuns[0].status,'failed');assert.match(h.state.agentRuns[0].error,/优先级/);
 });

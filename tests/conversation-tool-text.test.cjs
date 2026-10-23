@@ -17,7 +17,7 @@ function fixture({ calls = [makeCall()], run: runFields = {}, message: messageFi
   Object.defineProperty(document, 'activeElement', { get: () => focused });
   const context = { document, console, Date, getSelection: () => selection, WorkstationI18n: { getLanguage: () => language } };
   context.window = context; vm.createContext(context);
-  for (const file of ['json-schema-lite.js', 'tool-registry.js', 'tool-specs.js', 'tool-scheduler.js', 'agent-progress.js', 'conversation-process.js']) vm.runInContext(fs.readFileSync(path.join(ROOT, 'app', file), 'utf8'), context);
+  for (const file of ['json-schema-lite.js', 'tool-registry.js', 'tool-specs.js', 'approval-broker.js', 'tool-scheduler.js', 'agent-progress.js', 'conversation-process.js']) vm.runInContext(fs.readFileSync(path.join(ROOT, 'app', file), 'utf8'), context);
   const run = { id: 'run-1', status: 'completed', toolCalls: calls, ...runFields };
   const message = { id: 'msg-1', role: 'agent', runId: run.id, activities: [{ id: 'activity-1', kind: 'commentary', status: 'completed', text: 'Recorded event' }], ...messageFields };
   context.state = { agentRuns: [run], conversations: [{ id: 'conv-1', messages: [message] }] };

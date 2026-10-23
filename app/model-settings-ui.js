@@ -3,9 +3,9 @@
  let record=null,catalogProvider=null;
  // The model list is plain public metadata supplied by app.js; it never carries a key.
  const catalog=()=>{try{return catalogProvider?.()||null;}catch(_){return null;}};
- const IDS=['apiBase','apiProtocol','apiKey','model','apiModelOptions','apiCredentialStatus','apiCredentialUnlock','clearApiKey','testApi','apiStatus','workspaceModel-daily','workspaceModel-course','workspaceModel-research'];
+ const IDS=['apiBase','apiProtocol','apiToolProtocol','apiKey','model','apiModelOptions','apiCredentialStatus','apiCredentialUnlock','clearApiKey','testApi','apiStatus','workspaceModel-daily','workspaceModel-course','workspaceModel-research'];
  const BUTTONS=new Set(['testApi','clearApiKey']);
- const SELECTS=new Set(['apiProtocol']);
+ const SELECTS=new Set(['apiProtocol','apiToolProtocol']);
  function snapshot(nodes){
   const controls={};
   for(const [id,node] of nodes){
@@ -42,12 +42,12 @@
   const observer=new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;if(record?.island===island)refresh();});});
   // Observe only public presentation state; never inspect input values or storage.
   for(const [id,node] of nodes)if(BUTTONS.has(id)||SELECTS.has(id)||id==='apiCredentialUnlock')observer.observe(node,{attributes:true,attributeFilter:['hidden','disabled'],childList:BUTTONS.has(id)||SELECTS.has(id),subtree:BUTTONS.has(id)||SELECTS.has(id),characterData:BUTTONS.has(id)||SELECTS.has(id)});
-  const onChange=()=>refresh();nodes.get('apiProtocol').addEventListener('change',onChange);
+  const onChange=()=>refresh();for(const id of SELECTS)nodes.get(id).addEventListener('change',onChange);
   record.observer=observer;record.onChange=onChange;
   if(focused&&active.isConnected)active.focus({preventScroll:true});return true;
  }
  function unmount(){
-  if(!record)return;const old=record;record=null;old.observer.disconnect();old.nodes.get('apiProtocol').removeEventListener('change',old.onChange);
+  if(!record)return;const old=record;record=null;old.observer.disconnect();for(const id of SELECTS)old.nodes.get(id).removeEventListener('change',old.onChange);
   for(const [id,node]of old.nodes){const marker=old.markers.get(id);if(marker.parentNode)marker.after(node);}
   old.island.unmount();old.host.replaceChildren(...old.children);for(const marker of old.markers.values())marker.remove();
  }

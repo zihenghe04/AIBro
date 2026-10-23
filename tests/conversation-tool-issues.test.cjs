@@ -40,7 +40,7 @@ async function fixture({ language = 'zh', calls = [call('ok'), call('bad', 'fail
   Object.defineProperty(window.document, 'activeElement', { configurable: true, get: () => focus || window.document.body });
   for (const key of ['MutationObserver', 'Element', 'HTMLElement', 'HTMLIFrameElement', 'Node', 'Event', 'CustomEvent']) context[key] = window[key];
   context.window = context; context.self = context; context.globalThis = context; vm.createContext(context); vm.runInContext(bundle, context);
-  for (const file of ['agent-progress.js', 'json-schema-lite.js', 'tool-registry.js', 'tool-specs.js', 'tool-scheduler.js', 'conversation-process.js', 'halaska-conversation.js']) vm.runInContext(fs.readFileSync(path.join(ROOT, 'app', file), 'utf8'), context);
+  for (const file of ['agent-progress.js', 'json-schema-lite.js', 'tool-registry.js', 'tool-specs.js', 'approval-broker.js', 'tool-scheduler.js', 'conversation-process.js', 'halaska-conversation.js']) vm.runInContext(fs.readFileSync(path.join(ROOT, 'app', file), 'utf8'), context);
   const message = { id: 'msg-test', role: 'agent', text: 'Answer retained', runId: 'run-test', runStatus: 'completed', ...(progress ? { activities: [{ id: 'progress-test', kind: 'commentary', text: 'A real event', status: 'completed' }] } : {}), ...extra };
   const run = { id: 'run-test', status: 'completed', toolCalls: calls };
   context.state = { conversations: [{ id: 'conv-test', messages: [message] }], agentRuns: [run] };

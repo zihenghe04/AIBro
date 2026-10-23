@@ -4,16 +4,16 @@
 <p align="center">Read course materials and papers, edit your notes, and plan tasks and events.</p>
 <p align="center"><sub>NATIVE MAC APP · LOCAL FIRST · YOUR MODELS · OPEN SOURCE</sub></p>
 <p align="center"><a href="README.md">简体中文</a> · English</p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.8"><strong>Download the Mac preview ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website and demos</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">Changelog</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.9"><strong>Download the Mac preview ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website and demos</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">Changelog</a></p>
 
 [![AI Bro: read course materials, ask questions, and edit study notes on Mac](launch/dist/assets/demo/hero-workspace.png)](https://zihenghe04.github.io/AIBro/?lang=en)
 <p align="center"><sub>Actual AI Bro 0.8.0 App interface, captured from an isolated demo workspace. Projects, documents, and responses are fictional; animations arrange interface steps and do not represent live model speed. <a href="https://zihenghe04.github.io/AIBro/?lang=en#workspace">Explore the workflows ↗</a></sub></p>
 
 Add course materials, papers, and notes to a project, then ask questions about them. AI Bro can help summarize key ideas, draft notes, and break work into tasks. Open the cited source to check an answer, or review and edit an AI draft before saving it. When you need the material for an exam or a report, search your saved documents and notes.
 
-The public download is **0.9.8, a Mac development preview** for Apple Silicon / macOS 14+, not yet Apple-notarized. [Release notes](docs/RELEASE_NOTES.md)
+The public download is **0.9.9, a Mac development preview** for Apple Silicon / macOS 14+, not yet Apple-notarized. [Release notes](docs/RELEASE_NOTES.md)
 
-This release adds three switchable themes (independent of light/dark appearance), a fetched model list with multiple saved models and an in-chat model picker, undoable deletes without confirmation dialogs, and a ⌘N new-chat shortcut, and fixes the theme-color or light flash on cold start. The Android 0.4.9 APK remains available in the [v0.9.4 release](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.4) ([mobile source instructions](mobile/README.md)); no installable iOS IPA is provided.
+This release moves runs onto a new execution kernel: every write and delete goes through one set of approval rules, runs can keep going in the background after the window closes, long tasks compact their context automatically, and native tool calls are available as an experiment. Settings gain a background-run permission, and under Full access undoable deletions run directly while irreversible actions still need approval. The Android 0.4.9 APK remains available in the [v0.9.4 release](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.4) ([mobile source instructions](mobile/README.md)); no installable iOS IPA is provided.
 
 ---
 
@@ -80,7 +80,7 @@ AI Bro is moving from "chat that can use tools" to "one reliable execution kerne
 | Stage | What it covers | Status |
 | --- | --- | --- |
 | Polish and stability | Window restore, memory and save performance, automatic backups and startup self-check; three switchable themes, undoable deletes; multi-model list; tool registry and local MCP | Shipped in 0.9.6–0.9.8 |
-| Foundations | A unified execution kernel: event log, unified approvals, native tool calls, background runs that keep going after the window closes, automatic context compaction for long tasks; plugin interface; scheduled and event reminders (Mac notifications, the island panel); motion and accessibility polish | In progress |
+| Foundations | A unified execution kernel: event log, unified approvals, native tool calls, background runs that keep going after the window closes, automatic context compaction for long tasks; plugin interface; scheduled and event reminders (Mac notifications, the island panel); motion and accessibility polish | Execution kernel shipped in 0.9.9; plugin interface and scheduler in progress |
 | Today and reminders | Today page as home, a daily brief, one-sentence events and tasks, calendar and task views | Planned |
 | Course spaces | Bulk import of course materials with automatic organisation, materials and AI side by side, questions about a whole course, review help | Planned |
 | Paper library | Papers and metadata, translation, highlights and notes with citation jump-back, questions across papers, turning reading into lasting knowledge | Planned |
@@ -90,13 +90,13 @@ AI Bro is moving from "chat that can use tools" to "one reliable execution kerne
 
 ## Get started
 
-1. Download the DMG and checksums from [v0.9.8 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.8), following the [installation guide](docs/DISTRIBUTION.md). Python and PDF support are bundled.
+1. Download the DMG and checksums from [v0.9.9 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.9), following the [installation guide](docs/DISTRIBUTION.md). Python and PDF support are bundled.
 2. Connect your model service in Settings and select a model.
 3. Create a project, add a document, and start a conversation.
 
 > Summarize the core ideas in this handout, include source page references, save a learning note, and suggest three revision tasks.
 
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.8"><strong>Download AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">See the demos</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.9"><strong>Download AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">See the demos</a></p>
 
 <details>
 <summary><strong>Preview boundaries and data handling</strong></summary>

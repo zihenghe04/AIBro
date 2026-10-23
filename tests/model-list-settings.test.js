@@ -17,7 +17,7 @@ function fixture({ values = {}, storage = {}, settings = {} } = {}) {
       replaceChildren(...children) { this.children = children; }, setAttribute() {}, addEventListener(type, fn) { handlers.set(type, fn); },
       insertAdjacentElement(_where, child) { nodes.set('#' + child.id, child); }, dispatchEvent(event) { handlers.get(event.type)?.({ target: this }); return true; } };
   }
-  for (const id of ['apiBase', 'apiKey', 'apiProtocol', 'provider', 'apiModelOptions', 'model', 'apiStatus', 'saveSettings', 'testApi', 'workspaceModel-daily', 'workspaceModel-course', 'workspaceModel-research']) nodes.set('#' + id, element(id));
+  for (const id of ['apiBase', 'apiKey', 'apiProtocol', 'provider', 'apiModelOptions', 'model', 'apiStatus', 'saveSettings', 'testApi', 'workspaceModel-daily', 'workspaceModel-course', 'workspaceModel-research', 'headlessPermission']) nodes.set('#' + id, element(id));
   for (const [key, value] of Object.entries(values)) nodes.get('#' + key).value = value;
   const state = { settings: { permissions: {}, ...settings } };
   const context = vm.createContext({ apiProfiles: null, state, URL, Promise, AbortController, JSON,
@@ -111,4 +111,44 @@ test('context budgets come from the saved list entry of the active service', () 
   assert.equal(budgets('big').configured, true);
   assert.equal(budgets('plain').configured, false);
   assert.equal(budgets('plain').compactThreshold, 12000);
+});
+
+test('kernel truncation and run compaction read the context window through contextBudgetsFor', () => {
+  const settings = {}; Catalog.write(settings, BASE, [{ model: 'big', contextWindow: 1000000 }, { model: 'plain' }]);
+  const h = fixture({ settings, storage: { 'workstation-api-base': BASE, 'workstation-api-model': 'plain' } });
+  const fn = source.slice(source.indexOf('function contextBudgetsFor('), source.indexOf('function compactionBudgetOptions('));
+  vm.runInContext(fn, h.context);
+  const big = h.context.contextBudgetsFor('api', 'big'), plain = h.context.contextBudgetsFor('api', 'plain');
+  assert.equal(big.kernel.configured, true);
+  assert.ok(big.kernel.evidenceInputTokens > 24000 && big.kernel.runCompactTokens > 32000);
+  assert.deepEqual([plain.kernel.configured, plain.kernel.evidenceInputTokens, plain.kernel.runCompactTokens, plain.kernel.runRetainTokens], [false, 24000, 32000, 8000]);
+  assert.equal(h.context.contextBudgetsFor('openai-auth', 'big').kernel.configured, false);
+  // The main-window loop sizes evidence from it; the headless page loads the catalog and sizes run compaction from it.
+  assert.match(source, /const evidenceInput = \(typeof contextBudgets === 'object' && contextBudgets\?\.kernel\?\.evidenceInputTokens\) \|\| 24000;/);
+  assert.match(source, /evidenceChars:Math\.max\(4000,Math\.min\(evidenceInput\*2,\(evidenceInput-/);
+  const page = fs.readFileSync(require.resolve('../app/kernel.html'), 'utf8'), host = fs.readFileSync(require.resolve('../app/kernel-host.js'), 'utf8');
+  assert.ok(page.indexOf('src="model-catalog.js"') > 0 && page.indexOf('src="model-catalog.js"') < page.indexOf('src="kernel-host.js"'));
+  assert.match(host, /compaction:\{compactor:Compaction,\.\.\.runBudget\(state,conn\)\}/);
+});
+
+test('background run permission is saved with models and permissions; unknown values fall back to follow', async () => {
+  const h = fixture({ values: { apiBase: BASE, model: 'm1', apiKey: 'synthetic-secret-token' }, storage: { 'workstation-api-base': BASE, 'workstation-api-model': 'm1' } });
+  assert.equal(h.context.headlessPermissionSetting(undefined), 'follow');
+  assert.equal(h.context.headlessPermissionSetting('full'), 'follow');
+  h.node('headlessPermission').value = 'request';
+  assert.equal(await h.context.saveApiSettings(), true);
+  assert.equal(h.state.settings.headlessPermissionMode, 'request');
+  h.node('headlessPermission').value = 'readonly';
+  assert.equal(await h.context.saveApiSettings(), true);
+  assert.equal(JSON.parse(h.saved.at(-1)).settings.headlessPermissionMode, 'readonly');
+  const html = fs.readFileSync(require.resolve('../app/index.html'), 'utf8'), en = fs.readFileSync(require.resolve('../app/i18n-en.js'), 'utf8');
+  assert.match(html, /<select aria-label="后台运行权限" id="headlessPermission"[^>]*><option value="follow" data-i18n>跟随主窗口权限<\/option><option value="request" data-i18n>每个写入都审批<\/option><option value="readonly" data-i18n>只读，不写入<\/option><\/select>/);
+  for (const zh of ['后台运行权限', '关闭主窗口后继续的运行；删除等风险步骤始终要你批准', '跟随主窗口权限', '每个写入都审批', '只读，不写入']) assert.ok(en.includes(`"${zh}":`), zh);
+});
+
+test('the tool-calling trial switch stays visible inside the model settings surface', () => {
+  const bridge = fs.readFileSync(require.resolve('../app/model-settings-ui.js'), 'utf8'), surface = fs.readFileSync(require.resolve('../app/ui/model-settings-surfaces.jsx'), 'utf8');
+  assert.match(bridge, /const IDS=\['apiBase','apiProtocol','apiToolProtocol',/);
+  assert.match(bridge, /const SELECTS=new Set\(\['apiProtocol','apiToolProtocol'\]\);/);
+  assert.match(surface, /<RetainedField \{\.\.\.props\} id="apiToolProtocol" label=\{t\('工具调用方式','Tool calling'\)\} select/);
 });

@@ -225,12 +225,17 @@
       }
     }
   }
-  async function requestOnce({ provider = 'api', base, model, effort = '', token, input, webSearch = false, protocol, requirePlanProtocol = false, onDelta, onPhase, onActivity, onAttempt, onSources, onUsage, onReception, signal }) {
+  async function requestOnce({ provider = 'api', base, model, effort = '', token, input, webSearch = false, protocol, requirePlanProtocol = false, nativeTools = null, toolCallSession = '', onToolCalls, onDelta, onPhase, onActivity, onAttempt, onSources, onUsage, onReception, signal }) {
     if (provider === 'claude-auth') {
       const transport = root.ClaudeTransport || (typeof require === 'function' ? require('./claude-transport.js') : null);
       if (!transport?.request) throw Object.assign(new Error('Claude 文本连接组件未加载，请重新打开应用。'), { code: 'INVALID_RESPONSE' });
       return transport.request({ provider, model, effort, input, webSearch, requirePlanProtocol, onDelta, onPhase, onActivity, onAttempt, onUsage, onReception, signal }, { protocolError, inspectProtocolOutput });
     }
+    // P7: native tool calls only for API connections that opted in. The calls
+    // are normalized and handed back as knowledgeRequests in the plan, so the
+    // existing scheduler/approval path runs them; nothing is executed here.
+    const ToolCalls = Array.isArray(nativeTools) && nativeTools.length && provider === 'api' && requirePlanProtocol ? root.AIBroToolCalls || (typeof require === 'function' ? require('./tool-calls.js') : null) : null;
+    const native = ToolCalls ? ToolCalls.accumulator() : null;
     const controller = new AbortController();
     const reception = typeof onReception === 'function' ? Reception?.createEmitter(onReception) : null;
     let receptionOutcome = 'failed';
@@ -348,13 +353,27 @@
         for (const part of Array.isArray(item.content) ? item.content : []) if (part?.type === 'output_text') observeSources((Array.isArray(part.annotations) ? part.annotations : []).filter(annotation => annotation?.type === 'url_citation'));
       } else if (Object.hasOwn(toolLabels, item.type)) {
         const pending = hostCalls.has(item.type);
-        if (pending && requirePlanProtocol) pendingNativeToolCall = true;
+        if (pending && requirePlanProtocol && !(native && item.type === 'function_call')) pendingNativeToolCall = true;
         const status = ['failed', 'error'].includes(item.status) || item.error ? 'failed' : ['cancelled', 'canceled', 'incomplete'].includes(item.status) ? 'cancelled' : pending ? 'pending' : completed || item.status === 'completed' ? 'completed' : 'running';
         const id = item.id || item.call_id;
         const previous = activities.get(activityKey('tool', identifier(id)));
         activity('tool', id, pending ? '工具调用已提出；当前连接未执行此宿主操作' : toolLabels[item.type], status, toolName(item.name, previous?.name || toolLabels[item.type]));
         if (item.type === 'web_search_call') observeSources(item.action?.sources);
       }
+    };
+    // Native calls → the plan's knowledgeRequests (text the model wrote beside
+    // them becomes the plan message). A malformed call executes nothing: the
+    // whole reply is a protocol error and goes through the one repair budget.
+    const nativePlan = text => {
+      const names = new Set(nativeTools.map(spec => spec.name));
+      const calls = ToolCalls.normalize(native.raw(), { prefix: 'n', session: toolCallSession || attemptId || 'run', turn: attemptId || 0, known: names, validate: root.AIBroTools?.registry?.validate });
+      const bad = calls.filter(call => call.error);
+      if (bad.length) throw Object.assign(new Error('模型的原生工具调用无效，未执行其中任何调用：' + bad.slice(0, 3).map(call => `${call.name || '（无名）'}：${call.error.message}`).join('；')), { code: 'MODEL_PROTOCOL_ERROR', protocolKind: 'native_tool_args', recoverable: true });
+      const plan = ToolCalls.jsonObject(text) || (String(text || '').trim() ? { message: String(text).trim() } : {});
+      plan.knowledgeRequests = [...(Array.isArray(plan.knowledgeRequests) ? plan.knowledgeRequests : []), ...calls.map(call => ({ ...call.args, type: call.name }))];
+      if (!Array.isArray(plan.actions)) plan.actions = [];
+      try { onToolCalls?.(calls.map(call => ({ callId: call.callId, name: call.name, args: call.args })), { attemptId }); } catch (_) {}
+      return JSON.stringify(plan);
     };
     let response;
     try {
@@ -384,6 +403,7 @@
             body.include = ['web_search_call.action.sources'];
           }
         }
+        if (native) body.tools = [...(body.tools || []), ...ToolCalls.render(nativeTools, chosen)];
         const thinking = chosen === 'chat' ? pkuDeepSeekThinking(base, model, effort) : null;
         if (thinking) body.thinking = thinking;
         if (effort && effort !== 'auto') {
@@ -460,10 +480,13 @@
         const failure = generationError(data, '', 'response') || generationError(data, data?.type || '', 'response'); if (failure) throw failure;
         data = data?.response || data;
         if (['length','content_filter','error'].includes(data?.choices?.[0]?.finish_reason)) { const error = new Error('模型生成被截断或未完成，本次未执行操作。请检查服务返回的完成状态后重试。'); error.code = 'STREAM_ERROR'; error.diagnostic = root.RunFailureDiagnostics?.fromStream(null, data.choices[0].finish_reason === 'length' ? 'max_output_tokens' : data.choices[0].finish_reason); throw error; }
-        if (data?.choices?.some(choice => choice?.message?.tool_calls?.length || choice?.message?.function_call || ['tool_calls', 'function_call'].includes(choice?.finish_reason))) throw nativeProtocolError();
+        if (native) { if (Array.isArray(data?.choices)) native.chat({ ...data.choices[0], finish_reason: data.choices[0]?.finish_reason || 'stop' }); native.output(data?.output); }
+        else if (data?.choices?.some(choice => choice?.message?.tool_calls?.length || choice?.message?.function_call || ['tool_calls', 'function_call'].includes(choice?.finish_reason))) throw nativeProtocolError();
         (Array.isArray(data?.output) ? data.output : []).forEach(item => observeItem(item, true));
         if (pendingNativeToolCall) throw nativeProtocolError();
-        const output = jsonText(data); if (typeof output !== 'string' || !output.trim()) { const error = new Error('模型未返回可用内容，本次未执行操作。请检查账号和模型后重试。'); error.code = 'EMPTY_RESPONSE'; throw error; }
+        let output = jsonText(data);
+        if (native?.has()) output = nativePlan(output);
+        if (typeof output !== 'string' || !output.trim()) { const error = new Error('模型未返回可用内容，本次未执行操作。请检查账号和模型后重试。'); error.code = 'EMPTY_RESPONSE'; throw error; }
         const protocolFailure = protocolError(output); if (protocolFailure) throw protocolFailure;
         const thinking = [data?.choices?.[0]?.message?.reasoning_content, data?.choices?.[0]?.message?.reasoning].find(value => typeof value === 'string' && value);
         if (thinking) publicText({ item_id: '_chat_thinking', summary_index: 0 }, thinking, false, 'completed');
@@ -500,7 +523,8 @@
         if (type === 'response.output_item.added' && event.item && !['message','reasoning'].includes(event.item.type)) receivedContent = true;
         if (Array.isArray(event.choices) || type.startsWith('response.')) observeUsage((event.response || event).usage);
         const failure = generationError(event,type); if (failure) throw failure;
-        if (requirePlanProtocol && /^response\.(?:function_call_arguments|custom_tool_call_input)\./.test(type)) pendingNativeToolCall = true;
+        if (native && type.startsWith('response.')) native.responses(event);
+        if (requirePlanProtocol && (native ? /^response\.custom_tool_call_input\./ : /^response\.(?:function_call_arguments|custom_tool_call_input)\./).test(type)) pendingNativeToolCall = true;
         const format = type.startsWith('response.') ? 'responses' : Array.isArray(event.choices) ? 'chat' : null;
         if (format) {
           if (streamFormat && streamFormat !== format) { const error = new Error('API 混合返回了不同流协议，无法确认完整结果。'); error.code = 'STREAM_ERROR'; error.diagnostic = root.RunFailureDiagnostics?.receipt('INVALID_RESPONSE', { phase: 'stream' }); throw error; }
@@ -509,7 +533,8 @@
         if (format === 'chat') {
           const choice = event.choices.find(item=>item?.index===0) || event.choices[0];
           if (choice && ['length','content_filter','error'].includes(choice.finish_reason)) { const error = new Error('模型生成被截断或未完成，本次未执行操作。请检查服务返回的完成状态后重试。'); error.code = 'STREAM_ERROR'; error.diagnostic = root.RunFailureDiagnostics?.fromStream(null, choice.finish_reason === 'length' ? 'max_output_tokens' : choice.finish_reason); throw error; }
-          if (choice?.delta?.tool_calls?.length || choice?.message?.tool_calls?.length || choice?.delta?.function_call || choice?.message?.function_call || ['tool_calls', 'function_call'].includes(choice?.finish_reason)) pendingNativeToolCall = true;
+          if (native) native.chat(choice);
+          else if (choice?.delta?.tool_calls?.length || choice?.message?.tool_calls?.length || choice?.delta?.function_call || choice?.message?.function_call || ['tool_calls', 'function_call'].includes(choice?.finish_reason)) pendingNativeToolCall = true;
           const delta = choice?.delta?.content ?? choice?.text;
           // 明文思考（DeepSeek 等经 reasoning_content 返回）：独立成“模型思考”段进入
           // 进度流，与工具、正文分层；正文或工具一开始就结束该段。该段默认收起，
@@ -566,6 +591,7 @@
       if (!completed) { const error = new Error('连接已结束，但未收到模型的明确完成事件。本次结果可能不完整，未执行任何操作。请重试或检查 API 的流协议兼容性。'); error.code = 'STREAM_INCOMPLETE'; throw error; }
       if (pendingNativeToolCall) throw nativeProtocolError();
       const protocolFailure = protocolError([...outputParts.values()].join('') || output); if (protocolFailure) throw protocolFailure;
+      if (native?.has()) output = nativePlan(output);
       if (!output.trim()) throw Object.assign(new Error('模型未返回内容，请检查账号和模型后重试。'), { code: 'EMPTY_RESPONSE' }); receptionOutcome = 'completed'; return output;
     } catch (error) {
       receptionOutcome = controller.signal.aborted || error?.name === 'AbortError' || error?.code === 'CANCELLED' ? 'cancelled' : 'failed';

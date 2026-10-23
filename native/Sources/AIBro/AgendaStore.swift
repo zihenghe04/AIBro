@@ -27,6 +27,7 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
     @Published var deferred=0
     @Published var focusDate=Date()
     var onOpen:(()->Void)?
+    var onKernelApproval:((String,String,String)->Void)?
     var onChanged:(()->Void)?
     private var file:URL?
     private var tasks:[AgendaOccurrence]=[]
@@ -56,7 +57,7 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
             } else {events=[];preferences=AgendaPreferences();syncReceipts=[:];operationReceipts=[:]}
             tasks=[];taskRecords=[];taskKey="";loaded=true;error=nil
         }catch{self.error="日程读取失败：\(error.localizedDescription)";return}
-        if !qa {center.delegate=self;center.setNotificationCategories([UNNotificationCategory(identifier:"AIBRO_AGENDA",actions:[UNNotificationAction(identifier:"LATER",title:"10 分钟后提醒",options:[])],intentIdentifiers:[])])}
+        if !qa {center.delegate=self;center.setNotificationCategories([UNNotificationCategory(identifier:"AIBRO_AGENDA",actions:[UNNotificationAction(identifier:"LATER",title:"10 分钟后提醒",options:[])],intentIdentifiers:[]),UNNotificationCategory(identifier:"AIBRO_KERNEL_APPROVAL",actions:[UNNotificationAction(identifier:"KERNEL_APPROVE",title:"批准",options:[]),UNNotificationAction(identifier:"KERNEL_REJECT",title:"拒绝",options:[.destructive])],intentIdentifiers:[]),UNNotificationCategory(identifier:"AIBRO_KERNEL_REVIEW",actions:[UNNotificationAction(identifier:"KERNEL_VIEW",title:"查看",options:[.foreground]),UNNotificationAction(identifier:"KERNEL_REJECT",title:"拒绝",options:[.destructive])],intentIdentifiers:[])])}
         refreshTimer=Timer.scheduledTimer(withTimeInterval:300,repeats:true){[weak self]_ in Task{@MainActor in self?.reschedule()}}
         reschedule()
     }
@@ -254,6 +255,11 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
     }
     nonisolated func userNotificationCenter(_ center:UNUserNotificationCenter,willPresent notification:UNNotification,withCompletionHandler completionHandler:@escaping(UNNotificationPresentationOptions)->Void){completionHandler([.banner,.sound])}
     nonisolated func userNotificationCenter(_ center:UNUserNotificationCenter,didReceive response:UNNotificationResponse,withCompletionHandler completionHandler:@escaping()->Void){
+        // P8b: a background run waiting for a person (NativeKernelHost).
+        if let run=response.notification.request.content.userInfo["kernelRun"] as? String,let approval=response.notification.request.content.userInfo["kernelApproval"] as? String {
+            let action=response.actionIdentifier
+            Task{@MainActor in self.onKernelApproval?(run,approval,action);completionHandler()};return
+        }
         if response.actionIdentifier=="LATER",let content=response.notification.request.content.mutableCopy() as? UNMutableNotificationContent {
             center.add(UNNotificationRequest(identifier:"agenda-snooze-"+UUID().uuidString,content:content,trigger:UNTimeIntervalNotificationTrigger(timeInterval:600,repeats:false))){_ in completionHandler()}
         } else {Task{@MainActor in if let stamp=response.notification.request.content.userInfo["date"] as? Double {self.focusDate=Date(timeIntervalSince1970:stamp)}else{self.focusDate=Date()};self.onOpen?();completionHandler()}}

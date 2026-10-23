@@ -157,6 +157,15 @@ struct NativeWorkspaceLocation:Codable,Equatable {
         else if selection.hasPrefix("chat:"){self.init(view:"agent",conversationID:String(selection.dropFirst(5)))}
         else {self.init(view:selection,section:spaceSections[selection])}
     }
+    /// Onboarding and the workspace tour show the web page above a native
+    /// dashboard (overview, agenda, conversation hub). While one is open the
+    /// sidebar must name the page the person sees, not the hidden native one.
+    /// Returns the web view to adopt, or nil when nothing changes.
+    static func tourDestination(selection:String?,reportedView:String,tourOpen:Bool)->String? {
+        guard tourOpen,["overview","agenda","conversations"].contains(selection ?? "") else{return nil}
+        let view=reportedView == "dashboard" ? "overview":reportedView
+        return view == selection ? nil:view
+    }
     static func validSpaceSection(_ section:String,view:String)->Bool {
         ["projects","knowledge","tasks","overview"].contains(section) || (view == "research" && section == "papers")
     }

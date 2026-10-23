@@ -15,7 +15,7 @@ function fixture(options = {}) {
   Object.defineProperty(document, 'activeElement', { get: () => focus });
   const context = { document, console, Date, getSelection: () => selection, WorkstationI18n: { getLanguage: () => 'zh' } };
   context.window = context; vm.createContext(context);
-  for (const file of ['conversation-flow.js', 'stream-code.js', 'stream-markdown.js', 'streaming-body.js', 'json-schema-lite.js', 'tool-registry.js', 'tool-specs.js', 'tool-scheduler.js', 'agent-progress.js', 'conversation-process.js']) {
+  for (const file of ['conversation-flow.js', 'stream-code.js', 'stream-markdown.js', 'streaming-body.js', 'json-schema-lite.js', 'tool-registry.js', 'tool-specs.js', 'approval-broker.js', 'tool-scheduler.js', 'agent-progress.js', 'conversation-process.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'app', file), 'utf8'), context);
   }
   const run = { id: 'run-1', status: 'running', toolCalls: [] };

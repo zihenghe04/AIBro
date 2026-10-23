@@ -2,7 +2,8 @@
 const assert=(value,message)=>{if(!value)throw new Error('Choice QA: '+message)};
 const settle=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 assert(document.querySelectorAll('#interfaceLanguage + .native-choices [role=radio]').length===2,'language segments');
-assert([...document.querySelectorAll('.permission-row select')].every(s=>s.nextElementSibling?.classList.contains('native-choices')),'all permission controls');
+assert([...document.querySelectorAll('.permission-row select:not(#headlessPermission)')].every(s=>s.nextElementSibling?.classList.contains('native-choices')),'all permission controls');
+assert(document.querySelector('#headlessPermission')?.nextElementSibling?.classList.contains('native-select-trigger'),'background permission (three long labels) is a menu, not segments');
 assert(document.querySelector('.permission-row select:disabled').nextElementSibling.querySelector('button').disabled,'risk protection stays disabled');
 const dialog=document.createElement('dialog');dialog.innerHTML='<form method="dialog"><label for="qaSelect">示例项目</label><select id="qaSelect"><optgroup label="日常"><option value="zero">未归属</option></optgroup><optgroup label="课程"></optgroup></select><button>关闭</button></form>';
 document.body.append(dialog);const select=dialog.querySelector('select');for(let i=1;i<10;i++){const option=document.createElement('option');option.value='p'+i;option.textContent='学习项目 '+i;option.disabled=i===9;select.lastElementChild.append(option);}select.value='p2';let changes=0;select.addEventListener('change',()=>changes++);dialog.showModal();await settle();

@@ -31,6 +31,7 @@ function harness(options={}){
   c.window.ApprovalIntent = require('../app/approval-intent');
   c.queueMicrotask = queueMicrotask;
   c.KnowledgeAccess = c.window.KnowledgeAccess = require('../app/knowledge-access');
+  c.window.AIBroRunLoop = require('../app/kernel-run-loop'); c.window.ApprovalBroker ??= require('../app/approval-broker');
  const checkpoint = installRunCheckpointHost(c);
  c.normalizeStateShape(state);
  return{c,state,node,saved,deliveries,requests,toasts,checkpoint,send:options=>c.sendMessage(options),attachments:()=>vm.runInContext(cut('function activeResultRecord(', '\nfunction conversationProjectIds(') + cut('function dedupeResultEntries(', '\nfunction groupedEntities(') + 'currentAttachments().map(item=>item.id)',c)};

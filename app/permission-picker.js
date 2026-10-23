@@ -5,7 +5,7 @@
   const choices = [
     ['request', '请求批准', '读取本机文件、修改内容和网页操作前询问。', 'hand', 'Ask for approval', 'Ask before reading local files, editing content or interacting with websites.'],
     ['smart', '风险审批', '普通读取与整理自动进行，删除等风险动作询问。', 'shield', 'Ask for risky actions', 'Read and organize automatically. Ask before deletion and other risky actions.'],
-    ['full', '完全访问', '自动执行当前支持的操作，限已连接的本机目录。', 'shield', 'Full access', 'Run supported actions automatically, within connected local folders.'],
+    ['full', '完全访问', '自动执行当前支持的操作，含可撤销的删除（移入回收站）；永久删除等不可恢复的操作仍需你批准。限已连接的本机目录。', 'shield', 'Full access', 'Run supported actions automatically, including undoable deletions (moved to the trash). Permanent deletion and other irreversible actions still need your approval. Limited to connected local folders.'],
     ['legacy', '跟随空间设置', '沿用日常、课程、科研各自的审批设置。', 'folder', 'Follow workspace settings', 'Use the approval settings for Personal, Courses, and Research.']
   ];
   const label = mode => { const item = choices.find(item => item[0] === mode) || choices[3]; return t(item[1], item[4]); };

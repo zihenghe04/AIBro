@@ -7,8 +7,8 @@
   "assets": [
     {
       "name": "halaska-ui.js",
-      "bytes": 1015214,
-      "sha256": "2f32093397c7f8339d913ff3c60a3fcd05dfeed7fa09b1a3df91e3f8a17a8c2e"
+      "bytes": 1015551,
+      "sha256": "2fdcb97733f5399ece70cf496a3f8fc992b0b52e72f3a7d4f08ff71032cbaf37"
     },
     {
       "name": "halaska-geist.woff2",

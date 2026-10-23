@@ -67,7 +67,7 @@ async function readNote(id){
   const baseline=business(await snapshot());let validId,validRunId,validMessageId,expectedBody;
   for(const marker of ['MISSING-BODY','EMPTY-NOTE','PLACEHOLDER','MIXED-EMPTY'])await check(marker+' final is rejected atomically before any execution checkpoint or empty note',async()=>{
     const run=await submit(marker);observations.push({marker,run:{id:run.id,status:run.status,errorCode:run.errorCode,formatRepairCount:run.formatRepairCount}});
-    assert.equal(run.status,'failed');assert.equal(run.errorCode,'INCOMPLETE_ANALYSIS_RESULT');assert.equal(run.formatRepairCount,1);assert.equal(run.executionReceipt,undefined);
+    assert.equal(run.status,'failed');assert.equal(run.errorCode,'INCOMPLETE_ANALYSIS_RESULT');assert.equal(run.formatRepairCount,2);assert.equal(run.executionReceipt,undefined);
     assert.deepEqual(run.results||[],[]);assert.deepEqual(run.fileChanges||[],[]);const disk=await snapshot();assert.deepEqual(business(disk),baseline);
     const system=disk.notes.filter(note=>note.projectMemoryType);assert.deepEqual(system.map(note=>note.projectMemoryType).sort(),['daily','long','plan']);
     assert.ok(system.every(note=>note.projectId==='integrity-project'&&note.id.startsWith('pm_integrity-project_')));
@@ -75,14 +75,16 @@ async function readNote(id){
     observations.push({marker,systemAuditNotes:system.map(note=>({id:note.id,type:note.projectMemoryType})),businessPlanMutations:0});
     const calls=await evaluate(`__integrityProviderCalls.filter(call=>call.runId===${q(run.id)})`);
     // The real AgentContext loads missing operation capabilities and asks for
-    // a checked final again; that step is not a second format-repair attempt.
-    assert.equal(calls.filter(call=>call.formatRepair).length,1,'exactly one actual format-repair request');
+    // a checked final again; that step is not a format-repair attempt. The
+    // kernel allows two consecutive format repairs (kernel-run-loop.js).
+    assert.equal(calls.filter(call=>call.formatRepair).length,2,'exactly two consecutive format-repair requests');
     const capabilities=marker==='MIXED-EMPTY'?['knowledge','tasks']:['knowledge'];
     assert.deepEqual(calls.map(call=>({repair:call.formatRepair,capabilities:[...call.loadedCapabilities].sort()})),[
       {repair:false,capabilities:[]},
       {repair:false,capabilities},
       {repair:true,capabilities},
-    ],'initial final, capability protocol expansion, then exactly one format repair');
+      {repair:true,capabilities},
+    ],'initial final, capability protocol expansion, then two consecutive format repairs');
     assert.ok(calls.every(call=>call.marker===marker));
     const result=await evaluate(`(()=>{const c=currentConversation(),m=c.messages.find(m=>[m.runId,m.retryRunId,m.pendingRunId].includes(${q(run.id)}));const n=document.querySelector('[data-message-id="'+m.id+'"]');return {status:m.runStatus,text:m.text,ui:n.textContent};})()`);
     assert.equal(result.status,'failed');assert.match(result.ui,/未完成|失败|没有|未生成|不完整/);assert.doesNotMatch(result.text,/^已完成整理[。！]?$/);

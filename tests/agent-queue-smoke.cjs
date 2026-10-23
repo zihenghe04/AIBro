@@ -348,7 +348,7 @@ async function run(){
   assert.notEqual(bar,'no-bar','选中后应创建操作工具条');
   const barState=JSON.parse(bar);
   assert.equal(barState.hidden,false,'选中回复文本后应出现操作工具条');
-  assert.deepEqual(barState.modes,['explain','annotate'],'工具条应提供解释与批注');
+  assert.deepEqual(barState.modes,['explain','translate','annotate'],'工具条应提供解释、翻译与批注');
   // 隔离：本步骤之前设置过的替身一律重建。
   await evaluate(`(()=>{ConversationModels.configuration=()=>({provider:'api',model:'QA isolated model',effort:'medium'});ConversationModels.resolve=async value=>value;getApiConnection=async()=>({base:'https://fixture.invalid/v1',token:'isolated-test-placeholder'});AgentTransport.requestPlan=async options=>{window.__qaExplainInput=options.input;options.onDelta?.('段级呼吸指过程段的展开与收束');return '段级呼吸指过程段的展开与收束：流式期间展开，完成后自动折叠，点击可回看。';};})()`);
   await evaluate(`document.querySelector('#selectionBar [data-selection-mode="explain"]').click()`);

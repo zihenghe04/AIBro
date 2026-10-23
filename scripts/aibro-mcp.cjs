@@ -6,6 +6,7 @@
 // Usage:
 //   node scripts/aibro-mcp.cjs --state <dir/workspace.json> --ledger <calls.jsonl>
 //        [--project <projectId>] [--workspace 日常|课程|科研] [--http <port>]
+//        [--events <dir>]   also write tool/approval events (same layout as app/event_log.py)
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -14,6 +15,7 @@ const app = path.join(__dirname, '..', 'app');
 const Tools = require(path.join(app, 'tool-specs.js'));
 const Gateway = require(path.join(app, 'tool-gateway.js'));
 const Mcp = require(path.join(app, 'mcp-server.js'));
+const Events = require(path.join(app, 'event-log.js'));
 const ReadTools = require(path.join(app, 'read-tools.js'));
 const KnowledgeAccess = require(path.join(app, 'knowledge-access.js'));
 
@@ -21,7 +23,7 @@ function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
-    if (!/^--(state|ledger|project|workspace|http)$/.test(key) || argv[i + 1] === undefined) throw Error('unknown or incomplete option: ' + key);
+    if (!/^--(state|ledger|project|workspace|http|events)$/.test(key) || argv[i + 1] === undefined) throw Error('unknown or incomplete option: ' + key);
     out[key.slice(2)] = argv[++i];
   }
   if (!out.state || !out.ledger) throw Error('--state and --ledger are required');
@@ -46,6 +48,43 @@ function fileLedger(file) {
     async dispatched(id, entry) { if (rows.has(id)) throw Error('call id already dispatched'); append(id, entry); },
     async settle(id, entry) { append(id, entry); },
   };
+}
+
+// Event log on disk, the same layout and seq rule as app/event_log.py:
+// <dir>/runs/<yyyy-mm>/<runId>.jsonl. A stream continues across processes
+// (the last seq is read back from the file); dispatch/decision/end events are
+// fsynced before emit() resolves.
+function fileEvents(dir, options = {}) {
+  const last = new Map(), files = new Map();
+  const fileFor = (runId, ts) => {
+    if (files.has(runId)) return files.get(runId);
+    const runs = path.join(dir, 'runs');
+    let found = null;
+    try { for (const month of fs.readdirSync(runs).sort()) if (fs.existsSync(path.join(runs, month, runId + '.jsonl'))) found = path.join(runs, month, runId + '.jsonl'); } catch {}
+    const file = found || path.join(runs, new Date(ts).toISOString().slice(0, 7), runId + '.jsonl');
+    files.set(runId, file);
+    let seq = 0;
+    try { const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean); seq = JSON.parse(lines[lines.length - 1]).seq || 0; } catch {}
+    last.set('run:' + runId, seq);
+    return file;
+  };
+  const sink = async batch => {
+    const byFile = new Map();
+    for (const event of batch) {
+      if (!event.runId || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,127}$/.test(event.runId)) continue;
+      const file = fileFor(event.runId, event.ts), prev = last.get(event.stream);
+      if (event.seq !== prev + 1) throw Object.assign(Error('SEQ'), { code: 'SEQ', last: { [event.stream]: prev } });
+      last.set(event.stream, event.seq);
+      byFile.set(file, (byFile.get(file) || '') + JSON.stringify(event) + '\n');
+    }
+    for (const [file, text] of byFile) {
+      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+      const fd = fs.openSync(file, 'a', 0o600);
+      try { fs.writeSync(fd, text); if (batch.some(e => Events.FSYNC.has(e.type))) fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    }
+    return { ok: true };
+  };
+  return Events.create({ sink, source: { kind: options.kind || 'external-kernel', id: options.source || 'mcp' }, onError: error => process.stderr.write('event log: ' + error.message + '\n') });
 }
 
 // Snapshot reader: reloads when the file changes; never writes it.
@@ -82,8 +121,9 @@ function nodeExecutor({ getState, scope }) {
 function createServer(options) {
   const getState = snapshot(options.state);
   const scope = { projectId: options.project || null, workspace: options.workspace || null, allowedTaskIds: [] };
-  const gateway = Gateway.create({ registry: Tools.registry, host: 'node', execute: nodeExecutor({ getState, scope }), ledger: fileLedger(options.ledger) });
   const session = crypto.randomBytes(6).toString('hex');
+  const events = options.events ? fileEvents(options.events) : null;
+  const gateway = Gateway.create({ registry: Tools.registry, host: 'node', execute: nodeExecutor({ getState, scope }), ledger: fileLedger(options.ledger), events, runId: 'mcp-' + session });
   return Mcp.create({ registry: Tools.registry, gateway, host: 'node', session, version: require('../package.json').version });
 }
 
@@ -132,7 +172,7 @@ function serveHttp(server, port) {
   return httpServer;
 }
 
-module.exports = { createServer, fileLedger, parseArgs, serveHttp };
+module.exports = { createServer, fileEvents, fileLedger, nodeExecutor, parseArgs, serveHttp, serveStdio, snapshot };
 if (require.main === module) {
   let options;
   try { options = parseArgs(process.argv.slice(2)); } catch (error) { process.stderr.write(error.message + '\n'); process.exit(2); }

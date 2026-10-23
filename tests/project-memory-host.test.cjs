@@ -1,4 +1,5 @@
 const test = require('node:test');
+globalThis.AIBroRunLoop = require('../app/kernel-run-loop');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const M = require('../app/project-memory');
@@ -13,7 +14,7 @@ const host = new Function('initialState', 'ProjectMemory', 'AgentContext', 'onDe
  let state=initialState;
  const run={projectId:'p',userMessageId:'u',contextWorkspace:'科研'};
  const readScope={projectId:'p',workspace:'科研',readProjects:[]};
- const window={ProjectMemory};
+ const window={ProjectMemory,AIBroRunLoop:globalThis.AIBroRunLoop};
  const conversation={messages:[{id:'u',role:'user',text:'请查看现有资料'}]};
  let instruction='BASE RULES';
  ${source.slice(memoryStart, memoryEnd)}
@@ -80,7 +81,7 @@ for (const recovery of ['protocol','context']){
     return options.recoverInput({input:options.input});
    }
    return 'unexpected retry';
-  }},{});
+  }},{AIBroRunLoop:globalThis.AIBroRunLoop});
   await assert.rejects(ask({input:'original prompt',currentMemory:()=>memory,recoverInput:()=>{recovered++;return {input:'reduced'};}},{}),{code:'KNOWLEDGE_SOURCE_CHANGED'});
   assert.equal(calls,1);assert.equal(recovered,0);
  });
@@ -93,7 +94,7 @@ for (const recovery of ['protocol','context']){
     const next=await options.recoverInput({input:options.input});assert.equal(next.input,'reduced');return 'done';
    }
    assert.match(options.input,/JSON/);return 'done';
-  }},{});
+  }},{AIBroRunLoop:globalThis.AIBroRunLoop});
   assert.equal(await ask({input:'original prompt',currentMemory:()=> 'UNCHANGED',recoverInput:()=>{recovered++;return {input:'reduced'};}},{}),'done');
   assert.equal(calls,recovery==='protocol'?2:1);assert.equal(recovered,recovery==='context'?1:0);
  });

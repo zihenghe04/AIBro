@@ -5,6 +5,8 @@
   // declarations (tool-specs.js), not from lists kept here.
   const Tools=(typeof module==='object'&&module.exports?require('./tool-specs'):root.AIBroTools)?.registry;
   if(!Tools)throw Error('ToolScheduler needs the tool registry (tool-specs.js) loaded first');
+  const Broker=typeof module==='object'&&module.exports?require('./approval-broker'):root.ApprovalBroker;
+  if(!Broker)throw Error('ToolScheduler needs approval-broker.js loaded first');
   const reads=Tools.readTypes(),parallel=Tools.parallelTypes();
   const pending=new Set(['queued','running','awaiting-approval']);
   // A tool that settles without a receipt gets one of two recorded outcomes.
@@ -22,12 +24,24 @@
   const LEGACY_UNRECEIVED='未收到工具完成结果，请核对执行记录。';
   const UNKNOWN_TEXT='已发出请求但未收到结果，无法确认是否已执行。请核对实际效果；不会自动重跑。';
   const NOT_STARTED_TEXT='尚未开始执行，没有产生效果。';
-  function unreceived(entry,status,{dispatched=!!entry.dispatchedAt||entry.status==='running',reason}={}){
+  function unreceived(entry,status,{dispatched=!!entry.dispatchedAt||entry.status==='running',reason}={},run=null,events=null){
     entry.status=status;entry.finishedAt=Date.now();
     if(!dispatched){entry.outcome='not-started';entry.error=reason||NOT_STARTED_TEXT;}
     else if(!readOnly(entry)){entry.outcome='unknown';entry.error=UNKNOWN_TEXT;}
     else entry.error=LEGACY_UNRECEIVED;
+    if(run)toolEvent(events,run,'tool/outcome',entry,{status:entry.status,...(entry.outcome?{outcome:entry.outcome}:{}),error:entry.error});
   }
+  // Event log (P2, event-log.js): written alongside run.toolCalls, which stays
+  // the record of authority. A failing log never changes a tool's outcome.
+  const eventLog=events=>events===undefined?root.AIBroEvents?.default||null:events;
+  function toolEvent(events,run,type,entry,data={}){
+    const log=eventLog(events);if(!log||!run?.id)return Promise.resolve(false);
+    try{return Promise.resolve(log.emit(type,{runId:run.id,parentId:entry.parentId||null,callId:entry.id,data:{type:entry.type,...data}})).catch(()=>false);}catch{return Promise.resolve(false);}
+  }
+  // tool/dispatched is flushed before the tool runs, bounded so a stalled
+  // local server cannot hold a tool back.
+  const DISPATCH_FLUSH_MS=1500;
+  const dispatchedEvent=(events,run,entry)=>{let timer;return Promise.race([toolEvent(events,run,'tool/dispatched',entry),new Promise(resolve=>{timer=setTimeout(resolve,DISPATCH_FLUSH_MS);})]).finally(()=>clearTimeout(timer));};
   const clone=x=>JSON.parse(JSON.stringify(x));
   const cancelled=()=>Object.assign(Error('已停止工具执行'),{code:'CANCELLED'});
   const label=Tools.label;
@@ -38,7 +52,28 @@
     const {blocks,...data}=value||{};
     return {result:data,truncated:false};
   }
-  function create({run,execute,signal,checkpoint=async()=>{},changed=()=>{},validate=()=>{},concurrency=3,parentId=null}){
+  // P5: the same decision as ToolGateway (approval-broker.js), per call,
+  // before dispatch. The context comes from the host run only: the run's
+  // permission mode (already the stricter of frozen and current), "show me
+  // first" for this turn, and read-only for subagents. A host may add
+  // context through approval(), which can only tighten. "ask" for a tool
+  // whose executor asks a person itself (approval:"host": the command card,
+  // the native browser) runs with ctx.approval="ask"; any other "ask" has no
+  // answerer in this window and is refused.
+  const DENIED_TEXT='未获批准，未执行。';
+  function create({run,execute,signal,checkpoint=async()=>{},changed=()=>{},validate=()=>{},concurrency=3,parentId=null,events,approval=null,callIdFor=null}){
+    // P7: a request that came from a native tool call keeps the id derived
+    // from the provider's tool_call id; anything else (or a reused id) gets a fresh one.
+    const nativeId=request=>{let id=null;try{id=callIdFor?.(request);}catch{}return typeof id==='string'&&/^n:[A-Za-z0-9_.:-]{1,240}$/.test(id)&&!run.toolCalls?.some(call=>call.id===id)?id:null;};
+    function authorize(entry){
+      const spec=Tools.get(entry.type);
+      if(!spec)return {vote:'allow'};// unknown types are refused by the executor
+      let extra={};try{extra=approval?.(entry,spec)||{};}catch{return {vote:'deny',spec};}
+      const context={permissionMode:run.permissionMode||'legacy',requiresHumanReview:run.approvalIntent!=null,readOnly:!!parentId};
+      const layers=[()=>extra.readOnly&&!['none','view'].includes(spec.effect)?'deny':'allow',()=>extra.requiresHumanReview&&!['none','view'].includes(spec.effect)?'ask':'allow',
+        ()=>extra.permissionMode?Broker.baseVote(spec,{permissionMode:Broker.stricterMode(context.permissionMode,extra.permissionMode)}):'allow'];
+      return {vote:Broker.decide(spec,context,layers),spec};
+    }
     run.toolCalls ||= []; let serial=Promise.resolve();
     // Freeze authority from the host run, never from provider-supplied fields.
     // Navigation may change independently; it is not this request's owner.
@@ -62,7 +97,7 @@
       // durable record) so it can change course while calls are still allowed.
       const Guard=root.ToolLoopGuard,prior=Guard?.reminder?Guard.tally(run.toolCalls.filter(call=>(call.parentId||null)===(parentId||null))):null;
       const notices=requests.map(request=>prior?Guard.reminder(request,prior.get(Guard.signature(request))?.count||0,Guard.LIMIT):'');
-      const entries=requests.map(request=>{if(!request||typeof request.type!=='string')throw Error('无效工具请求');return {id:'tool_'+Date.now()+'_'+Math.random().toString(36).slice(2),parentId,type:request.type,request:safeRequest(request),status:'queued',createdAt:Date.now()};});
+      const entries=requests.map(request=>{if(!request||typeof request.type!=='string')throw Error('无效工具请求');return {id:nativeId(request)||'tool_'+Date.now()+'_'+Math.random().toString(36).slice(2),parentId,type:request.type,request:safeRequest(request),status:'queued',createdAt:Date.now()};});
       // A control or persistence failure stops this batch, including workers
       // already waiting for their pre-execution checkpoint. Received results
       // still pass through save(), so stopping never discards a tool receipt.
@@ -70,23 +105,35 @@
       const stop=error=>{stopped ||= error;};
       const checkBatch=()=>{if(stopped)throw stopped;try{check();}catch(error){stop(error);throw error;}};
       const save=async()=>{try{await persist();}catch(error){stop(error);throw error;}};
-      run.toolCalls.push(...entries);try{await save();checkBatch();}catch(error){for(const entry of entries)unreceived(entry,error.code==='CANCELLED'||signal?.aborted?'cancelled':'failed',{dispatched:false,reason:error.message});throw error;}const results=new Array(entries.length);
+      run.toolCalls.push(...entries);for(const entry of entries)toolEvent(events,run,'tool/requested',entry,{request:entry.request});
+      try{await save();checkBatch();}catch(error){for(const entry of entries)unreceived(entry,error.code==='CANCELLED'||signal?.aborted?'cancelled':'failed',{dispatched:false,reason:error.message},run,events);throw error;}const results=new Array(entries.length);
       async function invoke(i){
         const entry=entries[i];
         try{
-          checkBatch();entry.status='running';entry.startedAt=Date.now();await save();checkBatch();
+          checkBatch();
+          const {vote,spec}=authorize(entry);let hostApproval=null;
+          if(vote==='ask'&&spec?.approval==='host'){hostApproval='ask';toolEvent(events,run,'approval/asked',entry,{answerer:'host'});}
+          else if(vote!=='allow'){
+            entry.status='failed';entry.outcome='not-started';entry.error=DENIED_TEXT;entry.errorCode='APPROVAL_DENIED';results[i]={error:DENIED_TEXT,code:'APPROVAL_DENIED'};
+            toolEvent(events,run,'approval/decided',entry,{outcome:vote==='ask'?'unavailable':'rejected',answerer:vote==='ask'?'none':'policy'});
+            toolEvent(events,run,'tool/outcome',entry,{status:entry.status,outcome:'not-started',errorCode:'APPROVAL_DENIED'});
+            return;
+          }
+          entry.status='running';entry.startedAt=Date.now();await save();checkBatch();
+          if(eventLog(events)){await dispatchedEvent(events,run,entry);checkBatch();}
           let result,received=false;entry.dispatchedAt=Date.now();
           // Only an execute rejection is an ordinary tool failure. Scope checks
           // and durable-save failures must escape and stop later operations.
-          try{result=await (entry.type==='quick_panel_open'?openQuickPanel(clone(entry.request),entry):execute(clone(entry.request),{signal,entry}));received=true;}
+          try{result=await (entry.type==='quick_panel_open'?openQuickPanel(clone(entry.request),entry):execute(clone(entry.request),{signal,entry,...(hostApproval?{approval:hostApproval}:{})}));received=true;}
           catch(error){entry.status=error.code==='CANCELLED'||signal?.aborted?'cancelled':'failed';entry.error=error.message;const code=typeof error.code==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(error.code)?error.code:undefined;if(code)entry.errorCode=code;if(typeof error.reason==='string')entry.reason=error.reason;results[i]={error:error.message,...(code?{code}:{}),...(typeof error.recoveryHint==='string'?{recoveryHint:error.recoveryHint.slice(0,1200)}:{})};if(error.code==='CANCELLED')stop(error);}
           if(received){
             const value=result||{};
             Object.assign(entry,resultSnapshot(value));results[i]=value;
             entry.status=['cancelled','rejected'].includes(value.status)?'cancelled':value.error||['failed','timed_out','interrupted'].includes(value.status)?'failed':'completed';
           }
+          toolEvent(events,run,'tool/result',entry,{status:entry.status,...(entry.error!==undefined?{error:entry.error}:{}),...(entry.errorCode?{errorCode:entry.errorCode}:{})});
           if(notices[i]&&results[i]&&typeof results[i]==='object')results[i]={...results[i],loopNotice:notices[i]};
-        }catch(error){stop(error);if(pending.has(entry.status))unreceived(entry,error.code==='CANCELLED'||signal?.aborted?'cancelled':'failed',{dispatched:!!entry.dispatchedAt,reason:error.message});throw error;}
+        }catch(error){stop(error);if(pending.has(entry.status))unreceived(entry,error.code==='CANCELLED'||signal?.aborted?'cancelled':'failed',{dispatched:!!entry.dispatchedAt,reason:error.message},run,events);throw error;}
         finally{entry.finishedAt=Date.now();await save();}
         // Persist the authoritative returned outcome before honoring a stop or
         // scope change. Cancellation is not evidence that effects rolled back.
@@ -102,7 +149,7 @@
         }
         return results;
       }finally{
-        for(const entry of entries)if(pending.has(entry.status))unreceived(entry,'cancelled',{dispatched:!!entry.dispatchedAt,reason:'本批中止，未执行。'});
+        for(const entry of entries)if(pending.has(entry.status))unreceived(entry,'cancelled',{dispatched:!!entry.dispatchedAt,reason:'本批中止，未执行。'},run,events);
         await save();
       }
     }
@@ -118,11 +165,12 @@
     entry.status=activity.status==='pending'?'queued':activity.status||'running';entry.summary=activity.text;
     if(entry.status==='running')entry.startedAt ||= Date.now();if(!pending.has(entry.status))entry.finishedAt=Date.now();return true;
   }
-  function finish(run,status){for(const entry of run.toolCalls||[])if(pending.has(entry.status))unreceived(entry,status==='cancelled'?'cancelled':'interrupted');}
+  function finish(run,status,events){for(const entry of run.toolCalls||[])if(pending.has(entry.status))unreceived(entry,status==='cancelled'?'cancelled':'interrupted',{},run,events);}
   function recover(state,instanceId){
     if(!instanceId)return false;let changed=false;
     for(const run of state.agentRuns||[])if(run.status==='running'&&run.executionInstanceId&&run.executionInstanceId!==instanceId){
       run.status='interrupted';run.error='上次执行随本机服务结束而中断。已保存的输出保留，请核对后继续。';run.finishedAt=Date.now();finish(run,'interrupted');
+      try{eventLog()?.emit('run/interrupted',{runId:run.id,data:{status:'interrupted',reason:'service-restart'}});}catch{}
       for(const child of run.delegations||[])if(pending.has(child.status)){child.status='interrupted';child.finishedAt=Date.now();}
       for(const step of run.steps||[])if(step.status==='running')step.status='interrupted';
       const c=(state.conversations||[]).find(x=>x.id===run.conversationId);const m=c?.messages?.find(x=>x.runId===run.id);

@@ -154,3 +154,29 @@ test('result cards localize fixed status and receipt labels without translating 
   const dictionary=require('../app/i18n-en.js');
   for(const label of ['项目','任务','知识','论文','资料','新建','更新','已有','待合并','草稿已处理','已归档','已重命名','已保存','待开始','进行中','已完成','未命名','打开详情','日常空间','课程空间','科研空间','独立科研资料','未归属项目','已归入','已保存至工作区','内容已保存，可打开核对'])assert.ok(dictionary.exact[label],`missing result label: ${label}`);
 });
+
+test('a plan that trashes one record and creates another lists both on the result card',()=>{
+  const h=harness();h.state.tasks.push({id:'kept',title:'新任务',projectId:'new',workspace:'课程',status:'todo'});
+  const results=[{type:'task',id:'gone',projectId:'old',operation:'deleted',text:'移入回收站：复习光反应'},result('task','kept','new')];
+  const children=h.render({results}),boxes=children.filter(item=>item.className==='message-result-links');
+  assert.equal(boxes.length,2);
+  const trashed=boxes[0].children[0],[label,title,detail]=trashed.children;
+  assert.equal(label.textContent,'任务已移入回收站');assert.equal(label.dataset.i18n,'');
+  assert.equal(title.textContent,'复习光反应');assert.equal(title.dataset.userContent,'');
+  assert.equal(detail.textContent,'查看回收站，可恢复 ↗');assert.equal(typeof trashed.onclick,'function');
+  assert.match(boxes[1].innerHTML,/新建 1 项/);assert.match(boxes[1].innerHTML,/<b data-user-content>新任务<\/b>/);
+  // Repeated receipts for the same record collapse to one card; unknown types stay off the card.
+  const again=h.render({results:[results[0],{...results[0]},{type:'conversation',id:'c',operation:'deleted'}]}).filter(item=>item.className==='message-result-links');
+  assert.equal(again.length,1);assert.equal(again[0].children.length,1);
+  const dictionary=require('../app/i18n-en.js');
+  for(const label of ['项目已移入回收站','任务已移入回收站','知识已移入回收站','资料已移入回收站','查看回收站，可恢复项目及所属内容 ↗','查看回收站，可恢复 ↗'])assert.ok(dictionary.exact[label],`missing trash label: ${label}`);
+});
+
+test('deleting a task under full access records a trash receipt that the card can show',()=>{
+  const Core=require('../app/workstation-core');
+  const state={projects:[],tasks:[{id:'t1',title:'复习光反应',status:'todo',workspace:'日常'}],notes:[],imports:[],papers:[],links:[],trash:[],conversations:[],agentRuns:[]};
+  const outcome=Core.applyPlan(state,[{type:'delete_task',taskId:'t1'},{type:'create_task',title:'复习影响因素',workspace:'日常'}],{});
+  const deleted=outcome.results.find(item=>item.operation==='deleted');
+  assert.equal(deleted.type,'task');assert.equal(deleted.id,'t1');assert.match(deleted.text,/复习光反应/);
+  assert.ok(outcome.results.some(item=>item.operation==='created'&&item.type==='task'));
+});

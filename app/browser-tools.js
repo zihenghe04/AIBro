@@ -57,9 +57,9 @@
   if(url.username||url.password)throw Error(t('网页地址不能包含登录凭据。','Do not put credentials in a web address.'));
   return url.href;
  }
- function payload(request,run,bound,operationId){
+ function payload(request,run,bound,operationId,approval=null){
   const action=actions[request.type];if(!action)throw Error('Unsupported browser request');
-  const session=sessionFor(run,bound),data={action,operationId,...bound,browserPermission:run.permissionMode==='request'?'ask':'auto'};
+  const session=sessionFor(run,bound),data={action,operationId,...bound,browserPermission:approval==='ask'||run.permissionMode==='request'?'ask':'auto'};
   const owned=session?.sessionId&&!['closed','cancelled'].includes(session.status);
   for(const key of ['sessionId','tabId'])if(request[key]&&request[key]!==session?.[key])throw Error(t('只能操作本轮创建的浏览器页面。','Only this turn’s owned browser page can be controlled.'));
   if(owned){data.sessionId=session.sessionId;if(session.tabId)data.tabId=session.tabId;}
@@ -124,14 +124,14 @@
   }
   return value;
  }
- async function execute(request,state,run,{signal,save=hooks.save,refresh=hooks.render}={}){
+ async function execute(request,state,run,{signal,save=hooks.save,refresh=hooks.render,approval=null}={}){
   if(!available())throw Error(t('此运行环境没有连接原生浏览器控制器。请使用支持浏览器的 AI Bro 原生应用。','This runtime has no native browser controller. Use the AI Bro native app with browser support.'));
   if(signal?.aborted)throw stopped();
   const bound=owner(run);validScope(state,run,bound,{running:true});
   adoptSession(currentState(state),run,bound);
   if(active.has(run.id))throw Error(t('请等待当前浏览器操作结束，再执行下一步。','Wait for the current browser operation before starting another.'));
   if((run.browserSession?.operationCount||0)>=80)throw Object.assign(Error(t('本轮已执行 80 次浏览器操作。请整理已得到的结果，再开始新一轮。','This turn reached 80 browser operations. Summarize the results before starting a new turn.')),{code:'BROWSER_LIMIT'});
-  const operationId=id(),data=payload(request,run,bound,operationId);
+  const operationId=id(),data=payload(request,run,bound,operationId,approval);
   let rejectCancellation,cancelled=false;
   const cancellation=new Promise((_,reject)=>{rejectCancellation=reject;});
   // A synchronous render callback can stop before the bridge race is installed.

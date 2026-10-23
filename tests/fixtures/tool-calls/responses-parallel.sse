@@ -1,0 +1,150 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"dea50a9d-722b-4b58-986a-fdd0171d96d4","object":"response","created_at":1792635475,"status":"in_progress","background":false,"completed_at":null,"content_filters":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"deepseek-flash","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":null},"tool_choice":"auto","tools":[{"type":"function","name":"fs_read","description":"读取项目内文件","parameters":{"type":"object","required":["path"],"properties":{"path":{"type":"string"}},"additionalProperties":false},"strict":false},{"type":"function","name":"search","description":"检索资料库","parameters":{"type":"object","required":["query"],"properties":{"query":{"type":"string"}},"additionalProperties":false},"strict":false}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+event: response.in_progress
+data: {"type":"response.in_progress","response":{"id":"dea50a9d-722b-4b58-986a-fdd0171d96d4","object":"response","created_at":1792635475,"status":"in_progress","background":false,"completed_at":null,"content_filters":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"deepseek-flash","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":null},"tool_choice":"auto","tools":[{"type":"function","name":"fs_read","description":"读取项目内文件","parameters":{"type":"object","required":["path"],"properties":{"path":{"type":"string"}},"additionalProperties":false},"strict":false},{"type":"function","name":"search","description":"检索资料库","parameters":{"type":"object","required":["query"],"properties":{"query":{"type":"string"}},"additionalProperties":false},"strict":false}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"type":"reasoning","id":"d968206a-62eb-47b0-8af6-e677595c90a7","status":"in_progress","content":[],"summary":[],"encrypted_content":"dea50a9d-722b-4b58-986a-fdd0171d96d4-0"},"output_index":0,"sequence_number":2}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","content_index":0,"item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"part":{"type":"reasoning_text","text":""},"sequence_number":3}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":"User","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":4}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" wants","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":5}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" both","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":6}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" tools","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":7}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" called","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":8}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" in","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":9}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" parallel","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":10}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" in","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":11}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" one","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":12}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" reply","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":13}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":",","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":14}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" no","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":15}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" other","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":16}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":" text","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":17}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","content_index":0,"delta":".","item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":18}
+
+event: response.reasoning_text.done
+data: {"type":"response.reasoning_text.done","content_index":0,"item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"sequence_number":19,"text":"User wants both tools called in parallel in one reply, no other text."}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","content_index":0,"item_id":"d968206a-62eb-47b0-8af6-e677595c90a7","output_index":0,"part":{"type":"reasoning_text","text":"User wants both tools called in parallel in one reply, no other text."},"sequence_number":20}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"type":"reasoning","id":"d968206a-62eb-47b0-8af6-e677595c90a7","status":"completed","content":[{"type":"reasoning_text","text":"User wants both tools called in parallel in one reply, no other text."}],"summary":[],"encrypted_content":"dea50a9d-722b-4b58-986a-fdd0171d96d4-0"},"output_index":0,"sequence_number":21}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"type":"function_call","id":"f53e651e-d969-40cd-87a4-915fb96de5b0","status":"in_progress","arguments":"","call_id":"call_00_EjQ14MxxmEtJuYFZZwdj0680","name":"fs_read"},"output_index":1,"sequence_number":22}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"{","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":23}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\"","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":24}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"path","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":25}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\"","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":26}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":": ","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":27}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\"","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":28}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"README","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":29}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":".md","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":30}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\"","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":31}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"}","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":32}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","arguments":"{\"path\": \"README.md\"}","item_id":"f53e651e-d969-40cd-87a4-915fb96de5b0","output_index":1,"sequence_number":33}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"type":"function_call","id":"f53e651e-d969-40cd-87a4-915fb96de5b0","status":"completed","arguments":"{\"path\": \"README.md\"}","call_id":"call_00_EjQ14MxxmEtJuYFZZwdj0680","name":"fs_read"},"output_index":1,"sequence_number":34}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"type":"function_call","id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","status":"in_progress","arguments":"","call_id":"call_01_5v2lFVyM4Pu4JCgZ0Qsm5253","name":"search"},"output_index":2,"sequence_number":35}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"{","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":36}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\"","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":37}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"query","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":38}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\"","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":39}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":": ","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":40}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\"","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":41}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"变","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":42}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"分","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":43}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"推断","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":44}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\"","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":45}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"}","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":46}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","arguments":"{\"query\": \"变分推断\"}","item_id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","output_index":2,"sequence_number":47}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"type":"function_call","id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","status":"completed","arguments":"{\"query\": \"变分推断\"}","call_id":"call_01_5v2lFVyM4Pu4JCgZ0Qsm5253","name":"search"},"output_index":2,"sequence_number":48}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"dea50a9d-722b-4b58-986a-fdd0171d96d4","object":"response","created_at":1792635475,"status":"completed","background":false,"completed_at":1792635476,"content_filters":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"deepseek-flash","moderation":null,"output":[{"type":"reasoning","id":"d968206a-62eb-47b0-8af6-e677595c90a7","status":"completed","content":[{"type":"reasoning_text","text":"User wants both tools called in parallel in one reply, no other text."}],"summary":[],"encrypted_content":"dea50a9d-722b-4b58-986a-fdd0171d96d4-0"},{"type":"function_call","id":"f53e651e-d969-40cd-87a4-915fb96de5b0","status":"completed","arguments":"{\"path\": \"README.md\"}","call_id":"call_00_EjQ14MxxmEtJuYFZZwdj0680","name":"fs_read"},{"type":"function_call","id":"7a676915-4755-4cc6-a6ca-1dfe33441c25","status":"completed","arguments":"{\"query\": \"变分推断\"}","call_id":"call_01_5v2lFVyM4Pu4JCgZ0Qsm5253","name":"search"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":null},"tool_choice":"auto","tools":[{"type":"function","name":"fs_read","description":"读取项目内文件","parameters":{"type":"object","required":["path"],"properties":{"path":{"type":"string"}},"additionalProperties":false},"strict":false},{"type":"function","name":"search","description":"检索资料库","parameters":{"type":"object","required":["query"],"properties":{"query":{"type":"string"}},"additionalProperties":false},"strict":false}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":373,"input_tokens_details":{"cached_tokens":128},"output_tokens":83,"output_tokens_details":{"reasoning_tokens":15},"total_tokens":456},"user":null,"metadata":{}},"sequence_number":49}
+

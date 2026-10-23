@@ -53,6 +53,8 @@ struct Snapshot {var privateMode:Bool?=false;var projects=[Project(id:"p")];var 
  var webFocusGeneration=0,accepted=true
  var commands:[(String,String,String?)]=[]
  func rememberNavigationOrigin(_ value:String?){}
+ var tourChecks=0
+ @discardableResult func adoptTourDestination(_ value:Snapshot)->Bool {tourChecks+=1;return false}
  func command(_ type:String,_ id:String,section:String?=nil)->Task<Bool,Never>? {
   commands.append((type,id,section))
   return Task {if self.accepted {self.selection=type == "project" ? "project:"+id:type == "conversation" ? "chat:"+id:id;if let section {self.spaceSections[id]=section}}
@@ -81,16 +83,30 @@ struct Failure:Error {let message:String}
   UserDefaults.standard.set(try JSONEncoder().encode(NativeWorkspaceLocation(view:"project",projectID:"gone")),forKey:other);model.restoreCommittedLocation(model.snapshot!);try await settled(model);try check(model.commands.last!.1=="overview","unavailable target falls back")
   UserDefaults.standard.set(second,forKey:other);model.accepted=false;model.selection="overview";model.restoreCommittedLocation(model.snapshot!);try await settled(model);try check(UserDefaults.standard.data(forKey:other)==second,"failed restore cannot replace last committed location")
   let before=model.commands.count;model.restoreCommittedLocation(model.snapshot!);model.webFocusGeneration+=1;try await settled(model);try check(model.commands.count==before,"user action supersedes queued startup restore")
+  try check(model.tourChecks>0,"restore re-checks a tour page opened meanwhile")
+  try check(NativeWorkspaceLocation.tourDestination(selection:"overview",reportedView:"settings",tourOpen:true)=="settings","onboarding over overview names settings")
+  try check(NativeWorkspaceLocation.tourDestination(selection:"conversations",reportedView:"agent",tourOpen:true)=="agent","tour over the chat hub names the chat page")
+  try check(NativeWorkspaceLocation.tourDestination(selection:"overview",reportedView:"dashboard",tourOpen:true)==nil,"dashboard is the overview")
+  try check(NativeWorkspaceLocation.tourDestination(selection:"overview",reportedView:"settings",tourOpen:false)==nil,"hidden web routes never take over a native page")
+  try check(NativeWorkspaceLocation.tourDestination(selection:"settings",reportedView:"agent",tourOpen:true)==nil,"web pages already follow reports")
   try check(!NativeWorkspaceLocation(view:"daily",section:"papers").available(projects:[],conversations:[]),"space invalid section rejected")
   try check(NativeWorkspaceLocation(view:"research",section:"papers").available(projects:[],conversations:[]),"research papers retained")
   try check(NativeWorkspaceLocation(view:"dashboard").view=="overview","legacy dashboard is one native overview")
   let metadata=String(decoding:second,as:UTF8.self);try check(!metadata.contains("title") && !metadata.contains("content") && !metadata.contains("password"),"only route metadata is retained")
-  print("PASS: 14 committed location checks")
+  print("PASS: 20 committed location checks")
  }
 }
 `;
   const file=path.join(dir,'Location.swift'),binary=path.join(dir,'location');fs.writeFileSync(file,swift);
   const build=spawnSync('xcrun',['swiftc','-parse-as-library','-swift-version','5',file,'-o',binary],{encoding:'utf8',timeout:30000});assert.equal(build.status,0,build.stdout+build.stderr);
-  const run=spawnSync(binary,[],{encoding:'utf8',timeout:10000});assert.equal(run.status,0,run.stdout+run.stderr);assert.match(run.stdout,/PASS: 14 committed location checks/);
+  const run=spawnSync(binary,[],{encoding:'utf8',timeout:10000});assert.equal(run.status,0,run.stdout+run.stderr);assert.match(run.stdout,/PASS: 20 committed location checks/);
  }finally{fs.rmSync(dir,{recursive:true,force:true})}
+});
+
+test('first launch: onboarding over a native dashboard moves the sidebar to the page it shows',()=>{
+ // Restoration re-checks after it settles; later snapshots adopt while a tour is open.
+ assert.match(method('restoreCommittedLocation'),/if accepted \{persistConfirmedLocation\(\)\}\n\s*\/\/[^\n]*\n\s*if let current=snapshot \{_ = adoptTourDestination\(current\)\}/);
+ assert.match(source,/persistConfirmedLocation\(\)\n        \} else if !first \{_ = adoptTourDestination\(value\)\}/);
+ assert.match(method('adoptTourDestination'),/NativeWorkspaceLocation\.tourDestination\(selection:selection,reportedView:value\.view,tourOpen:value\.tourOpen == true\)/);
+ assert.doesNotMatch(method('adoptTourDestination'),/persistConfirmedLocation/);
 });

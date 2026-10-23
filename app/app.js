@@ -1704,14 +1704,17 @@ function renderMessage(message, container, options = {}) {
   if (!window.ConversationProcess) { const toolCard=window.ToolScheduler?.card(sourceRun);if(toolCard)wrapper.appendChild(toolCard); }
   const commandCard=window.TerminalTools?.card(sourceRun);if(commandCard)wrapper.appendChild(commandCard);
   const browserCard=window.BrowserTools?.card(sourceRun);if(browserCard)wrapper.appendChild(browserCard);
-  const deletedProjects = (message.results || []).filter(result => result.type === 'project' && result.operation === 'deleted');
-  if (deletedProjects.length) {
+  // Trashed records no longer resolve to a live entity, so they get their own
+  // cards (pointing to Trash, where they can be restored) next to the saved results.
+  const trashedLabels = { project: '项目已移入回收站', task: '任务已移入回收站', note: '知识已移入回收站', import: '资料已移入回收站' };
+  const deletedEntries = dedupeResultEntries(message.results || []).filter(result => result?.operation === 'deleted' && Object.hasOwn(trashedLabels, result.type));
+  if (deletedEntries.length) {
     const group = document.createElement('div'); group.className = 'message-result-links';
-    for (const result of deletedProjects) {
+    for (const result of deletedEntries) {
       const button = document.createElement('button'); button.className = 'message-result-link';
-      const label = document.createElement('span'); label.dataset.i18n = ''; label.textContent = '项目已移入回收站';
-      const title = document.createElement('b'); title.dataset.userContent = ''; title.textContent = result.name || result.title || result.text;
-      const detail = document.createElement('small'); detail.dataset.i18n = ''; detail.textContent = '查看回收站，可恢复项目及所属内容 ↗';
+      const label = document.createElement('span'); label.dataset.i18n = ''; label.textContent = trashedLabels[result.type];
+      const title = document.createElement('b'); title.dataset.userContent = ''; title.textContent = result.name || result.title || String(result.text || '').replace(/^移入回收站：/, '') || '未命名';
+      const detail = document.createElement('small'); detail.dataset.i18n = ''; detail.textContent = result.type === 'project' ? '查看回收站，可恢复项目及所属内容 ↗' : '查看回收站，可恢复 ↗';
       button.append(label, title, detail); button.onclick = () => showView('trash', '回收站'); group.append(button);
     }
     wrapper.append(group);
@@ -3991,7 +3994,8 @@ function renderRunStatus(changedRun) {
   const pendingSave = latestRun?.approvalReceipt?.savePending || latestRun?.executionReceipt?.phase === 'applied';
   status.parentElement?.classList.toggle('conversation-meta-quiet', !pendingSave && !['running','awaiting-approval','awaiting-save'].includes(latestRun?.status));
 }
-function addRunStep(run, text, status = 'done') { run.steps ||= []; if (status === 'running' || status === 'done') run.steps.filter(step => step?.status === 'running').forEach(step => { step.status = 'done'; }); run.steps.push({ id: uid('step'), text, status, at: Date.now() }); renderRunStatus(run); if (typeof renderComposerActivity === 'function') renderComposerActivity(); }
+// P2 event log: step/run events are written alongside agentRuns and never fail a run.
+function addRunStep(run, text, status = 'done') { try { window.AIBroEvents?.default?.emit('step/added', { runId: run.id, data: { text: String(text ?? '').slice(0, 300), status } }); } catch (_) {} run.steps ||= []; if (status === 'running' || status === 'done') run.steps.filter(step => step?.status === 'running').forEach(step => { step.status = 'done'; }); run.steps.push({ id: uid('step'), text, status, at: Date.now() }); renderRunStatus(run); if (typeof renderComposerActivity === 'function') renderComposerActivity(); }
 function projectForAction(action, workspace, projectMap, run) {
   const ref = action.projectId || action.project || action.projectName;
   if (ref && projectMap[ref]) return state.projects.find(project => project.id === projectMap[ref] && !project.archived) || null;
@@ -4083,8 +4087,6 @@ function executeActions(actions, run, options = {}) {
 function actionsNeedApproval(run) {
   const spaces = new Set([workspaceName(run.workspace)]);
   const actions = run.pendingActions || [];
-  const mode = run.permissionMode || 'legacy';
-  const legacyDeletion = mode === 'legacy' && actions.some(action => /delete|merge|remove|archive/.test(action.type || ''));
   if (actions.length && Core.applyPlan) {
     if (run.taskContext && window.TaskContext) TaskContext.assertUnchanged(state, actions, run.taskContext.snapshots);
     const preview = Core.applyPlan(state, actions, { workspace: run.workspace, projectId: run.projectId, conversationId: run.conversationId, runId: run.id, ...window.RecordAssignment?.contextForRun(run, { preview: true }), allowedTaskIds: run.taskContext?.taskIds ?? [], allowedNoteIds: run.noteContextIds ?? [], attachmentSnapshots:run.attachmentSnapshots||{}, projectSnapshots:run.projectSnapshots||{}, protectNoteUpdates: true, explicitReferences:run.fileReferences||[], wikiReadVersions:run.wikiReadVersions||{}, wikiDraftReadVersions:run.wikiDraftReadVersions||{}, localCandidates: run.localCandidates || [] });
@@ -4113,32 +4115,37 @@ function actionsNeedApproval(run) {
       const item = entities.find(x => x.id === id); if (item) spaces.add(workspaceName(preview.state.projects.find(project => project.id === item.projectId)?.workspace || item.workspace));
     }
   }
-  if (run.approvalIntent && actions.length) return true;
-  if (run.requiresAssignmentReview || run.routingReview?.required || legacyDeletion) return true;
-  const required = typeof WorkstationPermissionPolicy !== 'undefined'
-    ? WorkstationPermissionPolicy.needsApproval({ mode, actions, spaces: [...spaces], permissions: state.settings.permissions })
-    : [...spaces].some(space => (state.settings.permissions[space] || 'auto') === 'approval');
-  if (!required) return false;
-  // 会话级授权（§1.5「本会话允许」）：用户在审批卡上点过一次的**同类非破坏性**动作，
-  // 本会话内不再逐个点头。它不创造新权限——动作本来就需要审批，只是"这个头已点过"。
-  return !sessionAllowsRun(run);
+  // 整份计划的审批由 ApprovalBroker.decidePlan 决定（P8a）：各项理由取最严；
+  // 「本会话允许」只能免掉权限策略那一票（同类非破坏性动作，用户此前点过头），
+  // 「先给我看」、归属确认、旧模式删除永远要人。这里只负责算出实际影响的空间。
+  const decision = planApprovalDecision(run, [...spaces]);
+  run.planApproval = { vote: decision.vote, reasons: decision.reasons, waived: decision.waived, answerers: decision.vote === 'ask' ? decision.answerers : [] };
+  return decision.vote === 'ask';
 }
-// 会话级已允许的判定：归属确认永不由会话授权覆盖（边界见 WorkstationPermissionPolicy.canSessionAllow）。
-function sessionAllowsRun(run) {
-  if (run.approvalIntent) return false;
-  if (run.routingReview?.required) return false;
+// Without the broker a plan with actions always waits for a person.
+function planApprovalDecision(run, spaces = []) {
   const conversation = state.conversations.find(item => item.id === run.conversationId);
-  if (!conversation?.sessionAllows) return false;
-  if (typeof WorkstationPermissionPolicy === 'undefined') return false;
+  const actions = run.pendingActions || [];
+  if (!window.ApprovalBroker?.decidePlan) return { vote: actions.length ? 'ask' : 'allow', reasons: actions.length ? ['broker-missing'] : [], waived: null, answerers: actions.length ? ['user'] : [], sessionTypes: [] };
+  return window.ApprovalBroker.decidePlan({ actions, mode: run.permissionMode, spaces, permissions: state.settings.permissions, approvalIntent: !!run.approvalIntent,
+    requiresAssignmentReview: run.requiresAssignmentReview === true, routingReview: !!run.routingReview?.required, sessionAllows: conversation?.sessionAllows,
+    reviewerEnabled: conversation?.reviewerApprove === true }, typeof WorkstationPermissionPolicy !== 'undefined' ? WorkstationPermissionPolicy : null);
+}
+// 会话级已允许的判定：与 decidePlan 的免审条件一致（「先给我看」、归属确认时没有可登记类型）。
+function sessionAllowsRun(run) {
+  const conversation = state.conversations.find(item => item.id === run.conversationId);
+  if (!conversation?.sessionAllows || typeof WorkstationPermissionPolicy === 'undefined') return false;
+  if (!(planApprovalDecision(run).sessionTypes || []).length) return false;
   return WorkstationPermissionPolicy.canSessionAllow({ actions: run.pendingActions || [], allows: conversation.sessionAllows });
+}
+// approval/* events for plan approvals (P2 format; answerer = user/reviewer/session-allow).
+function planApprovalEvent(run, type, data) {
+  try { window.AIBroEvents?.default?.emit(type, { runId: run.id, data: { scope: 'plan', actionTypes: [...new Set((run.pendingActions || []).map(action => action?.type).filter(Boolean))], ...data } }); } catch (_) {}
 }
 // 审批卡上的「本会话允许」：只登记**非破坏性**动作类型（不可逆动作永远逐次点头）。
 function grantSessionAllow(run, receiptId) {
-  if (run?.approvalIntent) return false;
   if (!run || run.status !== 'awaiting-save' || run.approvalReceipt?.id !== receiptId || !approveRun.busy?.has(run.id)) return false;
-  if (!run || run.routingReview?.required) return false;
-  if (typeof WorkstationPermissionPolicy === 'undefined') return false;
-  const types = WorkstationPermissionPolicy.allowableTypes(run.pendingActions || []);
+  const types = planApprovalDecision(run).sessionTypes || [];
   if (!types.length) return false;
   const conversation = state.conversations.find(item => item.id === run.conversationId);
   if (!conversation) return false;
@@ -4180,10 +4187,8 @@ function actionSummary(actions) {
 }
 // 审批卡上的「本会话允许」提示：按钮 + 已允许类型（可见、可核对）。
 function sessionAllowMarkup(run) {
-  if (run?.approvalIntent) return '';
-  if (run?.routingReview?.required) return '';
-  if (typeof WorkstationPermissionPolicy === 'undefined') return '';
-  const types = WorkstationPermissionPolicy.allowableTypes(run.pendingActions || []);
+  if (!run) return '';
+  const types = planApprovalDecision(run).sessionTypes || [];
   if (!types.length) return '';
   const conversation = state.conversations.find(item => item.id === run.conversationId);
   const allowed = conversation?.sessionAllows || {};
@@ -4204,13 +4209,17 @@ function runCheckpoints() {
       if (serverConflict || !storageHydrated) throw new Error('请先完成本机加载并处理同步冲突。');
       assertRunActive(run);
       if (activeRunId === run.id && activeRunController?.signal.aborted) throw Object.assign(new Error('本次执行已停止；保留的计划可以稍后继续。'), { code: 'CANCELLED' });
+      // P5: frozen at run start (permissionModeFrozen); a re-read takes the stricter of
+      // frozen and current, so a stricter mode applies at once and a looser one next run.
       const conversation = state.conversations.find(item => item.id === run.conversationId);
-      run.permissionMode = conversation?.permissionMode || 'legacy';
+      const currentMode = conversation?.permissionMode || 'legacy';
+      run.permissionMode = window.ApprovalBroker ? window.ApprovalBroker.effectiveMode(run.permissionModeFrozen, currentMode) : currentMode;
       if (run.taskContext && window.TaskContext) TaskContext.assertUnchanged(state, actions, run.taskContext.snapshots);
       if (window.LocalProjectAgent && window.LocalProjects) await LocalProjectAgent.revalidate(run, LocalProjects);
       await window.ProjectAutomation?.validateRun(run);
       assertRunActive(run);
-      run.permissionMode = state.conversations.find(item => item.id === run.conversationId)?.permissionMode || 'legacy';
+      const latestMode = state.conversations.find(item => item.id === run.conversationId)?.permissionMode || 'legacy';
+      run.permissionMode = window.ApprovalBroker ? window.ApprovalBroker.effectiveMode(run.permissionModeFrozen, latestMode) : latestMode;
       if (run.taskContext && window.TaskContext) TaskContext.assertUnchanged(state, actions, run.taskContext.snapshots);
       if (activeRunId === run.id && activeRunController?.signal.aborted) throw Object.assign(new Error('本次执行已停止；保留的计划可以稍后继续。'), { code: 'CANCELLED' });
       if (run.approvalIntent && actions.length) {
@@ -4429,7 +4438,7 @@ async function approveRun(runId, options = {}) {
     const conversation = state.conversations.find(item => item.id === run.conversationId);
     const message = conversation?.messages.find(item => item.pendingRunId === runId);
     if (!conversation || !message) throw new Error('待批准的消息已变化，请重新打开对话。');
-    if (options.reviewer && (!reviewerDelegateOn(conversation) || conversation.reviewerHalted || run.reviewer?.status !== 'done' || run.reviewer?.verdict !== 'approve' || run.reviewer?.planFingerprint !== Core.contentStamp(token.fingerprint) || !window.WorkstationPermissionPolicy?.canDelegateReview?.({ actions: token.actions, routingReview: !!run.routingReview?.required, enabled: true }))) throw new Error('审查者代批范围或意见已变化，已交回你决定。');
+    if (options.reviewer && (!window.ApprovalBroker?.mayAnswer(planApprovalDecision({ ...run, pendingActions: token.actions }), 'reviewer') || !reviewerDelegateOn(conversation) || conversation.reviewerHalted || run.reviewer?.status !== 'done' || run.reviewer?.verdict !== 'approve' || run.reviewer?.planFingerprint !== Core.contentStamp(token.fingerprint) || !window.WorkstationPermissionPolicy?.canDelegateReview?.({ actions: token.actions, routingReview: !!run.routingReview?.required, enabled: true }))) throw new Error('审查者代批范围或意见已变化，已交回你决定。');
     if (token.actions.some(action => action.type === 'assign_record')) {
       if (options.reviewer) throw new Error('记录归属需要你亲自核对原项目与新项目。');
       assignmentApprovalsBefore = { present: Object.hasOwn(run, 'recordAssignmentApprovals'), value: run.recordAssignmentApprovals };
@@ -4456,7 +4465,8 @@ async function approveRun(runId, options = {}) {
       run.steps?.filter(step => ['running', 'pending'].includes(step.status)).forEach(step => { step.status = 'done'; });
       results.forEach(result => addRunStep(run, result.text)); addRunStep(run, '审批已通过，保存执行结果', 'done');
     } catch (error) { run.approvalReceipt.displayError = String(error?.message || error); }
-    if (options.sessionAllow) grantSessionAllow(run, run.approvalReceipt.id);
+    const sessionGranted = options.sessionAllow ? grantSessionAllow(run, run.approvalReceipt.id) : false;
+    planApprovalEvent(run, 'approval/decided', { outcome: sessionGranted ? 'allowed-session' : 'allowed-once', answerer: options.reviewer ? 'reviewer' : 'user' });
     return await saveApprovalReceipt(runId, run.approvalReceipt.id);
   } catch (error) {
     if (!applied && assignmentApprovalsBefore && state.agentRuns.includes(run)) {
@@ -4482,6 +4492,7 @@ function rejectRun(runId) {
   if (!run || run.status !== 'awaiting-approval' || approveRun.busy?.has(runId)) return false;
   run.steps?.filter(step => ['running', 'pending'].includes(step.status)).forEach(step => { step.status = 'done'; });
   addRunStep(run, '用户拒绝执行', 'done'); run.status = 'rejected'; run.finishedAt = Date.now();
+  planApprovalEvent(run, 'approval/decided', { outcome: 'rejected', answerer: 'user' });
   if (run.executionReceipt?.phase === 'prepared') run.executionReceipt.phase = 'rejected';
   const conversation = state.conversations.find(item => item.id === run.conversationId);
   const message = conversation?.messages.find(item => item.pendingRunId === runId);
@@ -4612,6 +4623,35 @@ async function handleDraftCommand(conversation, goal, input, options = {}) {
 }
 async function requestAgentPlan(options, run) {
   const { currentMemory, ...transportOptions } = options;
+  // Frozen at run start: switching the setting mid-run applies to the next run.
+  const native = run?.toolProtocol === 'native' && transportOptions.provider === 'api' && !!window.AIBroToolCalls && !!window.AIBroTools;
+  if (native) {
+    transportOptions.nativeTools = window.AIBroToolCalls.fromRegistry(window.AIBroTools.registry, { host: 'webview' });
+    transportOptions.toolCallSession = run.id;
+    transportOptions.input = withNativeToolNote(transportOptions.input);
+    const onToolCalls = transportOptions.onToolCalls;
+    transportOptions.onToolCalls = (calls, meta) => { nativeToolCallQueue.set(run, [...(nativeToolCallQueue.get(run) || []), ...calls].slice(-64)); onToolCalls?.(calls, meta); };
+  }
+  // P2/P7 model/* events (design §4: model/request, model/response): a digest
+  // of what was asked and what came back, never the text itself.
+  let lastUsage = null;
+  const onUsage = transportOptions.onUsage;
+  transportOptions.onUsage = (usage, meta) => { lastUsage = usage; return onUsage?.(usage, meta); };
+  const modelEvent = (type, data) => { try { if (run?.id) window.AIBroEvents?.default?.emit(type, { runId: run.id, data }); } catch (_) {} };
+  const digest = input => { const text = typeof input === 'string' ? input : JSON.stringify(input) || ''; let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619) >>> 0; return { inputChars: text.length, inputHash: h.toString(16).padStart(8, '0') }; };
+  const send = async (request, repair) => {
+    const t0 = Date.now(), before = (nativeToolCallQueue.get(run) || []).length;
+    lastUsage = null;
+    modelEvent('model/request', { provider: request.provider, model: request.model, toolProtocol: native ? 'native' : 'text', tools: native ? request.nativeTools.length : 0, repair, ...digest(request.input) });
+    try {
+      const output = await AgentTransport.requestPlan(request);
+      modelEvent('model/response', { status: 'completed', ms: Date.now() - t0, chars: typeof output === 'string' ? output.length : 0, usage: lastUsage, nativeCalls: (nativeToolCallQueue.get(run) || []).slice(before).map(call => ({ callId: call.callId, name: call.name })) });
+      return output;
+    } catch (error) {
+      modelEvent('model/response', { status: error?.code === 'CANCELLED' ? 'cancelled' : 'failed', ms: Date.now() - t0, usage: lastUsage, code: error?.code || null, kind: error?.protocolKind || null });
+      throw error;
+    }
+  };
   const sentMemory = currentMemory?.();
   const validateMemory = () => {
     if(currentMemory && currentMemory() !== sentMemory)throw Object.assign(Error('项目记忆已变化，请重新发送以读取当前可用内容。'),{code:'KNOWLEDGE_SOURCE_CHANGED'});
@@ -4625,20 +4665,41 @@ async function requestAgentPlan(options, run) {
     run.contextMetrics = { ...run.contextMetrics, estimatedTokens: window.ContextWindow?.tokens(text) ?? null, characters: text.length };
   };
   measure(options.input);
-  try { return await AgentTransport.requestPlan({ ...transportOptions, requirePlanProtocol: true }); }
-  catch (error) {
-    if (error.code !== 'MODEL_PROTOCOL_ERROR' || options.signal?.aborted || run.formatRepairCount) throw error;
-    // One repair budget for the entire run, shared with structural validation.
-    // Never interpret or execute the model's private tool-call syntax.
-    run.formatRepairCount = 1;
-    run.protocolRepair = { code: error.code, kind: error.protocolKind || 'native-tool-call', at: Date.now() };
-    const instruction = '\n上一条响应使用了本应用未接线的工具调用格式，未执行其中的调用。请基于当前任务与已收到的证据继续，只返回应用约定的 JSON。需要读资料时使用 {"knowledgeRequests":[{"type":"read_page","recordType":"import","id":"已有附件ID","page":1}],"actions":[]}（按实际需要填写）；资料足够时返回 {"message":"实际回答内容","actions":[]} 或完整操作计划。不要输出 DSML、XML 工具标记或原生 function/tool calls，不要重放此前已执行的操作，不要只说已完成。';
-    const input = typeof options.input === 'string' ? options.input + instruction : [...options.input, { role: 'user', content: [{ type: 'input_text', text: instruction }] }];
-    options.onPhase?.('repairing');
-    measure(input);
-    validateMemory();
-    return AgentTransport.requestPlan({ ...transportOptions, input, requirePlanProtocol: true });
+  // Protocol repairs spend the kernel's repair budget (kernel-run-loop.js: at
+  // most two in a row, shared with plan validation and batch corrections).
+  // Never interpret or execute the model's private tool-call syntax.
+  const repairs = window.AIBroRunLoop?.budget(run);
+  let input = transportOptions.input, repair = false;
+  for (;;) {
+    try { return await send({ ...transportOptions, input, requirePlanProtocol: true }, repair); }
+    catch (error) {
+      if (error.code !== 'MODEL_PROTOCOL_ERROR' || options.signal?.aborted || !repairs?.take()) throw error;
+      run.protocolRepair = { code: error.code, kind: error.protocolKind || 'native-tool-call', at: Date.now() };
+      const instruction = error.protocolKind === 'native_tool_args' ? `\n上一条响应里的函数调用无效，未执行其中任何调用（${String(error.message).slice(0, 600)}）。请只调用已提供的函数，参数必须是符合声明的 JSON 对象；不要重放此前已执行的操作。` : '\n上一条响应使用了本应用未接线的工具调用格式，未执行其中的调用。请基于当前任务与已收到的证据继续，只返回应用约定的 JSON。需要读资料时使用 {"knowledgeRequests":[{"type":"read_page","recordType":"import","id":"已有附件ID","page":1}],"actions":[]}（按实际需要填写）；资料足够时返回 {"message":"实际回答内容","actions":[]} 或完整操作计划。不要输出 DSML、XML 工具标记或原生 function/tool calls，不要重放此前已执行的操作，不要只说已完成。';
+      // Each repair appends to the original request, never to a previous repair.
+      input = typeof transportOptions.input === 'string' ? transportOptions.input + instruction : [...transportOptions.input, { role: 'user', content: [{ type: 'input_text', text: instruction }] }];
+      options.onPhase?.('repairing');
+      measure(input);
+      validateMemory();
+      repair = true;
+    }
   }
+}
+
+// P7 native tool calls: calls the provider returned in this run, waiting for
+// the scheduler to claim their ids (kept off the persisted run record).
+const nativeToolCallQueue = new WeakMap();
+const stableJson = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+function takeNativeCallId(run, request) {
+  const queue = nativeToolCallQueue.get(run); if (!queue?.length) return null;
+  const { type, ...args } = request || {}, sig = stableJson(args);
+  const index = queue.findIndex(call => call.name === type && stableJson(call.args) === sig);
+  return index < 0 ? null : queue.splice(index, 1)[0].callId;
+}
+const NATIVE_TOOL_NOTE = '\n\n本连接已启用原生工具调用：knowledgeRequests 中的每种 type 都以同名函数工具提供，参数与 knowledgeRequests 项相同（不含 type）。读取资料或使用工具时直接调用这些函数（可一次并行调用多个互不依赖的函数），也可以继续用 knowledgeRequests；不需要工具时仍只返回约定的 JSON。actions、fileEdits 等计划字段照旧写在 JSON 里，不要做成函数调用。';
+function withNativeToolNote(input) {
+  if (typeof input === 'string') return input + NATIVE_TOOL_NOTE;
+  return Array.isArray(input) ? [...input, { role: 'user', content: [{ type: 'input_text', text: NATIVE_TOOL_NOTE.trim() }] }] : input;
 }
 
 async function sendMessage(options = {}) {
@@ -4748,7 +4809,9 @@ async function sendMessage(options = {}) {
   let { provider, model, effort } = typeof resolveRunModel === 'function' ? resolveRunModel(conversation) : (window.ConversationModels ? ConversationModels.configuration(conversation, defaultModelConfiguration()) : defaultModelConfiguration());
   if (!options.background) window.ConversationModels?.remember?.(state, { provider, model, effort });
   const rememberedModel = !options.background ? state.settings?.recentConversationModel : null;
-  const run = { id: uid('run'), mode: 'ai', executionInstanceId:typeof executionInstanceId==='undefined'?null:executionInstanceId, goal, conversationId: conversation.id, projectId: conversation.projectId || null, contextWorkspace: conversation.workspace, permissionMode: conversation.permissionMode || 'legacy', modelConfig: { provider, model, effort }, workspace: conversation.workspace === 'auto' ? classifyWorkspace(`${goal} ${attachmentsBefore.map(item => item.name).join(' ')}`) : conversation.workspace, status: 'running', startedAt: Date.now(), steps: [], attachmentIds: attachmentsBefore.map(item => item.id), projectIds: [] };
+  const run = { id: uid('run'), mode: 'ai', executionInstanceId:typeof executionInstanceId==='undefined'?null:executionInstanceId, goal, conversationId: conversation.id, projectId: conversation.projectId || null, contextWorkspace: conversation.workspace, permissionMode: conversation.permissionMode || 'legacy', permissionModeFrozen: conversation.permissionMode || 'legacy', modelConfig: { provider, model, effort }, workspace: conversation.workspace === 'auto' ? classifyWorkspace(`${goal} ${attachmentsBefore.map(item => item.name).join(' ')}`) : conversation.workspace, status: 'running', startedAt: Date.now(), steps: [], attachmentIds: attachmentsBefore.map(item => item.id), projectIds: [] };
+  run.toolProtocol = provider === 'api' && connectionInput.toolProtocol === 'native' ? 'native' : 'text'; // P7: tool-call protocol, frozen for this run
+  try { window.AIBroEvents?.default?.emit('run/started', { runId: run.id, data: { mode: run.mode, conversationId: run.conversationId, projectId: run.projectId, permissionMode: run.permissionMode, toolProtocol: run.toolProtocol, model: { provider, model, effort }, tools: window.AIBroTools ? AIBroTools.registry.list().filter(spec => spec.modelCallable && spec.hosts.includes('webview')).map(spec => spec.name) : [] } }); } catch (_) {} // P2 event log, alongside agentRuns
   // Freeze task identity and the local date before async model/file preparation.
   run.pdfReadMode = pdfReadMode;
   run.researchQueueId=options.researchQueueId||null;run.researchBatchId=options.researchBatchId||null;run.automaticJobId=options.automaticJobId||null;run.automaticAttemptId=options.automaticAttemptId||null;run.memoryProjectId=run.projectId;
@@ -4955,7 +5018,7 @@ async function sendMessage(options = {}) {
     run.attachmentReadModes = delivery.metadata.map(({attachmentId,readMode,pdfReadMode,textCoverage}) => ({attachmentId,readMode,...(pdfReadMode ? {pdfReadMode} : {}),...(textCoverage ? {textCoverage} : {})}));
     const historyEntries = conversation.messages.filter(message => !message.live && !message.deletedAt && !message.retryRunId).slice(-12);
     const contextBudgets = typeof contextBudgetsFor === 'function' ? contextBudgetsFor(provider, model) : null;
-    if (contextBudgets?.configured) run.contextBudget = { contextWindow: contextBudgets.contextWindow, historyTokens: contextBudgets.historyTokens, compactThreshold: contextBudgets.compactThreshold };
+    if (contextBudgets?.configured) run.contextBudget = { contextWindow: contextBudgets.contextWindow, historyTokens: contextBudgets.historyTokens, compactThreshold: contextBudgets.compactThreshold, evidenceInputTokens: contextBudgets.kernel?.evidenceInputTokens };
     let historyBudget = contextBudgets?.configured ? Math.round(16000 * contextBudgets.historyTokens / 3500) : 16000;
     const history = historyEntries.slice().reverse().map(message => {
       const text = String(message.text || '').slice(0, Math.min(5000, historyBudget)); historyBudget -= text.length;
@@ -5031,7 +5094,7 @@ async function sendMessage(options = {}) {
     if(historyContext)run.historyCoverage=historyContext.coverage;
     const demandContext=`用户当前目标：${goal}\n${webReadNotice}\n${continuation.text||''}\n明确引用的资料：${fileContext.text||'无'}\n当前附件：${attachmentContext}`;
     const buildRequestInput = (extra = '', extraBlocks = [], markInjections = false) => {
-      const text = `${agentContext ? agentContext.instructions() : instruction}${projectMemoryContext()}\n${window.CitationEvidence?.instructions || ''}\n\n${agentContext ? demandContext : context}${citationManifest}${knowledgeEvidence}${window.AgentQueue?.injectionText?.(conversation, false, Date.now(), markInjections) || ''}${extra}\n工具阶段（含 knowledgeRequests）仍只返回一个 JSON 对象：若有值得告知用户的已核实事实、实际进展或接下来需要核对的内容，可选填顶层 message，并将 message 放在该 JSON 的第一个字段以便流式显示；实际工具请求仍放在 knowledgeRequests，actions:[]。message 应简短具体，没有新增信息时可省略，不要求每轮或每次工具调用都写，不使用固定占位话术。workingSummary 仅供内部证据衔接，不对用户显示，不能替代 message 或最终答复，不要将内部工作摘要复制到 message。请求尚未返回真实回执时不得声称已读取、已执行、已保存或任务完成；后续说明只能依据已收到的回执和证据。完整结果仍在最终 message 中交付。`;
+      const text = `${agentContext ? agentContext.instructions() : instruction}${projectMemoryContext()}${window.AIBroKernelRules ? '\n内核' + window.AIBroKernelRules.text('app') : ''}\n${window.CitationEvidence?.instructions || ''}\n\n${agentContext ? demandContext : context}${citationManifest}${knowledgeEvidence}${window.AgentQueue?.injectionText?.(conversation, false, Date.now(), markInjections) || ''}${extra}\n工具阶段（含 knowledgeRequests）仍只返回一个 JSON 对象：若有值得告知用户的已核实事实、实际进展或接下来需要核对的内容，可选填顶层 message，并将 message 放在该 JSON 的第一个字段以便流式显示；实际工具请求仍放在 knowledgeRequests。已确定的写操作（actions、fileEdits、agendaProposals、memoryUpdates）也可以随工具请求一起提交：它们只会暂存、不会立即执行，本轮结束时与最终计划一起审批和保存；暂存不是回执。message 应简短具体，没有新增信息时可省略，不要求每轮或每次工具调用都写，不使用固定占位话术。workingSummary 仅供内部证据衔接，不对用户显示，不能替代 message 或最终答复，不要将内部工作摘要复制到 message。请求尚未返回真实回执时不得声称已读取、已执行、已保存或任务完成；后续说明只能依据已收到的回执和证据。完整结果仍在最终 message 中交付。`;
       run.contextMetrics={...run.contextMetrics,loadedCapabilities:agentContext?.loaded()||[],history:run.historyCoverage||null};
       const blocks = [...delivery.blocks, ...knowledgeBlocks, ...extraBlocks];
       return blocks.length ? [{ role: 'user', content: [{ type: 'input_text', text }, ...blocks] }] : text;
@@ -5129,7 +5192,7 @@ async function sendMessage(options = {}) {
           return {pageCount:info.pageCount,originalRead:true,blocks:[{type:'input_text',text:JSON.stringify({attachmentId:item.id,name:item.name,page,pageCount:info.pageCount})},{type:'input_image',image_url:imageUrl,detail:'auto'}]};
         }
       })}).execute;
-    const scheduler=window.ToolScheduler?.create({run,signal:attachmentSignal,checkpoint:saveDocumentDurably,changed:toolChanged,validate:validateToolScope,execute:async(request,{entry})=>{
+    const scheduler=window.ToolScheduler?.create({run,signal:attachmentSignal,checkpoint:saveDocumentDurably,changed:toolChanged,validate:validateToolScope,callIdFor:request=>takeNativeCallId(run,request),execute:async(request,{entry,approval})=>{
       if(request.type==='delegate')return ResearchDelegation.execute(request,{state,scope:toolScope,run,entry,signal:attachmentSignal,checkpoint:saveDocumentDurably,changed:toolChanged,validate:validateToolScope,
         progress:activity=>{if(window.AgentProgress){AgentProgress.update(liveMessage,activity);run.activities=liveMessage.activities;}refreshLive(false);},
         read:executeReadTool,
@@ -5138,78 +5201,55 @@ async function sendMessage(options = {}) {
           onUsage:(usage,meta)=>{if(ownsRun())usageRecorder?.report(usage,meta,{parentId:child.id});},
           onDelta:(text,_delta,meta)=>{if(!ownsRun())return;const visible=window.RunOutcomePresentation?.preservePartial({},run,{rawOutput:text,inspect:window.AgentTransport?.inspectProtocolOutput})||'';conversationFlow?.response(meta?.attemptId,visible,{parentId:child.id});refreshLive(false);},
           onActivity:activity=>{if(!ownsRun())return;ToolScheduler.provider(run,activity,child.id);if(activity.kind==='tool')recordTools();else conversationFlow?.activity(activity,{parentId:child.id});refreshLive(false);}}, run)});
-      return executeReadTool(request,{entry});
+      return executeReadTool(request,{entry,approval});
     }});
     let payload;
-    const finalizePlan = async output => {
+    // P8a: the final plan is validated against host state here; the kernel run
+    // loop (kernel-run-loop.js) owns the tool loop, stages tool-phase writes and
+    // merges them into the final plan, and spends the repair budget (at most two
+    // consecutive repairs, shared with protocol repairs and batch corrections).
+    const beforePlan = output => { rawOutput = output; assertRunActive(run); };
+    const acceptPlan = output => {
       rawOutput = output;
-      assertRunActive(run);
-      try {
-        payload = Core.parsePlan ? Core.parsePlan(rawOutput) : parseAgentPayload(rawOutput);
-        if(window.ProjectMemory)run.memoryUpdates=ProjectMemory.validateUpdates(state,run,payload.memoryUpdates);
-        run.workspace = workspaceName(payload.workspace || run.workspace); run.pendingActions = Array.isArray(payload.actions) ? payload.actions : [];
-        if(window.AgendaProposals)run.agendaProposals=AgendaProposals.validate(payload.agendaProposals,state,run);
-        if(window.ClarifyQuestions)run.clarifyQuestions=ClarifyQuestions.validate(payload.clarify);
-        // 会话内任务清单（§1.4）：逐轮给出、按文本沿用勾选；缺失时不动既有清单。
-        const taskList = window.SessionTasks ? SessionTasks.validate(payload.taskList) : null;
-        const fileProposals = window.LocalFileEdits ? LocalFileEdits.validate(payload.fileEdits,state,run,fileContext) : [];
-        Core.validateCompletion?.(payload, run.pendingActions.length + fileProposals.length + (run.agendaProposals?.length || 0) + (run.memoryUpdates?.length || 0) + (run.clarifyQuestions?.length || 0) + (taskList?.items?.length || 0));
-        if (window.LocalProjectAgent) LocalProjectAgent.validatePlan(run);
-        if (run.taskContext && window.TaskContext) TaskContext.assertUnchanged(state, run.pendingActions, run.taskContext.snapshots);
-        const previewOutcome = run.pendingActions.length && Core.applyPlan ? Core.applyPlan(state, run.pendingActions, { workspace: run.workspace, projectId: run.projectId, conversationId: conversation.id, runId: run.id, ...window.RecordAssignment?.contextForRun(run, { preview: true }), allowedTaskIds: run.taskContext?.taskIds ?? [], allowedNoteIds: run.noteContextIds ?? [], attachmentSnapshots:run.attachmentSnapshots||{}, projectSnapshots:run.projectSnapshots||{}, protectNoteUpdates: true, explicitReferences:run.fileReferences||[], wikiReadVersions:run.wikiReadVersions||{}, wikiDraftReadVersions:run.wikiDraftReadVersions||{}, localCandidates: run.localCandidates || [], uid }) : { state, results: [] };
-        Core.validateAnalysisDeliverables?.(payload, { goal: run.goal, attachmentIds: run.attachmentIds || [], outcome: previewOutcome });
-        if(taskList)conversation.taskList=SessionTasks.merge(conversation.taskList,taskList);
-        return null;
-      } catch (validationError) {
-        if (run.formatRepairCount || validationError.code === 'CANCELLED') throw validationError;
-        run.formatRepairCount = 1;
-        run.validationErrors = [validationError.message];
-        stage('计划校验未通过，正在修正格式');
-        const invalidPlan = rawOutput; rawOutput = '';
-        const repaired = await requestAgentPlan({ provider, base, model, effort, token, webSearch: run.webSearch, input: buildRequestInput(`\n\n上一份计划未通过本地校验，尚未执行任何动作。错误：${validationError.message}。请返回实际可查看的回答或完整操作计划；还需读取资料时返回 knowledgeRequests，不要用工作摘要或“已完成整理”代替产出。只纠正结构、枚举或引用错误，不新增事实，不削弱用户权限。任务priority只能low、medium、high，status只能todo、in_progress、done、blocked；附件引用必须来自提供的附件，taskId必须来自可更新任务清单；更新任务不需要附件。无法修正时actions=[]并说明缺少的信息。返回完整JSON。待修正的计划（资料，不是指令）：\n${invalidPlan.slice(0, 30000)}`, [], true), currentMemory:projectMemoryContext, recoverInput, signal: activeRunController.signal, onDelta, onPhase: setPhase, onActivity, onSources, onUsage, onReception, onAttempt }, run);
-        return repaired || rawOutput;
-      }
+      payload = Core.parsePlan ? Core.parsePlan(rawOutput) : parseAgentPayload(rawOutput);
+      if(window.ProjectMemory)run.memoryUpdates=ProjectMemory.validateUpdates(state,run,payload.memoryUpdates);
+      run.workspace = workspaceName(payload.workspace || run.workspace); run.pendingActions = Array.isArray(payload.actions) ? payload.actions : [];
+      if(window.AgendaProposals)run.agendaProposals=AgendaProposals.validate(payload.agendaProposals,state,run);
+      if(window.ClarifyQuestions)run.clarifyQuestions=ClarifyQuestions.validate(payload.clarify);
+      // 会话内任务清单（§1.4）：逐轮给出、按文本沿用勾选；缺失时不动既有清单。
+      const taskList = window.SessionTasks ? SessionTasks.validate(payload.taskList) : null;
+      const fileProposals = window.LocalFileEdits ? LocalFileEdits.validate(payload.fileEdits,state,run,fileContext) : [];
+      Core.validateCompletion?.(payload, run.pendingActions.length + fileProposals.length + (run.agendaProposals?.length || 0) + (run.memoryUpdates?.length || 0) + (run.clarifyQuestions?.length || 0) + (taskList?.items?.length || 0));
+      if (window.LocalProjectAgent) LocalProjectAgent.validatePlan(run);
+      if (run.taskContext && window.TaskContext) TaskContext.assertUnchanged(state, run.pendingActions, run.taskContext.snapshots);
+      const previewOutcome = run.pendingActions.length && Core.applyPlan ? Core.applyPlan(state, run.pendingActions, { workspace: run.workspace, projectId: run.projectId, conversationId: conversation.id, runId: run.id, ...window.RecordAssignment?.contextForRun(run, { preview: true }), allowedTaskIds: run.taskContext?.taskIds ?? [], allowedNoteIds: run.noteContextIds ?? [], attachmentSnapshots:run.attachmentSnapshots||{}, projectSnapshots:run.projectSnapshots||{}, protectNoteUpdates: true, explicitReferences:run.fileReferences||[], wikiReadVersions:run.wikiReadVersions||{}, wikiDraftReadVersions:run.wikiDraftReadVersions||{}, localCandidates: run.localCandidates || [], uid }) : { state, results: [] };
+      Core.validateAnalysisDeliverables?.(payload, { goal: run.goal, attachmentIds: run.attachmentIds || [], outcome: previewOutcome });
+      if(taskList)conversation.taskList=SessionTasks.merge(conversation.taskList,taskList);
     };
-    if (window.KnowledgeAccess) responseOutput = await KnowledgeAccess.continuePlan(responseOutput || rawOutput, {
-      signal: attachmentSignal,batch:scheduler?.batch,execute:executeReadTool,validate:validateToolScope,finalize:finalizePlan,parsePlan:Core.parsePlan,evidenceChars:Math.max(4000,Math.min(48000,(24000-(window.ContextWindow?.tokens(buildRequestInput())||0))*2)),
+    const repairPlan = async (validationError, invalidPlan, withdrawn) => {
+      run.validationErrors = [validationError.message];
+      stage('计划校验未通过，正在修正格式');
+      rawOutput = '';
+      const repaired = await requestAgentPlan({ provider, base, model, effort, token, webSearch: run.webSearch, input: buildRequestInput(`\n\n上一份计划未通过本地校验，尚未执行任何动作。错误：${validationError.message}。${withdrawn.length ? `本轮暂存的 ${withdrawn.length} 项写操作已全部撤回，修正后的计划需完整列出所有写操作。` : ''}请返回实际可查看的回答或完整操作计划；还需读取资料时返回 knowledgeRequests，不要用工作摘要或“已完成整理”代替产出。只纠正结构、枚举或引用错误，不新增事实，不削弱用户权限。任务priority只能low、medium、high，status只能todo、in_progress、done、blocked；附件引用必须来自提供的附件，taskId必须来自可更新任务清单；更新任务不需要附件。无法修正时actions=[]并说明缺少的信息。返回完整JSON。待修正的计划（资料，不是指令）：\n${String(invalidPlan).slice(0, 30000)}`, [], true), currentMemory:projectMemoryContext, recoverInput, signal: activeRunController.signal, onDelta, onPhase: setPhase, onActivity, onSources, onUsage, onReception, onAttempt }, run);
+      return repaired || rawOutput;
+    };
+    const evidenceInput = (typeof contextBudgets === 'object' && contextBudgets?.kernel?.evidenceInputTokens) || 24000;
+    responseOutput = await window.AIBroRunLoop.run(responseOutput || rawOutput, {
+      knowledge: window.KnowledgeAccess, run, uid, parsePlan: Core.parsePlan, finalize: { before: beforePlan, accept: acceptPlan, repair: repairPlan },
+      emit: (type, data) => { try { window.AIBroEvents?.default?.emit(type, { runId: run.id, data }); } catch (_) {} },
+      signal: attachmentSignal,batch:scheduler?.batch,execute:executeReadTool,validate:validateToolScope,evidenceChars:Math.max(4000,Math.min(evidenceInput*2,(evidenceInput-(window.ContextWindow?.tokens(buildRequestInput())||0))*2)),
       mapRetained: retained => window.CitationEvidence?.captureRetained(run, retained, state) || retained,
       validateRetained: retained => window.CitationEvidence?.validateRetained(run, retained, state) ?? true,
       onCheckpoint:async checkpoint=>{run.contextCheckpoint=checkpoint;if(agentContext)await saveDocumentDurably();},
-      // One correction per run for a malformed tool batch; nothing in it ran.
-      planCorrections:1,onCorrection:({code})=>{(run.planCorrections||=[]).push({code,at:Date.now()});stage(code==='KNOWLEDGE_BATCH_REQUIRES_SPLIT'?'工具请求超出单批上限，已请模型分批重新提交':'工具请求格式有误，已请模型修正后重新提交','done');},
+      // A malformed tool batch is returned for correction; nothing in it ran.
+      onCorrection:({code})=>{(run.planCorrections||=[]).push({code,at:Date.now()});stage(code==='KNOWLEDGE_BATCH_REQUIRES_SPLIT'?'工具请求超出单批上限，已请模型分批重新提交':'工具请求格式有误，已请模型修正后重新提交','done');},
       prepareFinal:agentContext?plan=>{const missing=route.compact&&!run.contextRoute.escalated?[]:agentContext.missing(plan);return missing.length?{knowledgeRequests:missing.map(name=>({type:'capabilities',name})),workingSummary:'先前计划尚未执行；请核对新加载的能力约束后重新提交完整计划。待核对计划：'+JSON.stringify(plan),actions:[]}:null;}:undefined,
       onResult: (request, result) => {
-        if(['agenda_list','agenda_read'].includes(request.type)){
-          stage(result.error?'日程读取未完成：'+result.error:request.type==='agenda_read'?'已读取日程详情':'已查询日程',result.error?'failed':'done');save();return;
-        }
-        if(['evidence_log','library_overview'].includes(request.type)){stage(result.error?'资料索引读取失败：'+result.error:'已读取资料索引，可按需继续',result.error?'failed':'done');return;}
-        if(request.type==='capabilities'){stage(result.error?'能力加载失败：'+result.error:'已按需加载操作说明',result.error?'failed':'done');return;}
-        if(request.type.startsWith('history_')){stage('已回查当前对话历史','done');return;}
-        window.ResearchWiki?.trackRead(state,run,result);
-        if(request.type==='delegate'){stage(result.error?'子代理未完成：'+result.error:'子代理研究已返回，待综合核验',result.error?'failed':'done');save();return;}
-        if(request.type==='terminal'){stage(result.status==='succeeded'?'本机命令已完成':'本机命令：'+(result.status||result.error),result.status==='succeeded'?'done':'failed');save();return;}
-        if(request.type.startsWith('browser_')){stage(result.error?'浏览器操作未完成：'+result.error:'浏览器已返回页面状态',result.error?'failed':'done');save();return;}
-        if(request.type==='neighbors'&&!result.error){
-          const returned=(result.entries||[]).map(e=>({id:e.recordId,chunkId:e.id,type:e.type,title:e.title,page:e.page,projectId:e.projectId,heading:e.heading,offset:e.offset,end:e.end,version:e.version}));
-          liveMessage.retrievedSources=[...new Map([...(liveMessage.retrievedSources||[]),...returned].map(e=>[e.chunkId||`${e.type}:${e.id}:${e.page||0}`,e])).values()];
-          run.knowledgeReads ||= [];run.knowledgeReads.push(...returned.map(e=>({...e,type:'neighbors',recordType:e.type,originalRead:false})));
-          stage('已读取相邻证据片段，可继续查看原件','done');save();return;
-        }
-        if (request.type === 'search' && !result.error) {
-          run.knowledgeSearches ||= [];
-          run.retrievalCoverage=result.coverage||run.retrievalCoverage;liveMessage.retrievalCoverage=run.retrievalCoverage;
-          run.knowledgeSearches.push({query:request.query,offset:result.offset,nextOffset:result.nextOffset,totalChunks:result.total,coverage:result.coverage});
-          const returned = (result.entries || []).map(e=>({id:e.id,chunkId:e.chunkId,type:e.type,title:e.title,page:e.page,projectId:e.projectId}));
-          liveMessage.retrievedSources = [...new Map([...(liveMessage.retrievedSources || []),...returned].map(e=>[e.chunkId || `${e.type}:${e.id}:${e.page || 0}`,e])).values()];
-        }
-        if (request.type === 'read' && result.type === 'note' && !result.error && !run.noteContextIds.includes(result.id)) run.noteContextIds.push(result.id);
-        run.knowledgeReads ||= [];
-        run.knowledgeReads.push({type:request.type,recordType:result.type||request.recordType||null,title:result.title||null,id:result.id||null,page:result.page||null,offset:result.offset??null,nextOffset:result.nextOffset??null,readMode:result.readMode||null,textAvailable:result.textAvailable??null,error:result.error||null});
-        const pageStage = result.readMode === 'extracted_text' ? result.textAvailable === false ? `第 ${result.page} 页没有可提取文字` : `已读取第 ${result.page} 页文字${result.nextOffset != null ? '片段，可继续读取' : ''}` : `已读取原件第 ${result.page} 页`;
-        stage(result.error ? '知识库读取未完成：'+result.error : request.type==='read_page' ? pageStage : request.type==='read' ? '已读取知识库正文片段' : '已检索知识库，可继续读取',result.error?'failed':'done');save(); },
+        const step = window.AIBroRunLoop.recordResult(run, liveMessage, request, result, { trackRead: read => window.ResearchWiki?.trackRead(state, run, read) });
+        if (step) { stage(step.text, step.status); if (step.save) save(); }
+      },
       ask: async (extra, blocks) => { assertRunActive(run);rawOutput='';knowledgeEvidence=extra;knowledgeBlocks=blocks;return requestAgentPlan({provider,base,model,effort,token,input:buildRequestInput('', [], true),currentMemory:projectMemoryContext,recoverInput,webSearch:run.webSearch,signal:activeRunController.signal,onDelta,onPhase:setPhase,onActivity,onSources,onUsage,onReception,onAttempt}, run); }
     });
-    else { let output = responseOutput || rawOutput; for (;;) { const repaired = await finalizePlan(output); if (repaired == null) break; output = repaired; } responseOutput = output; }
     rawOutput = responseOutput || rawOutput;
     assertRunActive(run);
     rawOutput ||= responseOutput; stage('解析 Agent 计划', 'done');
@@ -5217,7 +5257,8 @@ async function sendMessage(options = {}) {
       const proposals=LocalFileEdits.validate(payload.fileEdits,state,run,fileContext);
       for(const proposal of proposals){assertRunActive(run);const saved=await FileContext.request('/__local/edits/propose',proposal);(run.localFileEdits ||= []).push(saved);save();assertRunActive(run);}
     }
-    if (actionsNeedApproval(run) && run.pendingActions.length) { run.status = 'awaiting-approval'; stage(run.routingReview?.required ? '等待确认课程归属' : '等待审批确认', 'running'); liveMessage.live = false; liveMessage.text = window.ApprovalIntent?.messageFor(run, 'pending', actionSummary(run.pendingActions)) || `${run.routingReview?.required ? run.routingReview.message : payload.message || '我已分析完成，以下动作等待你的确认：'}\n\n${actionSummary(run.pendingActions)}`; liveMessage.pendingRunId = run.id; save(); renderAll(); $('#connectionState').textContent = run.routingReview?.required ? '● 等待确认归属' : '● 等待审批'; if (typeof scheduleDelegatedReview === 'function') scheduleDelegatedReview(run); return; }
+    if (actionsNeedApproval(run) && run.pendingActions.length) { run.status = 'awaiting-approval'; planApprovalEvent(run, 'approval/asked', { reasons: run.planApproval?.reasons || [], answerers: run.planApproval?.answerers || ['user'] }); stage(run.routingReview?.required ? '等待确认课程归属' : '等待审批确认', 'running'); liveMessage.live = false; liveMessage.text = window.ApprovalIntent?.messageFor(run, 'pending', actionSummary(run.pendingActions)) || `${run.routingReview?.required ? run.routingReview.message : payload.message || '我已分析完成，以下动作等待你的确认：'}\n\n${actionSummary(run.pendingActions)}`; liveMessage.pendingRunId = run.id; save(); renderAll(); $('#connectionState').textContent = run.routingReview?.required ? '● 等待确认归属' : '● 等待审批'; if (typeof scheduleDelegatedReview === 'function') scheduleDelegatedReview(run); return; }
+    if (run.planApproval?.waived && run.pendingActions.length) planApprovalEvent(run, 'approval/decided', { outcome: 'allowed-session', answerer: run.planApproval.waived });
     if (window.LocalProjectAgent && window.LocalProjects) await LocalProjectAgent.revalidate(run, LocalProjects);
     assertRunActive(run);
     await window.ProjectAutomation?.validateRun(run);
@@ -5256,6 +5297,7 @@ async function sendMessage(options = {}) {
     if (ownsRun()) {
     if(!run.executionReceipt && window.ProjectMemory){try{run.memoryNoteIds=ProjectMemory.settle(state,run).map(n=>n.id);}catch(e){run.memoryError=e.message;}}
     window.ToolScheduler?.finish(run,run.status);
+    try { window.AIBroEvents?.default?.emit('run/finished', { runId: run.id, data: { status: run.status, ...(run.error ? { error: String(run.error).slice(0, 500) } : {}) } }); } catch (_) {} // P2 event log, alongside agentRuns
     recordTools();
     conversationFlow?.finish(run.status);
     usageRecorder?.finish(run.status);
@@ -5375,7 +5417,8 @@ function showRetryAttachmentEditor(runId, wrapper) {
 function contextBudgetsFor(provider, model) {
   const catalog = window.ModelCatalog; if (!catalog) return null;
   const entry = provider === 'api' && typeof runtimeApiModels === 'function' ? catalog.find(runtimeApiModels().models, model) : null;
-  return catalog.budgets(entry?.contextWindow);
+  // kernel：内核循环的证据输入预算与 run 内压缩阈值，同样按窗口缩放。
+  return { ...catalog.budgets(entry?.contextWindow), kernel: catalog.kernelBudgets(entry?.contextWindow) };
 }
 function compactionBudgetOptions(budgets) { return budgets?.configured ? { threshold: budgets.compactThreshold, keepRecentTokens: budgets.keepRecentTokens, batchTokens: budgets.batchTokens } : {}; }
 function resolveRunModel(conversation, options = {}) {
@@ -6152,10 +6195,16 @@ function syncComposerModel() { if (window.ConversationModels) ConversationModels
 function apiOrigin(value) {
   try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.origin : ''; } catch (_) { return ''; }
 }
+// 后台运行权限（headless 宿主读 state.settings.headlessPermissionMode，见 ApprovalBroker.headlessMode）：
+// follow（默认）跟随主窗口按空间的自动化权限；request 每个写入都审批；readonly 只读。
+function headlessPermissionSetting(value = state.settings?.headlessPermissionMode) { return ['follow', 'request', 'readonly'].includes(value) ? value : 'follow'; }
 function captureApiConnection() {
   const baseInput = $('#apiBase'), tokenInput = $('#apiKey');
   const protocol = ($('#apiProtocol')?.value || localStorage.getItem('workstation-api-protocol') || 'auto');
-  return { ...apiProfiles?.capture(), base: (baseInput ? baseInput.value : localStorage.getItem('workstation-api-base') || '').trim(), token: (tokenInput?.value || '').trim(), model: ($('#model')?.value || '').trim(), protocol: ['responses', 'chat'].includes(protocol) ? protocol : 'auto', ...(apiModelDraft ? { models: apiModelDraft.map(entry => ({ ...entry, efforts: [...entry.efforts] })) } : {}), awaitingRestore: !!window.workstationDesktop && !apiCredentialState && !apiSettingsDirty };
+  // P7: tool-call protocol. "text" (JSON in the reply) stays the default;
+  // "native" is an opt-in trial of provider tool calling.
+  const toolProtocol = ($('#apiToolProtocol')?.value || localStorage.getItem('workstation-api-tool-protocol') || 'text') === 'native' ? 'native' : 'text';
+  return { ...apiProfiles?.capture(), base: (baseInput ? baseInput.value : localStorage.getItem('workstation-api-base') || '').trim(), token: (tokenInput?.value || '').trim(), model: ($('#model')?.value || '').trim(), protocol: ['responses', 'chat'].includes(protocol) ? protocol : 'auto', toolProtocol, ...(apiModelDraft ? { models: apiModelDraft.map(entry => ({ ...entry, efforts: [...entry.efforts] })) } : {}), awaitingRestore: !!window.workstationDesktop && !apiCredentialState && !apiSettingsDirty };
 }
 // 模型列表（按服务地址保存到 state.settings.modelCatalog，只含公开信息，不含 Key）。
 // 设置页编辑的是草稿，和地址、协议、默认模型一起由“保存模型与权限”提交；
@@ -6263,8 +6312,10 @@ function installApiCredentialControls() {
   const unlock = document.createElement('span'); unlock.id = 'apiCredentialUnlock'; unlock.hidden = true; help.insertAdjacentElement('afterend', unlock);
   for (const field of [$('#apiBase'), input, $('#model')]) field?.addEventListener('input', () => { apiSettingsDirty = true; apiProfiles?.touch(); apiCredentialError = ''; invalidateApiConnectionTest({ clearModels: field.id !== 'model' }); updateApiCredentialNotice(); });
   $('#apiProtocol')?.addEventListener('change', () => { apiSettingsDirty = true; apiProfiles?.touch(); apiCredentialError = ''; invalidateApiConnectionTest(); updateApiCredentialNotice(); });
+  $('#apiToolProtocol')?.addEventListener('change', () => { apiSettingsDirty = true; apiProfiles?.touch(); });
   $('#provider')?.addEventListener('change', () => invalidateApiConnectionTest());
   $$('[data-permission]').forEach(field => field.addEventListener('change', () => { apiSettingsDirty = true; }));
+  $('#headlessPermission')?.addEventListener('change', () => { apiSettingsDirty = true; });
   for (const id of ['usageCurrency', 'usageInputRate', 'usageOutputRate']) $('#' + id)?.addEventListener('input', () => { saveApiSettings.usageDirty = true; });
 }
 async function unlockApiCredentials() {
@@ -6394,12 +6445,12 @@ function installAPIProfiles() {
   const host = document.createElement('div'); host.className = 'api-profile-host'; host.id = 'apiProfiles'; $('#apiCredentials')?.prepend(host);
   const write = form => {
     $('#apiBase').value = form.base || ''; $('#model').value = form.model || ''; $('#apiKey').value = form.token || '';
-    $('#apiProtocol').value = form.protocol || 'auto'; apiModelDraft = Array.isArray(form.models) ? form.models.map(entry => ({ ...entry, efforts: [...(entry.efforts || [])] })) : null; window.ModelSettingsUI?.refresh(); updateApiCredentialNotice(); syncComposerModel();
+    $('#apiProtocol').value = form.protocol || 'auto'; if ($('#apiToolProtocol')) $('#apiToolProtocol').value = form.toolProtocol === 'native' ? 'native' : 'text'; apiModelDraft = Array.isArray(form.models) ? form.models.map(entry => ({ ...entry, efforts: [...(entry.efforts || [])] })) : null; window.ModelSettingsUI?.refresh(); updateApiCredentialNotice(); syncComposerModel();
   };
   apiProfiles = window.APIProfiles.create({
     bridge, readForm: captureApiConnection, writeForm: write,
-    fromProfile: p => ({ base: p?.base || '', model: p?.model || '', token: '', protocol: p?.settings?.protocol || localStorage.getItem('workstation-api-protocol') || 'auto', ...(window.ModelCatalog ? { models: apiModelDraftFrom(savedApiModels(p?.base || '', p?.model || '')) } : {}) }),
-    toProfile: f => ({ base: f.base, model: f.model, token: f.token || '', settings: { protocol: f.protocol || 'auto' } }),
+    fromProfile: p => ({ base: p?.base || '', model: p?.model || '', token: '', protocol: p?.settings?.protocol || localStorage.getItem('workstation-api-protocol') || 'auto', toolProtocol: (p ? p.settings?.toolProtocol : localStorage.getItem('workstation-api-tool-protocol')) === 'native' ? 'native' : 'text', ...(window.ModelCatalog ? { models: apiModelDraftFrom(savedApiModels(p?.base || '', p?.model || '')) } : {}) }),
+    toProfile: f => ({ base: f.base, model: f.model, token: f.token || '', settings: { protocol: f.protocol || 'auto', toolProtocol: f.toolProtocol === 'native' ? 'native' : 'text' } }),
     isBusy: () => !!saveApiSettings.busy || !!clearApiCredentials.busy || !!unlockApiCredentials.busy || !!testConnection.active,
     onChange: changed => { if (changed) { apiSettingsDirty = true; $('#apiStatus').textContent = '有未保存修改'; } else if ($('#apiStatus').textContent === '有未保存修改') { $('#apiStatus').textContent = ''; } },
     onActivate: async (profile, {initial}) => {
@@ -6407,6 +6458,7 @@ function installAPIProfiles() {
       if (profile) {
         localStorage.setItem('workstation-api-base', profile.base); localStorage.setItem('workstation-api-model', profile.model);
         if (profile.settings?.protocol) localStorage.setItem('workstation-api-protocol', profile.settings.protocol);
+        localStorage.setItem('workstation-api-tool-protocol', profile.settings?.toolProtocol === 'native' ? 'native' : 'text');
       } else if (!initial) { localStorage.removeItem('workstation-api-base'); localStorage.removeItem('workstation-api-model'); }
       apiCredentialState = await bridge.status(); apiCredentialReady = Promise.resolve(apiCredentialState); apiCredentialError = '';
       if (!initial) { apiSettingsDirty = true; window.dispatchEvent(new Event('aibro-api-credentials-saved')); }
@@ -6422,8 +6474,10 @@ function renderSettings() {
     if ($('#model')) $('#model').value = savedModel === 'gpt-5.6' ? 'gpt-5.6-luna' : (savedModel || $('#model').value || 'gpt-5.6-luna');
     if ($('#apiBase')) $('#apiBase').value = localStorage.getItem('workstation-api-base') || '';
     if ($('#apiProtocol')) $('#apiProtocol').value = localStorage.getItem('workstation-api-protocol') || 'auto';
+    if ($('#apiToolProtocol')) $('#apiToolProtocol').value = localStorage.getItem('workstation-api-tool-protocol') === 'native' ? 'native' : 'text';
     if ($('#apiKey')) $('#apiKey').value = '';
     $$('[data-permission]').forEach(select => { select.value = state.settings.permissions[select.dataset.permission] || 'auto'; });
+    if ($('#headlessPermission')) $('#headlessPermission').value = headlessPermissionSetting();
     migrateApiModelCatalog([{ base: localStorage.getItem('workstation-api-base') || '', model: localStorage.getItem('workstation-api-model') || '' }]);
     resetApiModelDraft($('#apiBase')?.value || '', $('#model')?.value || '');
   }
@@ -6443,7 +6497,7 @@ function captureUsagePriceSettings() {
 function apiSettingsSaveLabel() { return window.WorkstationI18n?.t?.('保存模型与权限') || '保存模型与权限'; }
 async function saveApiSettings() {
   if (saveApiSettings.busy || clearApiCredentials.busy || unlockApiCredentials.busy || apiProfiles?.view().switching) return false;
-  const captured = captureApiConnection(), permissions = $$('[data-permission]').map(select => [select.dataset.permission, select.value]), usage = captureUsagePriceSettings();
+  const captured = captureApiConnection(), permissions = $$('[data-permission]').map(select => [select.dataset.permission, select.value]), headless = $('#headlessPermission')?.value, usage = captureUsagePriceSettings();
   invalidateApiConnectionTest({ clearModels: false, announce: false });
   let credentialSaved = false;
   const button = $('#saveSettings'); saveApiSettings.busy = true; button.disabled = true; button.textContent = '正在保存…'; $('#apiStatus').textContent = '正在保存模型、权限与用量…'; updateApiCredentialNotice();
@@ -6472,18 +6526,19 @@ async function saveApiSettings() {
         if (captured.token) localStorage.setItem('workstation-api-key', captured.token);
         credentialSaved = true;
       }
-      localStorage.setItem('workstation-api-base', captured.base); localStorage.setItem('workstation-api-model', captured.model); localStorage.setItem('workstation-api-protocol', captured.protocol);
+      localStorage.setItem('workstation-api-base', captured.base); localStorage.setItem('workstation-api-model', captured.model); localStorage.setItem('workstation-api-protocol', captured.protocol); localStorage.setItem('workstation-api-tool-protocol', captured.toolProtocol);
       // 列表和默认模型一起提交；默认模型总在列表里，空白行和重复行在这里去掉。
       if (window.ModelCatalog) window.ModelCatalog.write(state.settings, captured.base, window.ModelCatalog.ensureModel(captured.models || window.ModelCatalog.read(state.settings, captured.base), captured.model));
     }
     window.OpenAIAuth?.persist();
     if (usage) state.settings.usagePrice = usage.price; else window.UsageCost?.read();
     permissions.forEach(([key, value]) => { state.settings.permissions[key] = value; });
+    if ($('#headlessPermission')) state.settings.headlessPermissionMode = headlessPermissionSetting(headless);
     // The native credential file and workspace database are separate stores.
     // Do not clear drafts or claim the whole settings save before its DB ACK.
     await saveDocumentDurably();
     const latest = captureApiConnection();
-    if (latest.base === captured.base && latest.token === captured.token && latest.model === captured.model && latest.protocol === captured.protocol && JSON.stringify(latest.models) === JSON.stringify(captured.models) && $$('[data-permission]').every(select => permissions.some(([key, value]) => key === select.dataset.permission && value === select.value))) { apiProfiles?.acknowledge(captured); $('#apiKey').value = ''; apiSettingsDirty = false; if (captured.models) resetApiModelDraft(captured.base, captured.model); }
+    if (latest.base === captured.base && latest.token === captured.token && latest.model === captured.model && latest.protocol === captured.protocol && JSON.stringify(latest.models) === JSON.stringify(captured.models) && $$('[data-permission]').every(select => permissions.some(([key, value]) => key === select.dataset.permission && value === select.value)) && ($('#headlessPermission')?.value === headless)) { apiProfiles?.acknowledge(captured); $('#apiKey').value = ''; apiSettingsDirty = false; if (captured.models) resetApiModelDraft(captured.base, captured.model); }
     else apiSettingsDirty = true;
     const latestUsage = captureUsagePriceSettings();
     saveApiSettings.usageDirty = !!usage && (!latestUsage || usage.values.some((value, index) => value !== latestUsage.values[index]));

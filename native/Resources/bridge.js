@@ -140,7 +140,7 @@ function snapshot(){refreshNativeChoices();tidyReaderHeading();const view=docume
 
 // Progressive enhancement: every single-value select keeps its original form and change handlers.
 const choiceRegistry=new WeakMap();let activeChoice=null;let choiceSerial=0;
-const shortChoices='#provider,#conversationProvider,#polishStyle,#interfaceLanguage,.permission-row select';
+const shortChoices='#provider,#conversationProvider,#polishStyle,#interfaceLanguage,.permission-row select:not(#headlessPermission)';
 const english=()=>document.documentElement.lang.startsWith('en');
 function chooseValue(select,value){const option=[...select.options].find(o=>o.value===value);if(select.disabled||!option||option.disabled||option.hidden||option.parentElement?.disabled)return;select.value=value;select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}));refreshNativeChoices();}
 function choiceLabel(select){return (select.labels?.[0]?.textContent||select.getAttribute('aria-label')||select.title||(english()?'Choose':'选择')).trim();}

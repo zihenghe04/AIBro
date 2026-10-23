@@ -41,6 +41,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     let agenda = AgendaStore()
     let agendaAgent = AgendaAgentController()
     let browser = NativeBrowser()
+    let kernelHost = NativeKernelHost()
     @Published var agendaSyncConflicts:[AgendaSyncConflict]=[]
     @Published var agendaSyncStatus=""
     var agendaSyncRunning=false
@@ -159,6 +160,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         }
         web.navigationDelegate = self; web.uiDelegate = self
         agenda.onOpen = { [weak self] in self?.selection="agenda" }
+        agenda.onKernelApproval = { [weak self] run,approval,action in self?.kernelHost.respond(runId:run,approvalId:approval,action:action) }
         agenda.onChanged = { [weak self] in self?.agendaAgent.refreshContext();self?.requestAgendaSync();self?.web.evaluateJavaScript("document.dispatchEvent(new Event('aibro-agenda-changed'))",completionHandler:nil) }
         config.userContentController.add(self, name: "workspace")
         config.userContentController.add(self,name:"glassRegions")
@@ -226,6 +228,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             env["AI_WORKSTATION_PARENT_PIPE"] = "1"
             env["AI_WORKSTATION_NOTIFICATION_DIR"] = NativeQuickExternalNotificationLocation.directory.path
             env["AI_WORKSTATION_NATIVE_NOTIFICATION_TOKEN"] = nativeNotificationToken
+            env["AI_WORKSTATION_KERNEL_HOST_TOKEN"] = kernelHost.token
             process.environment = env
             let lifetime = Pipe(); process.standardInput = lifetime; backendLifetime = lifetime
             let pipe = Pipe(); process.standardOutput = pipe; process.standardError = FileHandle.nullDevice
@@ -237,6 +240,9 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             guard let text = output.components(separatedBy: "http://127.0.0.1:").last?.split(whereSeparator: { !$0.isNumber }).first,
                   let port = Int(text), port > 0, let url = URL(string:"http://127.0.0.1:\(port)/") else { throw CocoaError(.fileReadCorruptFile) }
             origin = url;recordStartupStatus("loading",stage:"backend_port_received");web.load(URLRequest(url: url))
+            // P8b: background runs execute in a hidden kernel page, created on demand.
+            kernelHost.credentials=desktop?.credentials;kernelHost.nativeToken=nativeNotificationToken
+            kernelHost.notificationsEnabled=ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] == nil;kernelHost.start(origin:url)
         } catch { self.error = "无法启动 AI Bro：\(error.localizedDescription)";startupFailure=nativeUI("本地工作区未能启动。", "The local workspace could not start.");recordStartupStatus("failed",stage:"backend_failed",error:error);startupWatchdog?.cancel();backend?.terminate();backend = nil }
     }
     // Local diagnostics contain readiness/counts only, never workspace text or credentials.
@@ -654,7 +660,16 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             let accepted=await task?.value ?? false
             restoringWorkspaceLocation=false
             if accepted {persistConfirmedLocation()}
+            // First launch: onboarding may have opened its page while this restore ran.
+            if let current=snapshot {_ = adoptTourDestination(current)}
         }
+    }
+    /// Onboarding / the tour shows the web page over a native dashboard: follow it in
+    /// the sidebar (not persisted; the tour returns to its origin when it ends).
+    func adoptTourDestination(_ value:Snapshot)->Bool {
+        guard !restoringWorkspaceLocation,projectNavigationRequest == nil,
+              NativeWorkspaceLocation.tourDestination(selection:selection,reportedView:value.view,tourOpen:value.tourOpen == true) != nil else{return false}
+        return adoptReportedWorkspaceDestination(snapshotDestination(value))
     }
     func consumeSearchSelection(_ value:String?)->Bool {
         guard let expected=commandSearchSelection else{return false}
@@ -793,7 +808,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
                 _ = adoptReportedWorkspaceDestination(snapshotDestination(value))
             }
             persistConfirmedLocation()
-        }
+        } else if !first {_ = adoptTourDestination(value)}
 
     }
     func webView(_ webView:WKWebView,didStartProvisionalNavigation navigation:WKNavigation!){
@@ -1003,7 +1018,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         } catch { try? "FAILED: \(error)".write(toFile:destination,atomically:true,encoding:.utf8) }
         if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_HOLD"] != "1" { NSApp.terminate(nil) }
     }
-    func stop() { browser.stopAll();web.configuration.userContentController.removeScriptMessageHandler(forName:"workspace");web.configuration.userContentController.removeScriptMessageHandler(forName:"glassRegions");glassHost?.clear();try? backendLifetime?.fileHandleForWriting.close();backendLifetime=nil }
+    func stop() { kernelHost.stop();browser.stopAll();web.configuration.userContentController.removeScriptMessageHandler(forName:"workspace");web.configuration.userContentController.removeScriptMessageHandler(forName:"glassRegions");glassHost?.clear();try? backendLifetime?.fileHandleForWriting.close();backendLifetime=nil }
 }
 struct WebContent: NSViewRepresentable {
     let model: Workspace
@@ -1613,6 +1628,12 @@ struct NativeDraftQuitGate {
         quickEntry.onClipboardPasteSessionBegan = {[weak self] in self?.quickClipboardPasteBack.beginSession()}
         quickEntry.onClipboardPasteSessionEnded = {[weak self] in self?.quickClipboardPasteBack.endSession()}
         guard let model else{return}
+        model.kernelHost.onShow = {[weak self,weak model] run in
+            guard let self,let model,self.model === model else{return}
+            self.restoreWorkspaceWindow()
+            let id=(try? JSONSerialization.data(withJSONObject:run,options:.fragmentsAllowed)).map{String(decoding:$0,as:UTF8.self)} ?? "null"
+            model.web.evaluateJavaScript("window.AIBroKernelRuns&&AIBroKernelRuns.show(\(id))",completionHandler:nil)
+        }
         model.desktop?.quickEntrySettings = {[weak self,weak model] request in
             guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return ["status":"error","reason":"unavailable"]}
             switch request {

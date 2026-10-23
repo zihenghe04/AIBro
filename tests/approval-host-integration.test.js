@@ -40,7 +40,7 @@ function fixture(actions = [{ type: 'create_task', title: 'Approved task' }], sa
   };
   const calls = { execute: 0, preview: 0, save: 0, durable: 0, render: 0, sound: 0, goal: 0, requests: [], errors: [], queuedSnapshots: [], durableSnapshots: [] };
   let serial = 0, durable = async () => true, transport = async () => JSON.stringify({ verdict: 'approve', reasons: ['Synthetic review'], risks: [] });
-  const window = { TaskContext, WorkstationPermissionPolicy, ReviewerDelegate, ApprovalIntent, AlertSound: { play: () => calls.sound++ }, GoalLoop: { onRoundFinished: () => calls.goal++ } };
+  const window = { AIBroRunLoop: require('../app/kernel-run-loop'), ApprovalBroker: require('../app/approval-broker'), TaskContext, WorkstationPermissionPolicy, ReviewerDelegate, ApprovalIntent, AlertSound: { play: () => calls.sound++ }, GoalLoop: { onRoundFinished: () => calls.goal++ } };
   const c = vm.createContext({ state, window, structuredClone, AbortController, setTimeout, clearTimeout,
     Core: { ...Core, applyPlan: (...args) => { calls.execute++; return Core.applyPlan(...args); } },
     WorkstationPermissionPolicy, ReviewerDelegate, TaskContext, workspaceName: value => value || '日常',

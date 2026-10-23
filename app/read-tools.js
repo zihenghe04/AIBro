@@ -34,17 +34,17 @@
   register('task_list',(request,ctx)=>need(ctx,'TaskContext').readCatalog(ctx.getState(),ctx.conversation,request,ctx.run));
   register('read_file',(request,ctx)=>ctx.fileContext.read(request));
   register('terminal',(request,ctx,{entry})=>need(ctx,'TerminalTools').execute(request,ctx.getState(),ctx.run,{signal:ctx.signal,save:ctx.save,refresh:ctx.refresh,toolCallId:entry?.id}));
-  register('browser_*',(request,ctx)=>ctx.lookup('BrowserTools').execute(request,ctx.getState(),ctx.run,{signal:ctx.signal,save:ctx.save,refresh:ctx.refresh}),{available:has('BrowserTools')});
+  register('browser_*',(request,ctx,{approval})=>ctx.lookup('BrowserTools').execute(request,ctx.getState(),ctx.run,{signal:ctx.signal,save:ctx.save,refresh:ctx.refresh,approval}),{available:has('BrowserTools')});
   // Hybrid retrieval answers only when semantic search is enabled; otherwise
   // the ordinary keyword reader below serves the same request.
   register('search',(request,ctx)=>ctx.lookup('VectorKnowledge').searchRequest(ctx.getState(),ctx.scope,request,ctx.signal),{available:has('VectorKnowledge'),optional:true});
   function create(ctx){
     for(const key of ['run','getState','validate','lookup','agentContext','fallback'])if(!ctx?.[key])throw TypeError('Read tool host is missing '+key);
-    async function execute(request,{entry}={}){
+    async function execute(request,{entry,approval=null}={}){
       ctx.validate();
       for(const item of entries){
         if(!item.matches(request.type)||!item.available(ctx))continue;
-        const result=await item.run(request,ctx,{entry});
+        const result=await item.run(request,ctx,{entry,approval});
         if(item.optional&&result==null)continue;
         return result;
       }

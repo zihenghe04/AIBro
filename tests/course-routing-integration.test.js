@@ -13,7 +13,7 @@ function fixture(mode = 'full', actions) {
     { type: 'create_knowledge_item', title: '矩阵概览', content: '来源第1页', workspace: '课程', projectId: 'old', sourceAttachmentIds: ['pdf'] }
   ] };
   const state = { projects: [{ id: 'old', name: '智能系统：原理模型与算法', workspace: '课程' }], imports: [{ id: 'pdf', name: '矩阵代数.pdf', workspace: '课程', projectId: null, updatedAt: 1 }], notes: [], tasks: [], papers: [], links: [], conversations: [{ id: 'c', projectId: null, messages: [] }], agentRuns: [run], settings: { permissions: { '课程': 'auto' } } };
-  const context = vm.createContext({ state, Core, window: { CourseRouting }, WorkstationPermissionPolicy: { needsApproval: () => false }, workspaceName: x => x || '日常', activeRunController: null });
+  const context = vm.createContext({ state, Core, window: { CourseRouting, ApprovalBroker: require('../app/approval-broker') }, WorkstationPermissionPolicy: { needsApproval: () => false }, workspaceName: x => x || '日常', activeRunController: null });
   vm.runInContext(code, context);
   return { state, run, context };
 }

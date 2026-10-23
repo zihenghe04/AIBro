@@ -19,7 +19,7 @@ function section(start, end) {
   return source.slice(from, to);
 }
 const requestSource = section('async function requestAgentPlan(', '\nasync function sendMessage(');
-const finalizeSource = section('    const finalizePlan = async output => {', '\n    if (window.KnowledgeAccess)');
+const finalizeSource = section('    const beforePlan = output =>', '\n    responseOutput = await window.AIBroRunLoop.run(');
 const assertActiveSource = section('function assertRunActive(', '\nlet activeRunController');
 const inspectContext = vm.createContext({WorkstationCore: Core});
 vm.runInContext(fs.readFileSync(require.resolve('../app/sse-frame-scanner'), 'utf8') + '\n' + fs.readFileSync(require.resolve('../app/agent-transport.js'), 'utf8'), inspectContext);
@@ -58,7 +58,7 @@ function harness(responses, options = {}) {
     return next;
   }};
   const context = vm.createContext({
-    Core, state, run, conversation, window: {}, AgentTransport: transport,
+    Core, state, run, conversation, window: {AIBroRunLoop: require('../app/kernel-run-loop')}, AgentTransport: transport,
     activeRunController: controller, provider: 'api', base: 'https://fixture.invalid/v1',
     model: 'fixture-model', effort: 'medium', token: 'fixture-token', fileContext: {},
     // This extracted closure has no ProjectMemory host; model memory/recovery
@@ -68,7 +68,9 @@ function harness(responses, options = {}) {
     uid: prefix => prefix + '-fixture',
   });
   vm.runInContext(assertActiveSource + requestSource + '\nlet rawOutput = "", payload;\n' + finalizeSource + `
-    globalThis.finalizeActual = finalizePlan;
+    // The host's validation and repair, with the kernel's repair budget and staging.
+    globalThis.finalizeActual = window.AIBroRunLoop.finalizer({ before: beforePlan, accept: acceptPlan, repair: repairPlan,
+      budget: window.AIBroRunLoop.budget(run), staging: window.AIBroRunLoop.staging(run), parsePlan: Core.parsePlan });
     globalThis.getPayload = () => payload;
     globalThis.performRequest = () => requestAgentPlan({provider, base, model, effort, token,
       input: buildRequestInput(), signal: activeRunController.signal, onPhase: setPhase}, run);
@@ -163,12 +165,12 @@ test('a repaired plan still loads missing capability constraints before final va
   assert.equal(h.state.notes.length, 0, 'The host validation is a dry run; approval/execution remains downstream');
 });
 
-test('two empty final plans fail after one repair and never accept the old fake completion', async () => {
-  const h = harness([answer('已完成整理。')]);
+test('three empty final plans fail after two consecutive repairs and never accept the old fake completion', async () => {
+  const h = harness([answer('已完成整理。'), answer('已完成整理。')]);
   await assert.rejects(h.continue('{"workingSummary":"已阅读全部资料","actions":[]}'), {code: 'EMPTY_AGENT_RESULT'});
-  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls.length, 2);
   assert.equal(h.accepted.length, 0);
-  assert.equal(h.run.formatRepairCount, 1);
+  assert.equal(h.run.formatRepairCount, 2);
   assert.deepEqual(h.run.pendingActions, []);
   assert.deepEqual(h.run.results, []);
 });
@@ -197,22 +199,23 @@ test('one DSML transport failure is repaired using the same input and then route
   assert.ok(!JSON.stringify(h.calls[1].input).includes(dsml), 'The private tool body is not replayed as executable instructions');
 });
 
-test('repeated DSML fails after one repair with no read or completion', async () => {
-  const h = harness([Transport.protocolError(dsml), Transport.protocolError(dsml)]);
+test('repeated DSML fails after two consecutive repairs with no read or completion', async () => {
+  const h = harness([Transport.protocolError(dsml), Transport.protocolError(dsml), Transport.protocolError(dsml)]);
   await assert.rejects(h.start(), {code: 'MODEL_PROTOCOL_ERROR'});
-  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls.length, 3);
   assert.equal(h.reads.length, 0);
   assert.equal(h.accepted.length, 0);
 });
 
-test('protocol and structural failures share one run-wide repair budget in both directions', async () => {
-  const afterProtocol = harness([Transport.protocolError(dsml), '{}']);
+test('protocol and structural failures share one budget of two consecutive repairs in both directions', async () => {
+  const afterProtocol = harness([Transport.protocolError(dsml), '{}', '{}']);
   await assert.rejects(afterProtocol.start(), {code: 'EMPTY_AGENT_RESULT'});
-  assert.equal(afterProtocol.calls.length, 2);
+  assert.equal(afterProtocol.calls.length, 3);
   assert.equal(afterProtocol.accepted.length, 0);
-  const afterStructure = harness([Transport.protocolError(dsml)]);
+  assert.equal(afterProtocol.run.formatRepairStreak, 2);
+  const afterStructure = harness([Transport.protocolError(dsml), Transport.protocolError(dsml)]);
   await assert.rejects(afterStructure.continue('{}'), {code: 'MODEL_PROTOCOL_ERROR'});
-  assert.equal(afterStructure.calls.length, 1);
+  assert.equal(afterStructure.calls.length, 2);
   assert.equal(afterStructure.accepted.length, 0);
 });
 
@@ -282,7 +285,7 @@ function sendHarness(responses) {
     currentConversationId: 'conversation', settings: {permissions: {'日常': 'auto'}}};
   const models = {configuration: () => ({provider: 'api', model: 'fixture-model', effort: 'medium'}), resolve: async value => value};
   const context = vm.createContext({apiProfiles:null,structuredClone, state, Core, KnowledgeAccess, AttachmentContext, AttachmentDelivery, AttachmentAnalysis,
-    $: element, window: {ConversationModels: models, AttachmentAnalysis, ApprovalIntent, TaskWorkflow, KnowledgeAccess, ReadTools: require('../app/read-tools'), RunOutcomePresentation, AgentTransport: Transport}, ConversationModels: models,
+    $: element, window: {AIBroRunLoop: require('../app/kernel-run-loop'), ApprovalBroker: require('../app/approval-broker'), ConversationModels: models, AttachmentAnalysis, ApprovalIntent, TaskWorkflow, KnowledgeAccess, ReadTools: require('../app/read-tools'), RunOutcomePresentation, AgentTransport: Transport}, ConversationModels: models,
     localStorage: {getItem: () => ''}, document: {createElement: () => element('holder')}, AbortController, URL, setTimeout, clearTimeout,
     uid: prefix => prefix + '-' + ++serial, workspaceName: value => value || '日常', classifyWorkspace: () => '日常', currentConversation: () => state.conversations.find(item => item.id === state.currentConversationId),
     currentAttachments: () => [], projectIsActive: id => state.projects.some(project => project.id === id && !project.archived),
@@ -430,7 +433,7 @@ test('actual sendMessage completes only after repaired read requests return evid
 });
 
 test('actual sendMessage records EMPTY_AGENT_RESULT as failed and never commits or marks an empty reply completed', async () => {
-  const h = sendHarness(['{}', answer('已完成整理。')]);
+  const h = sendHarness(['{}', answer('已完成整理。'), answer('已完成整理。')]);
   await h.send();
   assert.equal(h.run.status, 'failed', h.run.error);
   assert.equal(h.run.errorCode, 'EMPTY_AGENT_RESULT');
@@ -439,7 +442,7 @@ test('actual sendMessage records EMPTY_AGENT_RESULT as failed and never commits 
   assert.equal(h.reply.text, '', 'No fake result or duplicate generated error in the answer');
   assert.match(h.run.error, /没有返回可查看的回答或产出/);
   assert.match(RunOutcomePresentation.present(h.reply, h.run).noticeDescription, /没有返回可查看的回答或产出/);
-  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls.length, 3);
   assert.equal(h.commits, 0);
   assert.equal(h.state.notes.length, 1);
 });
@@ -451,13 +454,13 @@ const analysisNotePlan = (content, type = 'create_knowledge_item', extra = {}) =
 test('actual analysis completion rejects empty and placeholder notes before checkpoint or any mutation', async t => {
   for (const type of ['create_knowledge_item', 'create_note']) for (const content of [undefined, '', ' \n\t', '# 材料分析', '# 材料分析\n\n待补充', '<!-- analysis pending -->', '---\ntitle: 材料分析\n---\n', '+++\ntitle = "材料分析"\n+++\n', '已完成整理。']) {
     await t.test(`${type}: ${JSON.stringify(content)}`, async () => {
-      const response = analysisNotePlan(content, type), h = sendHarness([response, response]);
+      const response = analysisNotePlan(content, type), h = sendHarness([response, response, response]);
       h.context.$('#agentInput').value = '整理这份资料并保存分析笔记';
       const before = structuredClone(h.state.notes);
       await h.send();
       assert.equal(h.run.status, 'failed', h.run.error);
       assert.equal(h.run.errorCode, 'INCOMPLETE_ANALYSIS_RESULT');
-      assert.equal(h.calls.length, 2, 'One existing plan repair is allowed');
+      assert.equal(h.calls.length, 3, 'Two consecutive plan repairs are allowed');
       assert.equal(h.commits, 0); assert.equal(h.checkpoint.snapshots.length, 0);
       assert.deepEqual(h.state.notes, before);
       assert.equal(h.reply.text, '', 'A rejected completion claim is not retained as a successful partial answer');
@@ -471,7 +474,7 @@ test('actual invalid analysis note rejects the whole mixed plan before a valid s
     {type: 'create_note', title: '有效分析', content: '统计语言模型用上下文的条件概率估计下一个词。', workspace: '日常', projectId: 'project'},
     {type: 'create_note', title: '遗漏的一份资料', content: '# 待整理\n\nTODO', workspace: '日常', projectId: 'project'},
   ]});
-  const h = sendHarness([response, response]);
+  const h = sendHarness([response, response, response]);
   h.context.$('#agentInput').value = '整理资料并保存每份分析笔记';
   await h.send();
   assert.equal(h.run.errorCode, 'INCOMPLETE_ANALYSIS_RESULT');
@@ -483,7 +486,7 @@ test('actual invalid analysis note rejects the whole mixed plan before a valid s
 test('actual analysis completion cannot count an unchanged matched note or pending draft as a newly saved analysis', async t => {
   for (const pending of [false, true]) await t.test(pending ? 'drafted' : 'matched', async () => {
     const response = analysisNotePlan(pending ? '不同的新分析正文，仍然需要用户审阅。' : 'SOURCE_EVIDENCE_FOR_ACTUAL_HOST', 'create_note', {title: '材料'});
-    const h = sendHarness([response, response]);
+    const h = sendHarness([response, response, response]);
     h.context.$('#agentInput').value = '整理资料并保存分析笔记';
     if (pending) h.state.notes[0].userEdited = true;
     const before = structuredClone(h.state.notes);
@@ -519,7 +522,7 @@ test('actual material question needs no saved note, while a useful answer cannot
   assert.equal(question.state.notes.length, 1);
 
   const empty = JSON.parse(analysisNotePlan('')); empty.message = text;
-  const h = sendHarness([plan(empty), plan(empty)]);
+  const h = sendHarness([plan(empty), plan(empty), plan(empty)]);
   h.context.$('#agentInput').value = '整理资料并保存分析笔记';
   await h.send();
   assert.equal(h.run.errorCode, 'INCOMPLETE_ANALYSIS_RESULT');
@@ -560,7 +563,7 @@ test('actual paper analysis cannot count generated metadata and source links as 
 
 test('actual template creation with requested analysis content does not bypass integrity checks', async () => {
   for (const goal of ['新建分析报告模板并根据附件填充正文', '创建空白分析报告，再根据资料填入分析内容', 'Create a blank analysis note and populate it from the material']) {
-    const empty = analysisNotePlan('# 分析报告\n\n待补充'), h = sendHarness([empty, empty]);
+    const empty = analysisNotePlan('# 分析报告\n\n待补充'), h = sendHarness([empty, empty, empty]);
     h.context.$('#agentInput').value = goal;
     await h.send();
     assert.equal(h.run.errorCode, 'INCOMPLETE_ANALYSIS_RESULT', goal);
@@ -583,12 +586,12 @@ test('actual English analysis keeps meaningful existing and pending-review resul
 });
 
 test('actual sendMessage treats repeated DSML as failed with no tool execution or private protocol in its reply', async () => {
-  const h = sendHarness([Transport.protocolError(dsml), Transport.protocolError(dsml)]);
+  const h = sendHarness([Transport.protocolError(dsml), Transport.protocolError(dsml), Transport.protocolError(dsml)]);
   await h.send();
   assert.equal(h.run.status, 'failed', h.run.error);
   assert.equal(h.run.errorCode, 'MODEL_PROTOCOL_ERROR', h.run.error);
   assert.equal(h.reply.runStatus, 'failed');
-  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls.length, 3);
   assert.equal(h.commits, 0);
   assert.equal(h.run.knowledgeReads?.length || 0, 0);
   assert.ok(!h.reply.text.includes('<｜｜DSML｜｜'));
@@ -621,6 +624,29 @@ test('actual streaming failure cannot publish nested internal message fields as 
 });
 
 const durableTaskPlan = () => plan({workspace: '日常', message: '已创建可查看的整理任务。', actions: [{type: 'create_task', title: 'Durable fixture task', projectId: 'project', workspace: '日常', sourceAttachmentIds: []}]});
+
+// P8a: the tool phase may write. A write sent with tool requests is staged
+// (nothing changes while reads continue) and reaches the same checkpoint and
+// commit as the final plan's own writes, exactly once.
+test('actual tool-phase write is staged during reads and committed once with the final plan', async () => {
+  const stagedTask = {type: 'create_task', title: 'Staged fixture task', projectId: 'project', workspace: '日常', sourceAttachmentIds: []};
+  const h = sendHarness([
+    plan({knowledgeRequests: [{type: 'read', id: 'source-note'}], actions: [stagedTask]}),
+    request => {
+      // The model sees the staged write and that it has not happened.
+      assert.match(JSON.stringify(request.input), /已暂存的写操作（尚未执行/);
+      assert.equal(h.state.tasks.length, 0, 'staged writes do not execute during the tool phase');
+      assert.equal(h.commits, 0);
+      return plan({workspace: '日常', message: '已根据材料建立两项任务。', actions: [stagedTask, {type: 'create_task', title: 'Final fixture task', projectId: 'project', workspace: '日常', sourceAttachmentIds: []}]});
+    },
+  ]);
+  await h.send();
+  assert.equal(h.run.status, 'completed', h.run.error);
+  assert.equal(h.calls.length, 2); assert.equal(h.commits, 1);
+  assert.deepEqual(h.state.tasks.map(task => task.title).sort(), ['Final fixture task', 'Staged fixture task'], 'a restated staged write is committed once');
+  assert.deepEqual(h.run.executionReceipt.actions.map(action => action.title), ['Staged fixture task', 'Final fixture task']);
+  assert.deepEqual(h.run.stagedWrites.map(record => [record.kind, record.type, record.settled]), [['actions', 'create_task', true]]);
+});
 
 test('actual automatic host saves the plan before effects and waits for the applied snapshot acknowledgement', async () => {
   const prepared = deferred(), applied = deferred(), releasePrepared = deferred(), releaseApplied = deferred();

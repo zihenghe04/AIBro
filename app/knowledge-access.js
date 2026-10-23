@@ -174,21 +174,23 @@
  // way DeepSeek Harness / ZCode / Pi return INVALID_ARGS-style tool results.
  // Nothing in the batch has executed. Only indices and counts are described.
  const correctableCodes=new Set(['INVALID_KNOWLEDGE_REQUESTS','KNOWLEDGE_BATCH_REQUIRES_SPLIT']);
- function correctionNotice(error){
+ function correctionNotice(error,repairLimitText='只给一次修正机会。'){
   const d=error.knowledgeDiagnostic||{},positions=list(d.invalidIndices).map(i=>i+1).join('、'),split=list(d.nonReadOnlyIndices).map(i=>i+1).join('、');
   const detail=error.code==='KNOWLEDGE_BATCH_REQUIRES_SPLIT'
    ?`本批 ${d.requestCount} 项超过每批 ${batchLimit} 项，且含不能自动拆批的操作${split?`（第 ${split} 项）`:''}。请把终端、浏览器、子代理等操作分批提交，每批不超过 ${batchLimit} 项。`
    :d.invalidContainer?'knowledgeRequests 必须是数组。':`第 ${positions||'若干'} 项无效（共 ${d.invalidCount??'若干'} 项）：每项必须是对象，含非空字符串 type，参数取值有效（如 offset、page 为非负整数）。`;
-  return `\n工具请求未通过校验（${error.code}），本批全部未执行，没有产生任何效果。${detail}请修正后重新提交 knowledgeRequests，或在资料足够时直接提交最终计划。只给一次修正机会。`;
+  return `\n工具请求未通过校验（${error.code}），本批全部未执行，没有产生任何效果。${detail}请修正后重新提交 knowledgeRequests，或在资料足够时直接提交最终计划。${repairLimitText}`;
  }
- async function continuePlan(initial,{ask,execute:onExecute,signal,onResult,batch,validate=()=>{},validateRetained=()=>true,maxRounds=Infinity,evidenceChars=200000,maxImages=8,prepareFinal,finalize,parsePlan,onCheckpoint,mapRetained,planCorrections=0,onCorrection}){
+ async function continuePlan(initial,{ask,execute:onExecute,signal,onResult,batch,validate=()=>{},validateRetained=()=>true,maxRounds=Infinity,evidenceChars=200000,maxImages=8,prepareFinal,finalize,parsePlan,onCheckpoint,mapRetained,planCorrections=0,onCorrection,repairs,stageWrites,onBatch}){
   let output=initial,summary='',stalled=0,round=0,corrections=0,lastAsk=null;const evidence=new Map();let previousIncluded=new Set();
   // Returns false after asking for a correction, so the caller re-reads output.
   const correct=async error=>{
-   if(!correctableCodes.has(error?.code)||corrections>=planCorrections||typeof ask!=='function')throw error;
+   // A shared repair budget (kernel run loop: two consecutive) replaces the
+   // per-run correction count when the host supplies one.
+   if(!correctableCodes.has(error?.code)||typeof ask!=='function'||(repairs?!repairs.take():corrections>=planCorrections))throw error;
    corrections++;onCorrection?.({code:error.code,knowledgeDiagnostic:error.knowledgeDiagnostic});
    // Keep the evidence view the model last saw; only append the correction.
-   output=await ask((lastAsk?.text||'')+correctionNotice(error),lastAsk?.blocks||[]);check();return false;
+   output=await ask((lastAsk?.text||'')+correctionNotice(error,repairs?`连续修正最多 ${repairs.limit} 次。`:undefined),lastAsk?.blocks||[]);check();return false;
   };
   // Query spelling is not progress. Recover with the same scoped catalog
   // before spending more model rounds on genuinely empty searches.
@@ -246,9 +248,13 @@
      return output;
     }
    }
-   if(list(plan.actions).length||list(plan.fileEdits).length||list(plan.agendaProposals).length||list(plan.memoryUpdates).length)throw Error('检索步骤不能同时修改资料，请完成读取后再提交操作');
+   const writes=list(plan.actions).length||list(plan.fileEdits).length||list(plan.agendaProposals).length||list(plan.memoryUpdates).length;
+   // Without a staging host (subagents) the tool phase stays read-only.
+   if(writes&&typeof stageWrites!=='function')throw Error('检索步骤不能同时修改资料，请完成读取后再提交操作');
    if(++round>maxRounds)throw Object.assign(Error('已达到本轮读取上限，尚未执行整理操作。请缩小范围后继续；读取记录已保留。'),{code:'KNOWLEDGE_LIMIT'});
    let requestKeys;try{requestKeys=checkedRequestKeys(plan.knowledgeRequests);}catch(error){await correct(error);continue;}
+   // Writes sent with tool requests are staged by the host, never executed here.
+   if(writes)stageWrites(plan);
    if(unproductiveSearches>=5&&plan.knowledgeRequests.some(request=>request.type==='search')){
     const freshRead=plan.knowledgeRequests.some((request,i)=>['read','read_page','read_file','neighbors'].includes(request.type)&&!evidence.has(requestKeys[i]));
     // One recovery attempt may open a candidate alongside the next search.
@@ -277,7 +283,7 @@
     // Keep scheduler concurrency, approval barriers and durable receipts intact.
     // The next chunk cannot start until this batch has fully settled/saved.
     const values=batch?await batch(requests):await (async()=>{const out=[];for(const req of requests)out.push(await read(req));return out;})();
-    check();
+    check();onBatch?.(requests);
     for(let i=0;i<chunk.length;i++){
      const [key,request]=chunk[i],{blocks:images=[],...result}=values[i]||{};
      evidence.set(key,{request,result,images,readOrder:evidence.size+1});observeSearch(request,{...result,blocks:images});onResult?.(request,result);

@@ -19,6 +19,8 @@ from wiki_migration import WikiMigration
 from wiki_bundle import WikiBundle
 from wiki_vault import WikiVault, WikiVaultError
 from project_jobs import ProjectJobs
+import kernel_runs
+from kernel_runs import KernelRuns
 from sync_store import SyncStore, all_imports, DIGEST
 import workspace_backup
 from sync_merge import merge_local_snapshot, MergeConflict
@@ -32,6 +34,7 @@ from public_url_fetch import PublicFetchError, fetch_public_url, extract_feishu_
 import bookmark_fetch
 import bookmark_metadata
 from external_notifications import ExternalNotifications, handle_request as handle_external_notifications
+from event_log import EventLog, EventLogError
 
 ASSET_DIR = Path(os.environ.get('AI_WORKSTATION_ASSET_DIR', Path(__file__).resolve().parent)).resolve()
 ASSET_MANIFEST = json.loads((ASSET_DIR / 'asset-manifest.json').read_text())
@@ -1116,6 +1119,10 @@ def claude_error(error):
     status, message = CLAUDE_ERRORS[code]
     return status, {'code': code, 'message': message}
 LOCAL_PROJECTS = LocalProjects(DATA_DIR)
+EVENT_LOG = EventLog(DATA_DIR)
+# Headless kernel runs (P8b). The host token comes from the native shell per launch.
+KERNEL_RUNS = KernelRuns(DATA_DIR, EVENT_LOG, os.environ.get('AI_WORKSTATION_KERNEL_HOST_TOKEN', ''))
+NATIVE_CONTROL_TOKEN = os.environ.get('AI_WORKSTATION_NATIVE_NOTIFICATION_TOKEN', '')
 LOCAL_DOCUMENT_DRAFTS = LocalDocumentDraftStore(DATA_DIR, STORE.load, LOCAL_PROJECTS)
 DOCUMENT_MEDIA = DocumentMedia(STORE)
 LOCAL_DOCUMENT_MEDIA = LocalDocumentMedia(LOCAL_PROJECTS, STORE.load)
@@ -1172,6 +1179,20 @@ class Handler(SimpleHTTPRequestHandler):
             if self.headers.get('Sec-Fetch-Site') in ('cross-site', 'same-site'): return False
             return True
         except (ValueError, AttributeError): return False
+    def do_events(self, path):
+        # Run event log (written alongside the snapshot). Same-origin only.
+        if not self.valid_origin(): self.send_json({'error': '不允许来自其他网站的请求'}, 403); return
+        try:
+            if self.command == 'POST' and path == '/__events/append':
+                payload = json.loads(self.read_body(4_000_000) or b'{}')
+                self.send_json(EVENT_LOG.append(payload.get('events') if isinstance(payload, dict) else None))
+            elif self.command == 'GET' and path == '/__events':
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                after = int((query.get('after') or ['0'])[0]); limit = max(1, min(5000, int((query.get('limit') or ['1000'])[0])))
+                self.send_json({'events': EVENT_LOG.read((query.get('stream') or [''])[0], after, limit)})
+            else: self.send_error(404)
+        except EventLogError as error: self.send_json(error.payload, error.status)
+        except ValueError as error: self.send_json({'error': str(error) or '请求无效'}, 400)
     def do_cloud(self, path):
         if not self.valid_auth_origin(mutation=self.command != 'GET'):
             self.send_json({'error':'仅允许当前工作站管理云同步。'},403); return
@@ -2060,6 +2081,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if handle_external_notifications(self, EXTERNAL_NOTIFICATIONS): return
+        if kernel_runs.handle_request(self, KERNEL_RUNS, EVENT_LOG, NATIVE_CONTROL_TOKEN): return
         path = urllib.parse.urlsplit(self.path).path
         if path == '/__health': self.send_json({'app': 'ai-workstation', 'version': VERSION, 'assetFingerprint': ASSET_FINGERPRINT, 'port': self.server.server_port, 'instanceId': SERVICE_INSTANCE})
         elif path == '/__comparison-draft': self.do_comparison_draft()
@@ -2075,6 +2097,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == '/__wiki/migration':
             try:self.send_json(WikiMigration(STORE).preview())
             except Exception as exc:self.send_json({'error':str(exc)},400)
+        elif path == '/__events': self.do_events(path)
         elif path == '/__project/jobs':
             try: self.send_json({'jobs':PROJECT_JOBS.list()})
             except Exception as exc:self.send_json({'error':str(exc)},400)
@@ -2097,6 +2120,7 @@ class Handler(SimpleHTTPRequestHandler):
         else: self.send_error(404)
     def do_POST(self):
         if handle_external_notifications(self, EXTERNAL_NOTIFICATIONS): return
+        if kernel_runs.handle_request(self, KERNEL_RUNS, EVENT_LOG, NATIVE_CONTROL_TOKEN): return
         auth_path = urllib.parse.urlsplit(self.path).path
         if auth_path.startswith('/__claude/'):
             self.do_claude(auth_path); return
@@ -2119,6 +2143,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.valid_origin(): self.send_json({'error': '不允许来自其他网站的写入请求'}, 403); return
         path = urllib.parse.urlsplit(self.path).path
         if path == '/__state': self.do_state_post()
+        elif path == '/__events/append': self.do_events(path)
         elif path.startswith('/__project/jobs/'):
             try:
                 body=json.loads(self.read_body() or b'{}');action=path.rsplit('/',1)[-1]
@@ -2187,6 +2212,7 @@ if __name__ == '__main__':
     try: STORE.startup_check()
     except Exception as error: workspace_backup.log(f'startup check failed: {type(error).__name__}: {error}')
     upkeep = threading.Timer(BACKUP_DELAY_SECONDS, STORE.upkeep); upkeep.daemon = True; upkeep.start()
+    events_upkeep = threading.Timer(BACKUP_DELAY_SECONDS, EVENT_LOG.prune); events_upkeep.daemon = True; events_upkeep.start()
     http_server = LoopbackHTTPServer(('127.0.0.1', PORT), Handler)
     PORT = http_server.server_port
     if os.environ.get('AI_WORKSTATION_PARENT_PIPE') == '1':
