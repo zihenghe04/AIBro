@@ -73,6 +73,21 @@ Your workspace is stored on your Mac by default. Reading, editing, organizing ma
 
 For multiple devices, connect your own sync service over HTTPS or an SSH tunnel to push and pull supported workspace content. SSH provides the connection; the sync account establishes content ownership. Model credentials and local-folder permissions are not included in ordinary workspace sync. Chat and speech API profiles can instead be shared through a separate encrypted pairing flow after explicit approval on the Mac. [Models and local data](docs/DESKTOP_APP.md) · [Self-hosted sync](docs/CLOUD_SYNC.md)
 
+## Roadmap
+
+AI Bro is moving from "chat that can use tools" to "one reliable execution kernel plus plugins for each scenario". Every step is usable and verifiable on its own, data stays on your Mac by default, and approvals can only get stricter, never silently looser.
+
+| Stage | What it covers | Status |
+| --- | --- | --- |
+| Polish and stability | Window restore, memory and save performance, automatic backups and startup self-check; three switchable themes, undoable deletes; multi-model list; tool registry and local MCP | Shipped in 0.9.6–0.9.8 |
+| Foundations | A unified execution kernel: event log, unified approvals, native tool calls, background runs that keep going after the window closes, automatic context compaction for long tasks; plugin interface; scheduled and event reminders (Mac notifications, the island panel); motion and accessibility polish | In progress |
+| Today and reminders | Today page as home, a daily brief, one-sentence events and tasks, calendar and task views | Planned |
+| Course spaces | Bulk import of course materials with automatic organisation, materials and AI side by side, questions about a whole course, review help | Planned |
+| Paper library | Papers and metadata, translation, highlights and notes with citation jump-back, questions across papers, turning reading into lasting knowledge | Planned |
+| Get things done | Computer and browser actions you approve, end-to-end from research to a finished draft you can preview, question and revise | Planned |
+| Quick assistant | Global shortcut and voice input, clipboard history, recordings to minutes and to-dos, ask about a screenshot | Planned |
+| Sync and iPhone (1.0) | Incremental sync with conflict merging; on iPhone, see Today, get reminders, capture ideas and send instructions to the assistant | Planned |
+
 ## Get started
 
 1. Download the DMG and checksums from [v0.9.8 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.8), following the [installation guide](docs/DISTRIBUTION.md). Python and PDF support are bundled.
