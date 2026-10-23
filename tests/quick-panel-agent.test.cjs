@@ -31,7 +31,7 @@ function harness(text,options={}){
   receipts.push(receipt);return receipt;
  }}}};
  vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(root,'native/Resources/desktop.js'),'utf8'),context);
- vm.runInContext(fs.readFileSync(path.join(root,'app/tool-scheduler.js'),'utf8'),context);
+ for(const file of ['json-schema-lite.js','tool-registry.js','tool-specs.js','tool-scheduler.js'])vm.runInContext(fs.readFileSync(path.join(root,'app',file),'utf8'),context);
  const batch=(request={type:'quick_panel_open',section:'tasks'},extra={})=>context.ToolScheduler.create({run:data.run,execute:()=>{throw Error('Native UI requests must use the authenticated bridge');},...extra}).batch([request]);
  return {context,...data,calls,receipts,batch,events};
 }

@@ -282,6 +282,7 @@ final class LaunchProbe {
         check(failed.opened.count == 2 && failedStore.snapshot.state == .launching, "A completed failure needs an explicit check and a new Start before retry")
         oldCallback(failedOpen()); await settle()
         check(failedStore.snapshot.state == .launching && failedStore.busy, "Duplicate callback from request one cannot settle or unlock request two")
+        guard failed.callbacks.count == 2 else { print("RESULT: \(checks - failures)/\(checks + 1) Spotify launch checks passed"); exit(1) }
         failed.transport.target = first; failed.callbacks[1](application(first)); await waitUntil { !failedStore.busy }
         check(failedStore.snapshot.state == .stopped && failed.transport.asks.count == 1, "Only the current launch identity owns completion and its one passive read")
         failedStore.setVisible(false)
@@ -362,16 +363,24 @@ final class LaunchProbe {
               && leaveDuringReadiness.transport.asks.isEmpty && leaveDuringReadiness.opened.count == 1,
               "Leaving during readiness cancels further process observation and all subsequent AppleEvents")
 
-        let readinessDeadline = LaunchProbe(), deadlineStore = readinessDeadline.store(timeout: 0.07)
-        await show(deadlineStore); deadlineStore.launch()
-        try await Task.sleep(nanoseconds: 40_000_000)
+        // The deadline (0.4 s) runs from Start. The OS callback arrives at 0.15 s, well before it even on a
+        // loaded machine; a fresh timeout from the callback would end near 0.55 s, the shared one near 0.4 s.
+        // (A 0.07 s deadline with a 40 ms sleep let the deadline win under load: the OS request then stayed
+        // outstanding by design, the next Start was refused, and callbacks[1] trapped with Index out of range.)
+        let readinessDeadline = LaunchProbe(), deadlineStore = readinessDeadline.store(timeout: 0.4)
+        await show(deadlineStore); let launchedAt = Date(); deadlineStore.launch()
+        try await Task.sleep(nanoseconds: 150_000_000)
+        let callbackAt = Date(), beforeCallback = deadlineStore.snapshot.state
         readinessDeadline.callbacks[0](.init(application: .init(bundleID: NativeQuickSpotifyAppleEvents.bundleID,
             pid: first.pid, launchedAt: nil, terminated: false, observe: { .pending("fixture-never-ready") })))
-        try await Task.sleep(nanoseconds: 50_000_000)
-        check(deadlineStore.snapshot.state == .launchTimedOut && !deadlineStore.busy && readinessDeadline.transport.asks.isEmpty,
+        for _ in 0..<2000 where deadlineStore.snapshot.state != .launchTimedOut { try await Task.sleep(nanoseconds: 1_000_000) }
+        let timedOutAfter = Date().timeIntervalSince(launchedAt)
+        check(beforeCallback == .launching && deadlineStore.snapshot.state == .launchTimedOut && !deadlineStore.busy
+              && readinessDeadline.transport.asks.isEmpty && timedOutAfter < callbackAt.timeIntervalSince(launchedAt) + 0.4,
               "Readiness shares the original deadline rather than starting a new timeout at callback")
         deadlineStore.refresh(); await waitUntil { !deadlineStore.busy }; deadlineStore.launch()
         check(readinessDeadline.opened.count == 2, "Readiness timeout releases a completed OS request only for a new explicit Start")
+        guard readinessDeadline.callbacks.count == 2 else { print("RESULT: \(checks - failures)/\(checks + 1) Spotify launch checks passed"); exit(1) }
         readinessDeadline.transport.target = first; readinessDeadline.callbacks[1](application(first)); await waitUntil { !deadlineStore.busy }
         check(deadlineStore.snapshot.state == .stopped && readinessDeadline.transport.asks.count == 1,
               "Expired readiness cannot settle the newer launch generation")

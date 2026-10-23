@@ -38,7 +38,7 @@ async function run(){
     attachmentIds:['qa_img1','qa_img2','qa_img3','qa_vid','qa_pdf','qa_legacy'],
     attachments:state.imports.map(i=>({id:i.id,name:i.name}))}]}];
   state.currentConversationId='qa_c10';state.settings.permissions={'日常':'auto','课程':'auto','科研':'auto'};
-  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','持续对话');renderAll();
+  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','对话');renderAll();
   const layer=document.querySelector('#onboardingLayer');if(layer)layer.remove();})()`);
  await wait(900);
 

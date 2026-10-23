@@ -1,13 +1,13 @@
 .project-tasks-kit{--plan-ease:cubic-bezier(.22,1,.36,1);--plan-swift:cubic-bezier(.33,1,.68,1);container-type:inline-size;min-width:0;color:var(--text)}
-.project-tasks-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.project-tasks-toolbar{display:flex;align-items:center;justify-content:space-between;gap:var(--space-12);flex-wrap:wrap;margin-bottom:var(--space-14)}
 .project-task-items{list-style:none;padding:0;margin:0;min-width:0}
 /* List rows: a quiet hover fill instead of permanent separators competing with titles. */
-.project-task-items.is-task-list{display:flex;flex-direction:column;gap:2px}
-.project-task-item{position:relative;display:grid;grid-template-columns:28px minmax(0,1fr) minmax(55px,auto) 132px;align-items:center;gap:10px;padding:8px 8px 8px 4px;min-width:0;border-radius:12px;transition:background-color 180ms var(--plan-swift),opacity 240ms var(--plan-ease)}
-.project-task-items.is-task-list>.project-task-item+.project-task-item::before{content:'';position:absolute;left:40px;right:8px;top:-1px;height:1px;background:var(--line);transition:opacity 180ms var(--plan-swift)}
+.project-task-items.is-task-list{display:flex;flex-direction:column;gap:var(--space-2)}
+.project-task-item{position:relative;display:grid;grid-template-columns:28px minmax(0,1fr) minmax(55px,auto) 132px;align-items:center;gap:var(--space-10);padding:var(--space-8) var(--space-8) var(--space-8) var(--space-4);min-width:0;border-radius:var(--radius-12);transition:background-color var(--duration-180) var(--plan-swift),opacity var(--duration-240) var(--plan-ease)}
+.project-task-items.is-task-list>.project-task-item+.project-task-item::before{content:'';position:absolute;left:40px;right:8px;top:-1px;height:1px;background:var(--line);transition:opacity var(--duration-180) var(--plan-swift)}
 .project-task-items.is-task-list>.project-task-item:hover{background:color-mix(in srgb,var(--panel-hover) 72%,transparent)}
 .project-task-items.is-task-list>.project-task-item:hover::before,.project-task-items.is-task-list>.project-task-item:hover+.project-task-item::before{opacity:0}
-.project-task-state-icon{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;transition:color 180ms var(--plan-swift),background-color 180ms var(--plan-swift),transform 240ms var(--plan-ease)}
+.project-task-state-icon{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:var(--radius-8);background:transparent;color:var(--muted);cursor:pointer;transition:color var(--duration-180) var(--plan-swift),background-color var(--duration-180) var(--plan-swift),transform var(--duration-240) var(--plan-ease)}
 .project-task-state-icon:hover:not(:disabled){background:color-mix(in srgb,var(--green) 10%,transparent);color:var(--green)}
 .project-task-state-icon:active:not(:disabled){transform:scale(.9)}
 .project-task-state-icon:disabled{cursor:default;opacity:.6}
@@ -16,53 +16,53 @@
 .project-task-state-icon.status-blocked{color:var(--orange)}
 .project-task-copy,.project-task-status-select{min-width:0}
 .project-task-copy>button{max-width:100%;min-width:0}
-.project-task-copy>button>span{display:inline-flex!important;align-items:baseline;gap:6px;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
-.project-task-title{font-size:13px;line-height:1.55;font-weight:550;overflow-wrap:anywhere;color:var(--text);transition:color 240ms var(--plan-ease)}
-.project-task-open-hint{flex:none;align-self:center;color:var(--faint);opacity:0;transform:translate(-3px,2px);transition:opacity 180ms var(--plan-swift),transform 240ms var(--plan-ease)}
+.project-task-copy>button>span{display:inline-flex!important;align-items:baseline;gap:var(--space-6);min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.project-task-title{font-size:var(--font-size-13);line-height:var(--leading-155);font-weight:var(--font-weight-550);overflow-wrap:anywhere;color:var(--text);transition:color var(--duration-240) var(--plan-ease)}
+.project-task-open-hint{flex:none;align-self:center;color:var(--faint);opacity:0;transform:translate(-3px,2px);transition:opacity var(--duration-180) var(--plan-swift),transform var(--duration-240) var(--plan-ease)}
 .project-task-item:hover .project-task-open-hint,.project-task-copy>button:focus-visible .project-task-open-hint{opacity:1;transform:none}
-.project-task-prerequisite{display:block;color:var(--muted);font-size:11px;line-height:1.5;margin-top:2px}
+.project-task-prerequisite{display:block;color:var(--muted);font-size:var(--font-size-11);line-height:var(--leading-150);margin-top:var(--space-2)}
 /* Due chips: tone carries emphasis; the label always says it in words too. */
-.project-task-due{color:var(--muted);font-size:11px;white-space:nowrap;min-width:0}
-.project-task-due-chip{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:64px;font-variant-numeric:tabular-nums;color:var(--muted);background:color-mix(in srgb,var(--text) 5%,transparent)}
+.project-task-due{color:var(--muted);font-size:var(--font-size-11);white-space:nowrap;min-width:0}
+.project-task-due-chip{display:inline-flex;align-items:center;height:22px;padding:0 var(--space-8);border-radius:64px;font-variant-numeric:tabular-nums;color:var(--muted);background:color-mix(in srgb,var(--text) 5%,transparent)}
 .project-task-due-chip.is-today{color:var(--accent);background:var(--accent-soft)}
 .project-task-due-chip.is-soon{color:var(--text)}
 .project-task-due-chip.is-overdue,.project-task-due-chip.is-invalid{color:var(--orange);background:color-mix(in srgb,var(--orange) 11%,transparent)}
-.project-task-undated{color:var(--faint);padding:0 8px}
+.project-task-undated{color:var(--faint);padding:0 var(--space-8)}
 .project-task-status-select>.kit-select-wrap{min-width:0;width:100%}
 .project-task-status-select select{max-width:100%}
-.project-task-status-select .kit-input-presentation>div>div>button{height:28px!important;background:transparent!important;color:var(--muted)!important;transition:background-color 180ms var(--plan-swift),color 180ms var(--plan-swift)}
+.project-task-status-select .kit-input-presentation>div>div>button{height:28px!important;background:transparent!important;color:var(--muted)!important;transition:background-color var(--duration-180) var(--plan-swift),color var(--duration-180) var(--plan-swift)}
 .project-task-item:hover .project-task-status-select .kit-input-presentation>div>div>button,.project-task-status-select select:focus-visible+.kit-input-presentation>div>div>button{background:var(--panel)!important;color:var(--text)!important}
 .project-task-status-select .kit-input-presentation>button{max-width:100%;min-width:0}
 /* Completed rows settle back instead of disappearing; the check pops once. */
 .project-task-item[data-task-status=done] .project-task-title{color:var(--faint);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--faint) 60%,transparent)}
 .project-task-item[data-task-status=done]:not(:hover){opacity:.72}
-.project-task-item[data-motion-checked] .project-task-state-icon svg{animation:project-task-check 420ms cubic-bezier(.34,1.3,.64,1)}
+.project-task-item[data-motion-checked] .project-task-state-icon svg{animation:project-task-check var(--duration-420) cubic-bezier(.34,1.3,.64,1)}
 @keyframes project-task-check{0%{transform:scale(.6)}60%{transform:scale(1.14)}100%{transform:scale(1)}}
 /* Board: four columns on a soft wash; cards stay solid and lift slightly. */
-.project-task-board{display:grid;grid-template-columns:repeat(4,minmax(210px,1fr));gap:12px;overflow-x:auto;align-items:start;padding-bottom:14px;scroll-snap-type:x proximity;min-width:0}
-.project-board-column{min-width:0;min-height:160px;scroll-snap-align:start;padding:10px 8px 8px;border-radius:18px;background:color-mix(in srgb,var(--text) 3.5%,transparent);box-shadow:inset 0 0 0 1px transparent;transition:background-color 240ms var(--plan-ease),box-shadow 240ms var(--plan-ease)}
-.project-board-column h3{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 4px 10px;font-size:12px;font-weight:600;color:var(--muted)}
-.project-board-column-title{display:inline-flex;align-items:center;gap:8px;min-width:0}
-.project-board-column-dot{width:7px;height:7px;flex:none;border-radius:50%;background:var(--faint)}
+.project-task-board{display:grid;grid-template-columns:repeat(4,minmax(210px,1fr));gap:var(--space-12);overflow-x:auto;align-items:start;padding-bottom:var(--space-14);scroll-snap-type:x proximity;min-width:0}
+.project-board-column{min-width:0;min-height:160px;scroll-snap-align:start;padding:var(--space-10) var(--space-8) var(--space-8);border-radius:var(--radius-18);background:color-mix(in srgb,var(--text) 3.5%,transparent);box-shadow:inset 0 0 0 1px transparent;transition:background-color var(--duration-240) var(--plan-ease),box-shadow var(--duration-240) var(--plan-ease)}
+.project-board-column h3{display:flex;align-items:center;justify-content:space-between;gap:var(--space-10);margin:0 var(--space-4) var(--space-10);font-size:var(--font-size-12);font-weight:var(--font-weight-600);color:var(--muted)}
+.project-board-column-title{display:inline-flex;align-items:center;gap:var(--space-8);min-width:0}
+.project-board-column-dot{width:7px;height:7px;flex:none;border-radius:var(--radius-round);background:var(--faint)}
 .project-board-column-dot.status-in_progress{background:var(--accent)}.project-board-column-dot.status-blocked{background:var(--orange)}.project-board-column-dot.status-done{background:var(--green)}
-.project-board-column-count{min-width:20px;height:20px;padding:0 6px;border-radius:64px;display:inline-grid;place-items:center;font-size:11px;font-weight:500;color:var(--faint);background:color-mix(in srgb,var(--text) 5%,transparent);font-variant-numeric:tabular-nums}
+.project-board-column-count{min-width:20px;height:20px;padding:0 var(--space-6);border-radius:64px;display:inline-grid;place-items:center;font-size:var(--font-size-11);font-weight:var(--font-weight-500);color:var(--faint);background:color-mix(in srgb,var(--text) 5%,transparent);font-variant-numeric:tabular-nums}
 .project-board-column.is-over{background:var(--accent-soft);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent) 45%,transparent)}
-.project-board-column .project-task-items{display:flex;flex-direction:column;gap:8px}
-.project-task-item.is-board-item{grid-template-columns:28px minmax(0,1fr) 14px;gap:2px 6px;padding:10px 10px 10px 6px;border:1px solid var(--line);border-radius:12px;background:var(--panel-raised,var(--panel));box-shadow:0 1px 1px color-mix(in srgb,var(--text) 4%,transparent),0 2px 6px -2px color-mix(in srgb,var(--text) 6%,transparent);align-items:start;cursor:grab;transition:box-shadow 240ms var(--plan-ease),border-color 180ms var(--plan-swift),transform 240ms var(--plan-ease),opacity 240ms var(--plan-ease)}
+.project-board-column .project-task-items{display:flex;flex-direction:column;gap:var(--space-8)}
+.project-task-item.is-board-item{grid-template-columns:28px minmax(0,1fr) 14px;gap:var(--space-2) var(--space-6);padding:var(--space-10) var(--space-10) var(--space-10) var(--space-6);border:1px solid var(--line);border-radius:var(--radius-12);background:var(--panel-raised,var(--panel));box-shadow:0 1px 1px color-mix(in srgb,var(--text) 4%,transparent),0 2px 6px -2px color-mix(in srgb,var(--text) 6%,transparent);align-items:start;cursor:grab;transition:box-shadow var(--duration-240) var(--plan-ease),border-color var(--duration-180) var(--plan-swift),transform var(--duration-240) var(--plan-ease),opacity var(--duration-240) var(--plan-ease)}
 .project-task-item.is-board-item:hover{border-color:var(--line-strong);box-shadow:0 1px 1px color-mix(in srgb,var(--text) 5%,transparent),0 8px 20px -10px color-mix(in srgb,var(--text) 22%,transparent)}
 .project-task-item.is-board-item .project-task-state-icon{margin-top:-3px}
 .project-task-item.is-board-item .project-task-copy{grid-column:2/3}
-.project-task-item.is-board-item .project-task-due{grid-column:2/3;margin:4px 0 2px -2px}
+.project-task-item.is-board-item .project-task-due{grid-column:2/3;margin:var(--space-4) 0 var(--space-2) -2px}
 .project-task-item.is-board-item .project-task-status-select{grid-column:2/4;width:100%;max-width:160px;margin-left:-12px}
-.project-task-drag-hint{grid-column:3;grid-row:1;display:flex;color:var(--faint);opacity:0;transition:opacity 180ms var(--plan-swift)}
+.project-task-drag-hint{grid-column:3;grid-row:1;display:flex;color:var(--faint);opacity:0;transition:opacity var(--duration-180) var(--plan-swift)}
 .project-task-item.is-board-item:hover .project-task-drag-hint{opacity:1}
 .project-task-item.is-dragging{opacity:.4;transform:scale(.98)}
-.project-board-empty-column{margin:4px;padding:18px 0;color:var(--faint);font-size:12px;text-align:center;border:1px dashed var(--line);border-radius:12px}
-.project-tasks-empty{padding:30px 0}
+.project-board-empty-column{margin:var(--space-4);padding:var(--space-18) 0;color:var(--faint);font-size:var(--font-size-12);text-align:center;border:1px dashed var(--line);border-radius:var(--radius-12)}
+.project-tasks-empty{padding:var(--space-30) 0}
 .project-tasks-kit button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .project-tasks-kit [aria-busy=true]{cursor:progress}
 .project-tasks-kit [aria-busy=true] .project-task-state-icon svg{animation:project-task-busy 1.1s ease-in-out infinite}
 @keyframes project-task-busy{50%{opacity:.35}}
-@container(max-width:570px){.project-task-item{grid-template-columns:28px minmax(0,1fr) 112px;gap:2px 8px}.project-task-due{grid-column:2;grid-row:2}.project-task-status-select{grid-column:3;grid-row:1/3}.project-task-item.is-board-item .project-task-status-select{grid-row:auto}.project-task-item.is-board-item .project-task-due{grid-row:auto}.project-task-board{grid-template-columns:repeat(4,minmax(205px,1fr));gap:10px}}
+@container(max-width:570px){.project-task-item{grid-template-columns:28px minmax(0,1fr) 112px;gap:var(--space-2) var(--space-8)}.project-task-due{grid-column:2;grid-row:2}.project-task-status-select{grid-column:3;grid-row:1/3}.project-task-item.is-board-item .project-task-status-select{grid-row:auto}.project-task-item.is-board-item .project-task-due{grid-row:auto}.project-task-board{grid-template-columns:repeat(4,minmax(205px,1fr));gap:var(--space-10)}}
 @media(prefers-reduced-motion:reduce){.project-tasks-kit *{animation:none!important;transition:none!important}}
 body.reduce-motion .project-tasks-kit *,body[data-reduce-motion=true] .project-tasks-kit *{animation:none!important;transition:none!important}

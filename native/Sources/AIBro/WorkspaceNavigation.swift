@@ -130,7 +130,7 @@ struct ConversationHub:View {
             }
             Button {target=ConversationTarget(chat)} label:{Image(systemName:"ellipsis").padding(12)}.buttonStyle(LiftStyle()).help(nativeUI("管理对话", "Manage chat"))
         }.background(StudioPalette.panel,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(StudioPalette.line,lineWidth:1)).draggable("aibro-chat:"+chat.id)
-            .contextMenu{Button(nativeUI("重命名 / 移动", "Rename / Move")){target=ConversationTarget(chat)};Button(nativeUI("归档", "Archive")){Task{await model.manageConversation(["kind":"conversation","id":chat.id,"action":"archive"])}};Button(nativeUI("移入回收站", "Move to Trash"),role:.destructive){target=ConversationTarget(chat)}}
+            .contextMenu{Button(nativeUI("重命名 / 移动", "Rename / Move")){target=ConversationTarget(chat)};Button(nativeUI("归档", "Archive")){Task{await model.manageConversation(["kind":"conversation","id":chat.id,"action":"archive"])}};Button(nativeUI("移入回收站", "Move to Trash"),role:.destructive){Task{await model.manageConversation(["kind":"conversation","id":chat.id,"action":"delete","name":chat.title])}}}
     }
     private func subtitle(_ chat:ConversationEntry)->String {
         let owner=(model.snapshot?.projects ?? []).first{$0.id==chat.projectId}?.title ?? (chat.projectId?.isEmpty == false ? nativeUI("原项目不可用", "Original project unavailable"):nativeUI("独立对话", "Standalone chat"))

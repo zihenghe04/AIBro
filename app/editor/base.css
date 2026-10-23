@@ -26,12 +26,12 @@
   --crepe-shadow-1: 0 2px 8px #0002;
   --crepe-shadow-2: 0 6px 24px #0003;
 }
-.note-document .milkdown .ProseMirror { min-height: 300px; padding: 24px 32px 80px; outline: none; }
+.note-document .milkdown .ProseMirror { min-height: 300px; padding: var(--space-24) 32px 80px; outline: none; }
 .note-document .milkdown .ProseMirror:focus-visible { outline: none; }
 .note-document .milkdown .ProseMirror > :first-child { margin-top: 0; }
 .note-document .milkdown button { min-width: 0; min-height: 0; font: inherit; }
 @container (max-width: 540px) {
-  .note-document .milkdown .ProseMirror { padding: 16px 24px 60px; }
+  .note-document .milkdown .ProseMirror { padding: var(--space-16) var(--space-24) 60px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .note-document .milkdown *, .document-source-editor * { animation: none !important; transition: none !important; }

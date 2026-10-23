@@ -1,7 +1,7 @@
 /* Native NSGlassEffectView is below WebContents. The opaque shell opens only
    acknowledged rounded holes. Content scrims protect DOM text, whose colors
    do not receive AppKit's automatic vibrant-label contrast adaptation. */
-#nativeGlassShell {position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;fill:var(--bg)}
+#nativeGlassShell {position:fixed;inset:0;width:100%;height:100%;z-index:var(--z-behind);pointer-events:none;fill:var(--bg)}
 html.native-liquid-glass body.liquid-glass[data-view] {isolation:isolate;--native-edge-scrim:rgba(22,22,24,.25);--native-content-scrim:rgba(22,22,24,.63)}
 html.native-liquid-glass body.liquid-glass[data-view].light-mode {--native-edge-scrim:rgba(247,247,245,.16);--native-content-scrim:rgba(247,247,245,.68)}
 html.native-liquid-glass,
@@ -33,7 +33,7 @@ html.native-liquid-glass body.liquid-glass[data-view] #composer[data-native-glas
 /* A thin rim veil lets the native lens show; the inset body protects labels. */
 html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region]::before,
 html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region]::after {
-  content:'';display:block;position:absolute;inset:0;z-index:-1;pointer-events:none;
+  content:'';display:block;position:absolute;inset:0;z-index:var(--z-behind);pointer-events:none;
   padding:0;border:0;border-radius:inherit;opacity:1;
   box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;mask:none;-webkit-mask:none;
 }
@@ -48,18 +48,18 @@ html.native-liquid-glass body.liquid-glass[data-view] [data-native-glass-region]
 html.native-liquid-glass body.liquid-glass[data-view] #sidebar[data-native-glass-region]::before,
 html.native-liquid-glass body.liquid-glass[data-view] #sidebar[data-native-glass-region]::after {inset:8px 5px 8px 8px;border-radius:23px}
 html.native-liquid-glass body.liquid-glass[data-view] #conversationNavigator[data-native-glass-region]::before,
-html.native-liquid-glass body.liquid-glass[data-view] #conversationNavigator[data-native-glass-region]::after {border-radius:20px}
+html.native-liquid-glass body.liquid-glass[data-view] #conversationNavigator[data-native-glass-region]::after {border-radius:var(--radius-20)}
 html.native-liquid-glass body.liquid-glass[data-view] .topbar[data-native-glass-region]::before,
-html.native-liquid-glass body.liquid-glass[data-view] .topbar[data-native-glass-region]::after {border-radius:16px}
+html.native-liquid-glass body.liquid-glass[data-view] .topbar[data-native-glass-region]::after {border-radius:var(--radius-16)}
 html.native-liquid-glass body.liquid-glass[data-view] .reading-toolbar[data-native-glass-region]::before,
-html.native-liquid-glass body.liquid-glass[data-view] .reading-toolbar[data-native-glass-region]::after {border-radius:16px 16px 0 0}
+html.native-liquid-glass body.liquid-glass[data-view] .reading-toolbar[data-native-glass-region]::after {border-radius:var(--radius-16) var(--radius-16) 0 0}
 html.native-liquid-glass body.liquid-glass[data-view] .reading-toolbar[data-native-glass-region]::after {--native-feather-y:linear-gradient(to bottom,transparent,#000 6px)}
 html.native-liquid-glass body.liquid-glass[data-view] .reading-tabs[data-native-glass-region]::before,
-html.native-liquid-glass body.liquid-glass[data-view] .reading-tabs[data-native-glass-region]::after {border-radius:0 0 16px 16px}
+html.native-liquid-glass body.liquid-glass[data-view] .reading-tabs[data-native-glass-region]::after {border-radius:0 0 var(--radius-16) var(--radius-16)}
 html.native-liquid-glass body.liquid-glass[data-view] .reading-tabs[data-native-glass-region]::after {--native-feather-y:linear-gradient(to bottom,#000 calc(100% - 6px),transparent)}
 @media(max-width:760px) {
   html.native-liquid-glass body.liquid-glass[data-view] #sidebar[data-native-glass-region]::before,
-  html.native-liquid-glass body.liquid-glass[data-view] #sidebar[data-native-glass-region]::after {inset:6px 3px 6px 5px;border-radius:18px}
+  html.native-liquid-glass body.liquid-glass[data-view] #sidebar[data-native-glass-region]::after {inset:6px 3px 6px 5px;border-radius:var(--radius-18)}
 }
 /* Menu/modal control layers are intentionally still CSS fallback surfaces. */
 @media(prefers-reduced-transparency:reduce),(prefers-contrast:more) {

@@ -75,12 +75,13 @@ function harness(options = {}) {
     fetch: (url, init) => { calls.push({ url, init }); return options.fetch ? options.fetch(url, init) : Promise.resolve(response(catalogue)); },
     OpenAIAuth: { ensureReady: async () => { ensureCount++; if (options.ensureReady) await options.ensureReady(); } },
     ClaudeAuth: { ensureReady: async () => { claudeEnsureCount++; if (options.claudeEnsureReady) await options.claudeEnsureReady(); } },
+    ...(options.getApiModels ? { ModelCatalog: require('../app/model-catalog.js') } : {}),
   });
   vm.runInContext(source, context);
   const api = context.ConversationModels;
   api.init({
     getState: () => state, getConversation: () => state.conversations.find(conversation => conversation.id === currentId),
-    getDefaults: () => defaults, getResolvedConfig:options.getResolvedConfig, canSave:options.canSave, save: async () => {saves++;return options.save?options.save():true;}, toast: message => toasts.push(message),
+    getDefaults: () => defaults, getResolvedConfig:options.getResolvedConfig, getApiModels:options.getApiModels, canSave:options.canSave, save: async () => {saves++;return options.save?options.save():true;}, toast: message => toasts.push(message),
   });
   return {
     api, state, defaults, el, calls, toasts,focusEvents,
@@ -394,4 +395,26 @@ test('Claude run snapshots survive model changes and reject unsupported alias/re
  const ready=deferred();const h=harness({claudeEnsureReady:()=>ready.promise});const input={provider:'claude-auth',model:'sonnet',effort:''};const run=h.api.resolve(input);input.model='haiku';ready.resolve();assert.equal((await run).model,'sonnet');
  await assert.rejects(h.api.resolve({provider:'claude-auth',model:'arbitrary-model',effort:''}),/别名/);
  await assert.rejects(h.api.resolve({provider:'claude-auth',model:'opus',effort:'high'}),/默认推理/);assert.equal(h.claudeEnsureCount,1);assert.equal(h.calls.length,0);
+});
+
+test('saved API model list drives picker choices, display names and per-model reasoning levels', async () => {
+  const models = [{ model: 'api-default', label: 'Daily default', contextWindow: null, efforts: [] }, { model: 'deep', label: 'Deep thinker', contextWindow: 1000000, efforts: ['low', 'high', 'max'] }];
+  const h = harness({ getApiModels: () => ({ models, protocol: 'chat' }) }); await h.open();
+  assert.deepEqual(plain(h.surface.apiOptions.map(option => option.value)), ['api-default', 'deep']);
+  assert.equal(h.surface.apiOptions[1].label, 'Deep thinker · deep');
+  assert.equal(h.surface.currentModel, 'Daily default');
+  // Empty list entry = every level the chat protocol can send; never Responses-only or unknown levels.
+  assert.ok(h.surface.effortOptions.some(option => option.value === 'max'));
+  assert.ok(!h.surface.effortOptions.some(option => option.value === 'ultra'));
+  h.surface.onEffort('medium'); h.surface.onModel('deep');
+  assert.deepEqual(plain(h.surface.effortOptions.map(option => option.value)), ['', 'low', 'high', 'max']);
+  assert.equal(h.surface.selection.effort, '', 'an effort the model does not list is cleared, not sent');
+  h.surface.onModel('unlisted');
+  assert.ok(h.surface.apiOptions.some(option => option.value === 'unlisted' && /不在模型列表/.test(option.label)));
+});
+
+test('without a saved list the API picker keeps the free-text model field', async () => {
+  const h = harness({ getApiModels: () => ({ models: [], protocol: 'auto' }) }); await h.open();
+  assert.equal(h.surface.apiOptions.length, 0);
+  assert.equal(h.surface.currentModel, 'api-default');
 });

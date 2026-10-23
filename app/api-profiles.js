@@ -7,7 +7,7 @@
  function create({bridge,readForm,writeForm,fromProfile,toProfile,onActivate=()=>{},onChange=()=>{},isBusy=()=>false,makeID=()=>root.crypto.randomUUID()}){
   let catalog=null,selected='',name='',busy=false,error='',island=null,changed=false,loading=null;
   const drafts=new Map();
-  function view(){return {ready:!!catalog,revision:catalog?.revision,busy:busy||isBusy(),selected,name,dirty:changed,error,active:catalog?.activeProfileID||'',profiles:[...(catalog?.profiles||[]).map(p=>({id:p.id,name:p.name})),...[...drafts].filter(([id])=>!metadata(id)&&id!==selected).map(([id,d])=>({id,name:d.name+' · 未保存'}))],isNew:!!selected&&!catalog?.profiles.some(p=>p.id===selected)};}
+  function view(){return {ready:!!catalog,revision:catalog?.revision,busy:busy||isBusy(),switching:busy,selected,name,dirty:changed,error,active:catalog?.activeProfileID||'',profiles:[...(catalog?.profiles||[]).map(p=>({id:p.id,name:p.name})),...[...drafts].filter(([id])=>!metadata(id)&&id!==selected).map(([id,d])=>({id,name:d.name+' · 未保存'}))],isNew:!!selected&&!catalog?.profiles.some(p=>p.id===selected)};}
   function paint(){island?.update({...view()});}
   function formIdentity(){const form=copy(readForm());delete form.profileId;delete form.profileRevision;delete form.awaitingRestore;return JSON.stringify(form);}
   function stash(){if(selected)drafts.set(selected,{name,form:copy(readForm()),dirty:changed});}
@@ -65,7 +65,9 @@
    if(!root.HalaskaUI?.mount||!host)return false;
    island=root.HalaskaUI.mount(host,'APIProfileBar',{...view(),label,onDiscard:discard,onReload:()=>void reload(),onChoose:id=>void choose(id),onName:editName,onNew:add,onSave,onRemove:()=>{if(confirmRemove())void remove();}});return true;
   }
-  const api={load,reload,choose,add,save,read,remove,discard,hasPending,capture,touch,acknowledge,paint,mount,view};managers.add(api);return api;
+  // Public address/model pairs only, used to seed the per-service model list from older single-model profiles.
+  function profilesForMigration(){return (catalog?.profiles||[]).map(p=>({base:p.base||'',model:p.model||''}));}
+  const api={load,reload,choose,add,save,read,remove,discard,hasPending,capture,touch,acknowledge,paint,mount,view,profilesForMigration};managers.add(api);return api;
  }
  return {create,hasPending:()=>[...managers].some(manager=>manager.hasPending())};
 });

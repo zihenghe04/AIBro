@@ -1,8 +1,8 @@
 {
   "name": "ai-bro",
   "productName": "AI Bro",
-  "version": "0.9.7",
-  "nativeBuild": 916,
+  "version": "0.9.8",
+  "nativeBuild": 917,
   "private": true,
   "description": "AI native personal knowledge and task workstation",
   "main": "app/electron-main.js",
@@ -25,6 +25,7 @@
     "start:native": "./scripts/run-native-preview.sh",
     "build:native": "./scripts/run-native-preview.sh --build-only",
     "build:ui": "node scripts/build-halaska-ui.mjs",
+    "check:ui": "node scripts/build-halaska-ui.mjs --check",
     "build:editors": "node scripts/build-document-editors.mjs",
     "test:halaska": "electron tests/halaska-kit-smoke.cjs",
     "build:document-markdown": "node scripts/build-document-markdown.mjs"

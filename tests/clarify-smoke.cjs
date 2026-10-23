@@ -28,7 +28,7 @@ async function run(){
   state.conversations=[{id:'qa_clarify_conversation',title:'隔离验收 · 结构化问询',workspace:'日常',permissionMode:'auto',attachments:[],draftAttachmentIds:[],draft:'',messages:[],createdAt:now}];
   state.currentConversationId='qa_clarify_conversation';
   state.settings.permissions={'日常':'auto','课程':'auto','科研':'auto'};
-  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','持续对话');
+  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','对话');
   $('#apiBase').value='https://fixture.invalid/v1';$('#apiKey').value='isolated-test-placeholder';
   ConversationModels.configuration=()=>({provider:'api',model:'QA isolated model',effort:'medium'});
   ConversationModels.resolve=async value=>value;

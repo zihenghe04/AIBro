@@ -129,7 +129,7 @@ app.on('window-all-closed', () => {});
       attachments: [], draftAttachmentIds: [], draft: '', createdAt: 1700000000000, updatedAt: 1700000000200 }],
     currentConversationId: ORIGINAL_CHAT, currentProjectId: PROJECT, agentRuns: [], tasks: [], papers: [], imports: [], attachments: [], links: [], trash: []
   };
-  await evaluate(`WorkstationOnboarding.close();WorkspaceTour?.close();Object.assign(state,${JSON.stringify(fixture)});state.ui.onboarding={version:WorkstationOnboarding.VERSION,status:'skipped'};state.notes[0].content=ResearchWiki.markdown('idea',${JSON.stringify(TITLE)},{question:'持续检索能否改善长期记忆？',observations:${JSON.stringify(ORIGINAL_MARKER)},hypothesis:'未验证。'});normalizeStateShape(state);repairRelationships();state.ui.theme='light';state.ui.inspectorOpen=false;state.settings.permissions={日常:'auto',课程:'auto',科研:'auto'};state.ui.workspaceTour={completed:true};applyUiPreferences();showView('agent','持续对话');renderAll();saveDocumentDurably()`);
+  await evaluate(`WorkstationOnboarding.close();WorkspaceTour?.close();Object.assign(state,${JSON.stringify(fixture)});state.ui.onboarding={version:WorkstationOnboarding.VERSION,status:'skipped'};state.notes[0].content=ResearchWiki.markdown('idea',${JSON.stringify(TITLE)},{question:'持续检索能否改善长期记忆？',observations:${JSON.stringify(ORIGINAL_MARKER)},hypothesis:'未验证。'});normalizeStateShape(state);repairRelationships();state.ui.theme='light';state.ui.inspectorOpen=false;state.settings.permissions={日常:'auto',课程:'auto',科研:'auto'};state.ui.workspaceTour={completed:true};applyUiPreferences();showView('agent','对话');renderAll();saveDocumentDurably()`);
   await settleStore(); await installSyntheticTransport();
   originalBody = (await note()).content; originalConversation = await originalMessages();
 

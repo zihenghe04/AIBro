@@ -44,13 +44,13 @@ html body.aibro-native[data-view] dialog:not(#previewDialog) {
   box-shadow: var(--ds-elevation-300);
   opacity: 0;
   transform: scale(.98);
-  transition: opacity 140ms var(--ds-ease-swift), transform 160ms var(--ds-ease-swift), display 160ms allow-discrete, overlay 160ms allow-discrete;
+  transition: opacity var(--duration-140) var(--ds-ease-swift), transform var(--duration-160) var(--ds-ease-swift), display var(--duration-160) allow-discrete, overlay var(--duration-160) allow-discrete;
 }
 html body.aibro-native[data-view] dialog[open]:not(#previewDialog) {
   opacity: 1;
   transform: none;
   animation: none;
-  transition: opacity 180ms var(--ds-ease-swift), transform 420ms var(--mac-spring-snappy), display 420ms allow-discrete, overlay 420ms allow-discrete;
+  transition: opacity var(--duration-180) var(--ds-ease-swift), transform var(--duration-420) var(--mac-spring-snappy), display var(--duration-420) allow-discrete, overlay var(--duration-420) allow-discrete;
 }
 @starting-style {
   html body.aibro-native[data-view] dialog[open]:not(#previewDialog) { opacity: 0; transform: scale(.96) }
@@ -61,23 +61,23 @@ html body.aibro-native[data-view] dialog:not(#previewDialog)::backdrop {
   backdrop-filter: none;
   opacity: 0;
   animation: none;
-  transition: opacity 160ms var(--ds-ease-swift), display 160ms allow-discrete, overlay 160ms allow-discrete;
+  transition: opacity var(--duration-160) var(--ds-ease-swift), display var(--duration-160) allow-discrete, overlay var(--duration-160) allow-discrete;
 }
-html body.aibro-native[data-view] dialog[open]:not(#previewDialog)::backdrop { opacity: 1; transition-duration: 220ms }
+html body.aibro-native[data-view] dialog[open]:not(#previewDialog)::backdrop { opacity: 1; transition-duration: var(--duration-220) }
 @starting-style {
   html body.aibro-native[data-view] dialog[open]:not(#previewDialog)::backdrop { opacity: 0 }
 }
 html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header {
-  margin-bottom: 18px;
-  padding: 22px 26px 4px;
+  margin-bottom: var(--space-18);
+  padding: var(--space-22) var(--space-26) var(--space-4);
   border-bottom: 0;
   background: transparent;
 }
-html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header h2 { font-size: 17px; font-weight: 650; letter-spacing: -.02em }
-html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header .eyebrow { color: var(--faint); font-weight: 500 }
+html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header h2 { font-size: var(--font-size-17); font-weight: var(--font-weight-650); letter-spacing: var(--tracking-tight)}
+html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header .eyebrow { color: var(--faint); font-weight: var(--font-weight-500)}
 html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-actions {
-  margin: 22px -26px -26px;
-  padding: 14px 26px 20px;
+  margin: var(--space-22) -26px -26px;
+  padding: var(--space-14) var(--space-26) var(--space-20);
   border-top: 0;
   background: transparent;
 }
@@ -87,7 +87,7 @@ html body.aibro-native[data-view] dialog:not(#previewDialog) .dialog-header .ico
   width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: var(--mac-fill);
   color: var(--muted);
   box-shadow: none;
@@ -116,18 +116,18 @@ html.appkit-web-glass body.aibro-native dialog[data-appkit-glass] :is(input:not(
 html body.aibro-native[data-view] :is(.toast, #toast) {
   max-width: min(520px, calc(100vw - 40px));
   min-height: 36px;
-  padding: 9px 18px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: var(--space-9) var(--space-18);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-500);
   line-height: 18px;
   text-align: center;
   text-wrap: balance;
   transform: translate(-50%, 10px) scale(.96);
-  transition: opacity 160ms var(--ds-ease-swift), transform 200ms var(--ds-ease-swift);
+  transition: opacity var(--duration-160) var(--ds-ease-swift), transform var(--duration-200) var(--ds-ease-swift);
 }
 html body.aibro-native[data-view] :is(.toast, #toast):is(.visible, .show) {
   transform: translate(-50%, 0);
-  transition: opacity 180ms var(--ds-ease-swift), transform 460ms var(--mac-spring-snappy);
+  transition: opacity var(--duration-180) var(--ds-ease-swift), transform 460ms var(--mac-spring-snappy);
 }
 
 /* Command palette: a Spotlight-style panel anchored in the upper third, so
@@ -138,13 +138,13 @@ html body.aibro-native[data-view] #searchDialog.command-search {
   width: min(640px, calc(100vw - 32px));
   max-height: min(600px, calc(100dvh - 15vh - 24px));
   margin: max(48px, 13vh) auto auto;
-  border-radius: 20px;
+  border-radius: var(--radius-20);
   transform-origin: 50% 0;
 }
 html body.aibro-native[data-view] #searchDialog.command-search #searchForm { max-height: inherit }
 html body.aibro-native[data-view] #searchDialog.command-search .search-field-row {
   min-height: 56px;
-  padding-inline: 18px 12px;
+  padding-inline: var(--space-18) var(--space-12);
   border-bottom: .5px solid var(--line-strong);
   background: transparent;
   box-shadow: none;
@@ -154,7 +154,7 @@ html body.aibro-native[data-view] #searchDialog.command-search #globalSearchInpu
   border: 0;
   background: transparent;
   box-shadow: none;
-  font-size: 17px;
+  font-size: var(--font-size-17);
   letter-spacing: -.01em;
 }
 html body.aibro-native[data-view] #searchDialog.command-search #globalSearchInput:focus { box-shadow: none }
@@ -167,18 +167,18 @@ html body.aibro-native[data-view] #searchDialog.command-search .search-close {
   border-radius: var(--ds-radius-sm);
   background: var(--mac-fill);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
-html body.aibro-native[data-view] #searchDialog.command-search .search-meta { padding: 10px 20px 4px; color: var(--faint); font-size: 11px }
-html body.aibro-native[data-view] #searchDialog.command-search .search-results { padding: 2px 8px 8px }
-html body.aibro-native[data-view] .command-search-group + .command-search-group { margin-top: 6px; padding-top: 4px; border-top: .5px solid var(--line) }
-html body.aibro-native[data-view] .command-search-group-heading { padding: 8px 12px 4px; color: var(--faint); font-size: 11px; font-weight: 600 }
+html body.aibro-native[data-view] #searchDialog.command-search .search-meta { padding: var(--space-10) var(--space-20) var(--space-4); color: var(--faint); font-size: var(--font-size-11) }
+html body.aibro-native[data-view] #searchDialog.command-search .search-results { padding: var(--space-2) var(--space-8) var(--space-8) }
+html body.aibro-native[data-view] .command-search-group + .command-search-group { margin-top: var(--space-6); padding-top: var(--space-4); border-top: .5px solid var(--line) }
+html body.aibro-native[data-view] .command-search-group-heading { padding: var(--space-8) var(--space-12) var(--space-4); color: var(--faint); font-size: var(--font-size-11); font-weight: var(--font-weight-600)}
 html body.aibro-native[data-view] #searchDialog.command-search .search-result {
   min-height: 44px;
-  gap: 11px;
-  padding: 6px 10px;
+  gap: var(--space-11);
+  padding: var(--space-6) var(--space-10);
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   box-shadow: none;
   transition: background-color 90ms var(--ds-ease-swift);
 }
@@ -192,7 +192,7 @@ html body.aibro-native[data-view] #searchDialog.command-search .search-result-ic
   width: 26px;
   height: 26px;
   flex: 0 0 26px;
-  border-radius: 7px;
+  border-radius: var(--radius-7);
   background: var(--mac-fill);
   color: var(--muted);
 }
@@ -200,32 +200,32 @@ html body.aibro-native[data-view] #searchDialog.command-search .search-result[ar
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
 }
-html body.aibro-native[data-view] #searchDialog.command-search .search-result-copy b { font-size: 13px; font-weight: 500 }
-html body.aibro-native[data-view] #searchDialog.command-search .search-result-copy small { margin-top: 1px; font-size: 11px; color: var(--muted) }
+html body.aibro-native[data-view] #searchDialog.command-search .search-result-copy b { font-size: var(--font-size-13); font-weight: var(--font-weight-500)}
+html body.aibro-native[data-view] #searchDialog.command-search .search-result-copy small { margin-top: var(--space-1); font-size: var(--font-size-11); color: var(--muted) }
 html body.aibro-native[data-view] #searchDialog.command-search .search-footer {
   min-height: 38px;
-  padding: 8px 18px;
+  padding: var(--space-8) var(--space-18);
   border-top: .5px solid var(--line-strong);
   background: transparent;
   color: var(--faint);
 }
 html body.aibro-native[data-view] #searchDialog.command-search .search-footer kbd {
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-5);
   background: var(--mac-fill);
   color: var(--muted);
 }
 html body.aibro-native[data-view] #searchDialog.command-search .search-welcome-icon {
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-14);
   background: var(--mac-fill);
   box-shadow: none;
   color: var(--muted);
   opacity: .8;
 }
-html body.aibro-native[data-view] #searchDialog.command-search .search-scope-hints span { border: 0; border-radius: 999px; padding: 3px 9px; background: var(--mac-fill) }
+html body.aibro-native[data-view] #searchDialog.command-search .search-scope-hints span { border: 0; border-radius: var(--radius-pill); padding: var(--space-3) var(--space-9); background: var(--mac-fill) }
 @media (max-width: 500px) {
-  html body.aibro-native[data-view] #searchDialog.command-search { width: calc(100vw - 20px); margin-top: 24px; max-height: calc(100dvh - 48px) }
+  html body.aibro-native[data-view] #searchDialog.command-search { width: calc(100vw - 20px); margin-top: var(--space-24); max-height: calc(100dvh - 48px) }
 }
 @media (prefers-contrast: more) {
   html body.aibro-native[data-view] #searchDialog.command-search .search-result[aria-selected=true] { box-shadow: inset 0 0 0 2px var(--accent) }
@@ -250,7 +250,7 @@ html body.aibro-native[data-view] #searchDialog.command-search .search-scope-hin
     max-width: 1180px;
   }
   html body.aibro-native[data-view] #settings.settings-sectioned > * { grid-column: 2; min-width: 0; max-width: none; margin-inline: 0 }
-  html body.aibro-native[data-view] #settings.settings-sectioned > .page-heading { grid-column: 1 / -1; margin-bottom: 22px }
+  html body.aibro-native[data-view] #settings.settings-sectioned > .page-heading { grid-column: 1 / -1; margin-bottom: var(--space-22) }
   html body.aibro-native[data-view] #settings.settings-sectioned :is(#settingsNavigation, .settings-navigation-kit) { display: contents }
   html body.aibro-native[data-view] #settings.settings-sectioned .settings-tabs-scroll {
     grid-column: 1;
@@ -260,14 +260,14 @@ html body.aibro-native[data-view] #searchDialog.command-search .search-scope-hin
     overflow: visible;
     padding: 0;
   }
-  html body.aibro-native[data-view] #settings.settings-sectioned .settings-section-intro { grid-column: 2; grid-row: 2; padding: 4px 2px 18px }
+  html body.aibro-native[data-view] #settings.settings-sectioned .settings-section-intro { grid-column: 2; grid-row: 2; padding: var(--space-4) var(--space-2) var(--space-18) }
   html body.aibro-native[data-view] #settings.settings-sectioned .settings-panels { grid-column: 2; grid-row: 3 }
   html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs { min-width: 0; width: 100%; flex: none }
   html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div {
     flex-direction: column;
     width: 100%;
     padding: 0;
-    gap: 2px !important;
+    gap: var(--space-2) !important;
     border-radius: 0;
     background: transparent;
   }
@@ -275,10 +275,10 @@ html body.aibro-native[data-view] #searchDialog.command-search .search-scope-hin
     justify-content: flex-start;
     width: 100%;
     min-height: 32px;
-    padding: 6px 12px !important;
-    border-radius: 9px;
+    padding: var(--space-6) var(--space-12) !important;
+    border-radius: var(--radius-9);
     text-align: left;
-    font-size: 13px !important;
+    font-size: var(--font-size-13) !important;
     color: var(--muted) !important;
     transition: background-color var(--ds-fast) var(--ds-ease-swift), color var(--ds-fast) var(--ds-ease-swift) !important;
   }
@@ -286,7 +286,7 @@ html body.aibro-native[data-view] #searchDialog.command-search .search-scope-hin
   html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div > button[aria-selected=true] {
     background: var(--mac-row-hover) !important;
     color: var(--text) !important;
-    font-weight: 600 !important;
+    font-weight: var(--font-weight-600) !important;
   }
   html body.aibro-native[data-view] #settings .settings-tabs-scroll .kit-tabs > div > button:focus-visible {
     outline: none;
@@ -302,7 +302,7 @@ html body.aibro-native.reduce-motion[data-view] #settings .settings-section:not(
 html body.aibro-native.workspace-resizing[data-view] #settings .settings-section { animation: none }
 /* The save scope is a quiet footnote row rather than a second card. */
 html body.aibro-native[data-view] #settings .settings-save-bar {
-  padding: 12px 14px 12px 16px;
+  padding: var(--space-12) var(--space-14) var(--space-12) var(--space-16);
   border: 0;
   border-radius: var(--ds-radius-md);
   background: var(--mac-fill);
@@ -324,13 +324,13 @@ html body.aibro-native[data-view] :is(.empty-list, .trash-empty-message, .run-hi
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--space-10);
   min-height: 120px;
   margin: 0;
-  padding: 28px 16px calc(28px + 4%);
+  padding: var(--space-28) var(--space-16) calc(28px + 4%);
   color: var(--faint);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-12);
+  line-height: var(--leading-160);
   text-align: center;
   text-wrap: balance;
 }

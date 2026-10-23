@@ -5,10 +5,12 @@
  const Assignment=typeof module==='object'&&module.exports?require('./record-assignment'):globalThis.RecordAssignment;
  const active=x=>x&&!x.wikiFileError&&!x.deleted&&!x.deletedAt&&!x.archived&&!x.archivedAt&&!['deleted','archived'].includes(x.status);
  const list=x=>Array.isArray(x)?x:[];
- const batchLimit=32;
+ const Tools=typeof module==='object'&&module.exports?require('./tool-specs'):globalThis.AIBroTools;
+ if(!Tools?.registry)throw Error('KnowledgeAccess needs the tool registry (tool-specs.js) loaded first');
+ const batchLimit=Tools.BATCH_LIMIT;
  // Only evidence reads may cross scheduler batches automatically. Commands,
  // live browser actions, delegation and unknown tools keep their existing cap.
- const chunkableReads=new Set(['agenda_list','agenda_read','project_list','task_list','list','search','neighbors','read','read_page','read_file','wiki_list','memory_read','capabilities','history_search','history_read','library_overview','evidence_log']);
+ const chunkableReads=Tools.registry.chunkableTypes();
  function requestError(code,message,requestCount,details){
   return Object.assign(Error(message),{code,knowledgeDiagnostic:{version:1,code,requestCount,batchLimit,...details}});
  }
@@ -112,21 +114,26 @@
   const variant=request.variant||'current',verify=found.type==='note'?makeReadGuard(found.type,found.record.id,scope,explicitlySelected,sharedSnapshot(readSession,found.type,found.record.id,sourceSnapshot(found.record,found.type,variant)),getState,variant):null;
   return {...identity(found),variant,offset,text,totalChars:content.length,nextOffset:offset+text.length<content.length?offset+text.length:null,originalRead:false,hint:!content&&found.type==='import'?'No text index. Use read_page for original PDF pages.':null,...(verify?{[readGuard]:verify}:{})};
  }
- function requestKey(request){
-  const r={...request};
-  if(['list','search','task_list','read','read_file','wiki_list','memory_read','history_search','history_read','library_overview','evidence_log'].includes(r.type))r.offset=Number(r.offset??0);
-  if(['read','read_page'].includes(r.type))r.recordType=r.recordType||'note';
-  if(r.type==='read')r.variant=r.variant||'current';
-  if(r.type==='read_page'){r.page=pdfCursor(r.page,1);r.offset=pdfCursor(r.offset,0);}
-  if(['list','search','project_list','task_list','history_search'].includes(r.type))r.query=String(r.query||'').trim();
+ // Evidence cache key. Which fields form the key and how defaults are
+ // filled in are declared per tool (ToolSpec.cache); unknown types key on all fields.
+ const keyNormalizers={
+  int0:value=>Number(value??0),
+  int1:value=>Number(value??1),
+  trim:value=>String(value||'').trim(),
+  note:value=>value||'note',
+  current:value=>value||'current',
+  pdfPage:value=>pdfCursor(value,1),
+  pdfOffset:value=>pdfCursor(value,0),
   // Search execution uses this same effective budget. Reusing its result must
   // not require another tool call just because the model spells out a default.
   // Invalid budgets retain their original key/error rather than aliasing 4000.
-  if(r.type==='search'){const n=Number(r.maxTokens??4000);if(Number.isSafeInteger(n)&&n>=256&&n<=16000)r.maxTokens=n;}
-  if(r.type==='neighbors')r.radius=Number(r.radius??1);
-  const fields={agenda_list:['query','from','to','limit','offset'],agenda_read:['eventId','expectedVersion'],list:['query','offset'],search:['query','offset','maxTokens'],project_list:['query','offset'],task_list:['query','offset'],read:['recordType','id','variant','offset'],read_page:['recordType','id','page','offset'],read_file:['refKey','offset'],wiki_list:['offset'],memory_read:['offset'],neighbors:['chunkId','version','radius'],library_overview:['offset','maxTokens'],capabilities:['name'],history_search:['query','offset','maxTokens'],history_read:['messageId','offset'],evidence_log:['runId','offset']};
-  const keys=fields[r.type]||Object.keys(r).filter(k=>k!=='type');
-  return JSON.stringify(Object.fromEntries(['type',...keys.sort()].map(k=>[k,r[k]])));
+  searchBudget:value=>{const n=Number(value??4000);return Number.isSafeInteger(n)&&n>=256&&n<=16000?n:value;},
+ };
+ function requestKey(request){
+  const r={...request};
+  for(const [field,name] of Object.entries(Tools.registry.normalizers(r.type)))r[field]=keyNormalizers[name](r[field]);
+  const keys=Tools.registry.keyFields(r.type)||Object.keys(r).filter(k=>k!=='type');
+  return JSON.stringify(Object.fromEntries(['type',...[...keys].sort()].map(k=>[k,r[k]])));
  }
  function checkedRequestKeys(requests){
   if(!Array.isArray(requests))throw requestError('INVALID_KNOWLEDGE_REQUESTS','工具计划的 knowledgeRequests 必须是数组，尚未执行。',null,{invalidContainer:true,invalidCount:1,invalidIndices:[]});
@@ -253,7 +260,7 @@
    // Browser observations and actions operate on a live page. A previous
    // snapshot cannot answer a later observation, even when arguments match.
    // Actions are serialised by ToolScheduler and consume native snapshot refs.
-   const requested=[...new Map(plan.knowledgeRequests.map((r,i)=>[requestKeys[i]+((r.type.startsWith('browser_')||['agenda_list','agenda_read'].includes(r.type))?':live:'+round:''),r])).entries()];
+   const requested=[...new Map(plan.knowledgeRequests.map((r,i)=>[requestKeys[i]+(Tools.registry.isLive(r.type)?':live:'+round:''),r])).entries()];
    const fresh=requested.filter(([key])=>!evidence.has(key));
    // Detect cycles across alternating tools, JSON property order and batching.
    stalled=fresh.length||requested.some(([key])=>!previousIncluded.has(key))?0:stalled+1;
@@ -345,5 +352,6 @@
    output=await ask(lastAsk.text,lastAsk.blocks);
   }
  }
- return {records,execute,continuePlan,validateReadResult,readValidationFailures,createReadSession};
+ // The knowledge-request protocol text, rendered from the tool declarations.
+ return {records,execute,continuePlan,validateReadResult,readValidationFailures,createReadSession,requestKey,toolText:Tools.text};
 });

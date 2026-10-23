@@ -39,9 +39,9 @@
 .aicss-effort-label {
   position: absolute;
   top: 2.5px;
-  z-index: 2;
+  z-index: var(--z-2);
   font-size: 10.5px;
-  font-weight: 500;
+  font-weight: var(--font-weight-500);
   line-height: 14px;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -50,8 +50,8 @@
 
 .aicss-effort-swap {
   display: flex;
-  gap: 3px;
-  animation: aicss-effort-blur-in 180ms ease-out;
+  gap: var(--space-3);
+  animation: aicss-effort-blur-in var(--duration-180) ease-out;
 }
 
 @keyframes aicss-effort-blur-in {
@@ -85,7 +85,7 @@
   bottom: 0;
   left: 0;
   height: 32px;
-  border-radius: 16px;
+  border-radius: var(--radius-16);
   cursor: grab;
 }
 
@@ -98,7 +98,7 @@
   top: 0;
   bottom: 0;
   left: 0;
-  border-radius: 16px;
+  border-radius: var(--radius-16);
   background: linear-gradient(90deg, #006aff, #0059d4);
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.16);
   pointer-events: none;
@@ -107,9 +107,9 @@
 .aicss-effort-thumb {
   position: absolute;
   top: 50%;
-  z-index: 2;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #ffffff, #f5f5f5);
+  z-index: var(--z-2);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--color-white), #f5f5f5);
   box-shadow: var(--ss-thumb-shadow);
   pointer-events: none;
 }
@@ -117,7 +117,7 @@
 .aicss-effort-tick {
   position: absolute;
   top: 50%;
-  z-index: 3;
+  z-index: var(--z-3);
   width: 1.5px;
   margin-left: -0.75px;
   border-radius: 1px;

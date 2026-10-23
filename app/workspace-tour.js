@@ -19,7 +19,7 @@
  }
  function createController(hooks={},env=root){
   const doc=env.document;if(!doc)throw Error('工作台导览需要界面。');
-  let opened=false,destroyed=false,index=0,generation=0,pendingFrame=null,opener=null,anchor=null,starting=null,waiting=false,seen=false,mutation=null,resize=null,startupObserver=null,startupTimer=null,readyRetries=0;
+  let automaticAt=0,opened=false,destroyed=false,index=0,generation=0,pendingFrame=null,opener=null,anchor=null,starting=null,waiting=false,seen=false,mutation=null,resize=null,startupObserver=null,startupTimer=null,readyRetries=0;
   const make=(tag,cls,value)=>{const n=doc.createElement(tag);n.className=cls||'';if(value!==undefined)n.textContent=value;return n;};
   const button=(cls,label,handler)=>{const n=make('button',cls,label);n.type='button';n.onclick=handler;return n;};
   const layer=make('div','workspace-tour');layer.id='workspaceTour';layer.hidden=true;
@@ -55,20 +55,27 @@
    label.textContent=`${index+1} / ${steps.length} · ${step.label}`;count.textContent=`${index+1} / ${steps.length}`;back.disabled=index===0;next.textContent=index===steps.length-1?'开始使用':'下一步';trackButtons.forEach((n,i)=>{n.setAttribute('aria-current',i===index?'step':'false');n.classList.toggle('is-complete',i<index);});
    glyph.textContent=['↗','▱','≡','⌄','◎'][index];[line1,line2,line3].forEach((n,i)=>n.textContent=step.scene[i]);demo.dataset.scene=step.id;demo.classList.remove('is-playing');void demo.offsetWidth;demo.classList.add('is-playing');layout();card.focus({preventScroll:true});hooks.onStep?.(step.id,index);
   }
-  function listen(on){const method=on?'addEventListener':'removeEventListener';env[method]('resize',schedule);doc[method]('scroll',schedule,true);doc[method]('keydown',keydown,true);}
-  function keydown(event){if(!opened||blocked())return;if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close('skipped');return;}if(!card.contains(doc.activeElement)||event.altKey||event.ctrlKey||event.metaKey||event.isComposing)return;if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();event.stopPropagation();go(index+(event.key==='ArrowRight'?1:-1));}if(event.key==='Home'||event.key==='End'){event.preventDefault();go(event.key==='Home'?0:steps.length-1);}}
+  function listen(on){const method=on?'addEventListener':'removeEventListener';env[method]('resize',schedule);doc[method]('scroll',schedule,true);doc[method]('keydown',keydown,true);doc[method]('pointerdown',pointerdown,true);}
+  // The card floats over a live workspace. Working elsewhere (another page,
+  // a click outside the card, Esc) tucks it away; settings can resume it.
+  function dismiss(options={}){if(!opened)return false;close('skipped',{...options,resumeStep:index});hooks.toast?.(env.WorkstationI18n?.getLanguage?.()==='en'?'Workspace tour hidden. Resume it from Settings → Workspace tour.':'工作台导览已收起，可在“设置”里点“工作台导览”继续。');return true;}
+  function pointerdown(event){if(!opened||blocked())return;const target=event.target;if(!target||card.contains(target)||entry.contains(target))return;dismiss({restoreFocus:false});}
+  function routeChanged(view){if(!opened||view===(hooks.view||'agent'))return false;
+   // The native shell restores the last location right after launch; that is not the user leaving.
+   if(automaticAt&&Date.now()-automaticAt<2500){schedule();return false;}return dismiss({restoreFocus:false});}
+  function keydown(event){if(!opened||blocked())return;if(event.key==='Escape'){event.preventDefault();event.stopPropagation();dismiss();return;}if(!card.contains(doc.activeElement)||event.altKey||event.ctrlKey||event.metaKey||event.isComposing)return;if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();event.stopPropagation();go(index+(event.key==='ArrowRight'?1:-1));}if(event.key==='Home'||event.key==='End'){event.preventDefault();go(event.key==='Home'?0:steps.length-1);}}
   function observe(){if(env.ResizeObserver){resize=new env.ResizeObserver(schedule);resize.observe(card);}if(env.MutationObserver){mutation=new env.MutationObserver(records=>{if(records.some(r=>!layer.contains(r.target)))schedule();});mutation.observe(doc.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden','open']});}}
   async function start(options={}){
    if(destroyed)return false;if(opened)return true;if(starting)return starting;
    // Explicit replay may replace the other guide, but never a save/login decision.
    if(modalBlocked()){if(!options.automatic)hooks.onError?.(env.WorkstationI18n?.getLanguage?.()==='en'?'Finish or close the current dialog before opening the workspace tour.':'请先完成或关闭当前弹窗，再打开工作台导览。');return false;}
-   if(doc.querySelector('#onboardingLayer:not([hidden])')){if(options.automatic)return false;env.WorkstationOnboarding?.close?.('skipped',{restoreFocus:false});if(blocked())return false;}
+   if(doc.querySelector('#onboardingLayer:not([hidden])')){if(options.automatic)return false;env.WorkstationOnboarding?.close?.('skipped',{restoreFocus:false,returnToOrigin:false});if(blocked())return false;}
    waiting=false;const own=++generation;opener=doc.activeElement;
-   starting=(async()=>{try{await hooks.showWorkspace?.();}catch(_){if(own===generation)hooks.onError?.('当前界面暂不能切换。');return false;}if(destroyed||own!==generation||blocked())return false;stopStartup();opened=true;index=0;layer.hidden=false;entry.setAttribute('aria-expanded','true');listen(true);observe();paint();return true;})().finally(()=>{if(own===generation)starting=null;});return starting;
+   starting=(async()=>{try{await hooks.showWorkspace?.();}catch(_){if(own===generation)hooks.onError?.('当前界面暂不能切换。');return false;}if(destroyed||own!==generation||blocked())return false;stopStartup();automaticAt=options.automatic?Date.now():0;const resume=options.automatic?0:hooks.getState?.()?.ui?.workspaceTour?.resumeStep;opened=true;index=Number.isInteger(resume)&&resume>0&&resume<steps.length?resume:0;layer.hidden=false;entry.setAttribute('aria-expanded','true');listen(true);observe();paint();return true;})().finally(()=>{if(own===generation)starting=null;});return starting;
   }
   function close(status='skipped',options={}){
    if(!opened&&!starting)return false;const wasOpen=opened;stopStartup();opened=false;starting=null;waiting=false;seen=true;generation++;layer.hidden=true;spot.hidden=true;entry.setAttribute('aria-expanded','false');listen(false);mutation?.disconnect();resize?.disconnect();mutation=resize=null;anchor=null;if(pendingFrame!==null){env.cancelAnimationFrame(pendingFrame);pendingFrame=null;}
-   if(options.restoreFocus!==false){const target=[opener,doc.querySelector('#agentInput'),entry].find(visible);target?.focus({preventScroll:true});}if(wasOpen&&options.notify!==false)hooks.onFinish?.({version:VERSION,status});return true;
+   if(options.restoreFocus!==false){const target=[opener,doc.querySelector('#agentInput'),entry].find(visible);target?.focus({preventScroll:true});}if(wasOpen&&options.notify!==false)hooks.onFinish?.({version:VERSION,status,...(Number.isInteger(options.resumeStep)?{resumeStep:options.resumeStep}:{})});return true;
   }
   function go(nextIndex){if(!opened)return false;index=Math.max(0,Math.min(steps.length-1,nextIndex));paint();return true;}
   function stopStartup(){startupObserver?.disconnect();startupObserver=null;if(startupTimer!==null){env.clearTimeout(startupTimer);startupTimer=null;}}
@@ -78,10 +85,11 @@
    if(destroyed||opened||seen||!shouldStart(hooks.getState?.())){stopStartup();return false;}watchStartup();
    if(await hooks.ready?.()===false){waiting=true;if(hooks.autoStart===true&&readyRetries++<60)queueStartup(500);return false;}
    if(destroyed||seen||!shouldStart(hooks.getState?.())){stopStartup();return false;}
-   if(blocked()||hooks.isBusy?.()){waiting=true;return false;}waiting=false;return start({automatic:true});
+   // Automatic startup waits for the workspace page instead of pulling the user off the page they chose.
+   if(blocked()||hooks.isBusy?.()||hooks.onWorkspace?.()===false){waiting=true;return false;}waiting=false;return start({automatic:true});
   }
   function destroy(){close('skipped',{notify:false});stopStartup();destroyed=true;layer.remove();entry.remove();}
-  const api={start,open:start,close,next:()=>index===steps.length-1?close('completed'):go(index+1),previous:()=>go(index-1),go,layout,maybeStart,destroy,isOpen:()=>opened,currentStep:()=>steps[index].id,isWaiting:()=>waiting};if(hooks.autoStart===true)void maybeStart().catch(()=>{});return api;
+  const api={start,open:start,close,dismiss,routeChanged,next:()=>index===steps.length-1?close('completed'):go(index+1),previous:()=>go(index-1),go,layout,maybeStart,destroy,isOpen:()=>opened,currentStep:()=>steps[index].id,isWaiting:()=>waiting};if(hooks.autoStart===true)void maybeStart().catch(()=>{});return api;
  }
- let controller=null;return {VERSION,steps,shouldStart,placement,createController,init(hooks){if(!controller)controller=createController(hooks);return controller;},start:options=>controller?.start(options),open:options=>controller?.start(options),close:(...args)=>controller?.close(...args),maybeStart:()=>controller?.maybeStart(),isOpen:()=>!!controller?.isOpen()};
+ let controller=null;return {VERSION,steps,shouldStart,placement,createController,init(hooks){if(!controller)controller=createController(hooks);return controller;},start:options=>controller?.start(options),open:options=>controller?.start(options),close:(...args)=>controller?.close(...args),maybeStart:()=>controller?.maybeStart(),isOpen:()=>!!controller?.isOpen(),routeChanged:view=>!!controller?.routeChanged(view)};
 });

@@ -33,11 +33,11 @@
   background: transparent;
 }
 .document-visual-editor .milkdown .ProseMirror {
-  padding: 28px clamp(22px, 4vw, 56px) 100px;
+  padding: var(--space-28) clamp(22px, 4vw, 56px) 100px;
   min-height: 360px;
   color: var(--text, #242424);
   font-family: var(--crepe-font-default);
-  line-height: 1.8;
+  line-height: var(--leading-180);
   overflow-wrap: anywhere;
   outline: none;
 }
@@ -49,7 +49,7 @@
 .document-visual-editor .milkdown .ProseMirror h6 {
   font-family: var(--crepe-font-title);
   font-weight: 620;
-  line-height: 1.4;
+  line-height: var(--leading-140);
   letter-spacing: -.018em;
 }
 .document-visual-editor .milkdown .ProseMirror h1 { font-size: 1.8em; margin: 1.6em 0 .6em; }
@@ -66,40 +66,40 @@
   position: sticky;
   top: 0;
   z-index: 5;
-  background: var(--panel, #fff);
+  background: var(--panel, var(--color-white));
   border-bottom: 1px solid var(--border, #e1e5e4);
-  padding: 7px 12px;
+  padding: var(--space-7) var(--space-12);
 }
-.document-visual-editor .milkdown .top-bar-inner { display: flex; flex-wrap: wrap; gap: 2px; }
+.document-visual-editor .milkdown .top-bar-inner { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .document-visual-editor .milkdown .top-bar-item,
 .document-visual-editor .milkdown .top-bar-heading-button {
   min-width: 30px;
   min-height: 30px;
-  border-radius: 6px;
+  border-radius: var(--radius-6);
   color: var(--muted, #69727b);
 }
 .document-visual-editor .milkdown .top-bar-item.active { color: var(--accent, #28796a); }
 .document-visual-editor .milkdown .top-bar-item svg { width: 18px; height: 18px; }
-.document-visual-editor .document-visual-symbol { display: inline-flex; align-items: center; justify-content: center; font-size: 21px; line-height: 20px; width: 20px; height: 20px; }
-.document-visual-editor .milkdown .top-bar-divider { margin: 3px 5px; }
+.document-visual-editor .document-visual-symbol { display: inline-flex; align-items: center; justify-content: center; font-size: var(--font-size-21); line-height: 20px; width: 20px; height: 20px; }
+.document-visual-editor .milkdown .top-bar-divider { margin: var(--space-3) var(--space-5); }
 /* Crepe gives each 32 px item a 6 px margin, so a narrow reading pane folds the
    toolbar into several rows above the text. Keep one compact row there; items
    that do not fit scroll sideways (focus scrolls them into view). */
 @container (max-width: 760px) {
-  .document-visual-editor .milkdown .milkdown-top-bar { padding: 3px 8px; min-height: 0; }
+  .document-visual-editor .milkdown .milkdown-top-bar { padding: var(--space-3) var(--space-8); min-height: 0; }
   .document-visual-editor .milkdown .top-bar-inner { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
   .document-visual-editor .milkdown .top-bar-inner::-webkit-scrollbar { display: none; }
-  .document-visual-editor .milkdown .top-bar-item { width: 28px; height: 28px; min-width: 28px; min-height: 28px; margin: 1px; padding: 3px; }
+  .document-visual-editor .milkdown .top-bar-item { width: 28px; height: 28px; min-width: 28px; min-height: 28px; margin: var(--space-1); padding: var(--space-3); }
   .document-visual-editor .milkdown .top-bar-item svg { width: 16px; height: 16px; }
-  .document-visual-editor .milkdown .top-bar-divider { margin: 3px 2px; height: 22px; }
+  .document-visual-editor .milkdown .top-bar-divider { margin: var(--space-3) var(--space-2); height: 22px; }
   /* The heading menu is positioned against the sticky bar instead of the
      selector, so the scrolling row does not clip it; auto offsets keep it
      directly under the selector button. */
-  .document-visual-editor .milkdown .top-bar-heading-selector { position: static; padding: 2px; }
+  .document-visual-editor .milkdown .top-bar-heading-selector { position: static; padding: var(--space-2); }
   .document-visual-editor .milkdown .top-bar-heading-dropdown { top: auto; left: auto; }
-  .document-visual-editor .milkdown .top-bar-heading-button { height: 28px; padding-block: 2px; }
+  .document-visual-editor .milkdown .top-bar-heading-button { height: 28px; padding-block: var(--space-2); }
   .document-visual-editor .milkdown .top-bar-heading-button .top-bar-heading-label { min-width: 56px; }
-  .document-visual-editor .milkdown .ProseMirror { padding-top: 14px; }
+  .document-visual-editor .milkdown .ProseMirror { padding-top: var(--space-14); }
 }
 .document-visual-editor button:focus-visible,
 .document-visual-editor input:focus-visible,
@@ -109,43 +109,43 @@
 }
 .document-visual-editor .milkdown .milkdown-code-block {
   border: 1px solid var(--border, #e1e5e4);
-  border-radius: 9px;
+  border-radius: var(--radius-9);
   background: var(--bg, #f6f7f8);
   margin: 1.1em 0;
   min-width: 0;
 }
-.document-visual-editor .milkdown .milkdown-code-block .cm-editor { font-size: 13px; min-width: 0; }
+.document-visual-editor .milkdown .milkdown-code-block .cm-editor { font-size: var(--font-size-13); min-width: 0; }
 .document-visual-editor .milkdown .milkdown-code-block .cm-scroller { max-width: 100%; }
 .document-visual-editor .milkdown .milkdown-table-block { max-width: 100%; margin: 1.1em 0; }
 .document-visual-editor .milkdown .milkdown-table-block table { min-width: 100%; }
 .document-visual-editor .milkdown .milkdown-table-block th,
 .document-visual-editor .milkdown .milkdown-table-block td { border-color: var(--border, #dfe5e3); }
 .document-visual-editor .milkdown .milkdown-table-block th { background: var(--bg, #f6f7f8); }
-.document-visual-editor .milkdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 5px 0; }
+.document-visual-editor .milkdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: var(--space-5) 0; }
 .document-visual-editor .milkdown .uploader[aria-disabled="true"] { opacity: .5; cursor: default; }
 .document-visual-editor .milkdown input[type="file"] { display: none; }
 .document-visual-editor .milkdown .image-wrapper img { max-width: 100%; }
 .document-visual-notice {
-  margin: 20px;
-  padding: 18px 20px;
+  margin: var(--space-20);
+  padding: var(--space-18) var(--space-20);
   background: var(--bg, #f6f7f8);
   border: 1px solid var(--border, #dfe5e3);
-  border-radius: 10px;
-  line-height: 1.65;
+  border-radius: var(--radius-10);
+  line-height: var(--leading-165);
 }
-.document-visual-notice p { margin: 0 0 12px; color: var(--muted, #69727b); }
+.document-visual-notice p { margin: 0 0 var(--space-12); color: var(--muted, #69727b); }
 .document-visual-source-action {
   border: 1px solid var(--border, #dfe5e3);
-  border-radius: 7px;
-  padding: 7px 12px;
-  background: var(--panel, #fff);
+  border-radius: var(--radius-7);
+  padding: var(--space-7) var(--space-12);
+  background: var(--panel, var(--color-white));
   color: var(--text, #242424);
   cursor: pointer;
 }
 @media (max-width: 680px) {
-  .document-visual-editor .milkdown .ProseMirror { padding: 22px 20px 76px; }
-  .document-visual-editor .milkdown .milkdown-top-bar { padding: 6px; }
-  .document-visual-editor .milkdown .top-bar-divider { margin-inline: 2px; }
+  .document-visual-editor .milkdown .ProseMirror { padding: var(--space-22) var(--space-20) 76px; }
+  .document-visual-editor .milkdown .milkdown-top-bar { padding: var(--space-6); }
+  .document-visual-editor .milkdown .top-bar-divider { margin-inline: var(--space-2); }
 }
 @media (prefers-reduced-motion: reduce) {
   .document-visual-editor *, .document-visual-editor *::before, .document-visual-editor *::after {
@@ -157,8 +157,8 @@
 body.reduced-motion .document-visual-editor * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 
 .document-visual-editor .document-image-upload {
-  display: inline-block; padding: 5px 10px; margin: 5px 3px;
+  display: inline-block; padding: var(--space-5) var(--space-10); margin: var(--space-5) var(--space-3);
   color: var(--muted, #69727b); background: var(--bg, #f6f7f8);
-  border: 1px dashed var(--border, #dfe5e3); border-radius: 6px;
+  border: 1px dashed var(--border, #dfe5e3); border-radius: var(--radius-6);
   font: 12px/1.5 var(--font-sans, sans-serif); white-space: normal;
 }

@@ -711,3 +711,23 @@ test('reopening a parked workspace window must not let SwiftUI spawn a second wi
  assert.match(reopen,/restoreWorkspaceWindow\(\) != nil\s*\{return false\}/);
  assert.match(reopen,/return true\s*$/);
 });
+
+test('native chat delete moves straight to trash, returns the trash id, and undo restores only that entry',()=>{
+ const f=fixture();f.state.conversations.push({id:'chat',title:'Keep me',messages:[]});f.state.trash=[{id:'trash_old',type:'conversation',data:{conversations:[]}}];
+ const restored=[];Object.assign(f.env,{NativeConversationLibrary:require('../native/Resources/conversation-library.js'),normalizeStateShape(){},save(){},renderAll(){},
+  restoreTrash:id=>{restored.push(id);const entry=f.env.state.trash.find(x=>x.id===id);f.env.state.trash=f.env.state.trash.filter(x=>x!==entry);f.env.state.conversations.push(...entry.data.conversations);}});
+ const trashId=f.env.window.NativeConversationActions.perform({kind:'conversation',id:'chat',action:'delete',name:'Keep me'});
+ assert.equal(typeof trashId,'string');assert.notEqual(trashId,'trash_old');
+ assert.equal(f.env.state.conversations.some(x=>x.id==='chat'),false);assert.ok(f.env.state.trash.some(x=>x.id===trashId));
+ assert.equal(f.env.window.NativeConversationActions.perform({action:'undoTrash',id:trashId}),true);
+ assert.deepEqual(restored,[trashId]);assert.ok(f.env.state.conversations.some(x=>x.id==='chat'));
+ assert.equal(f.env.window.NativeConversationActions.perform({action:'undoTrash',id:trashId}),false,'a second undo restores nothing');assert.deepEqual(restored,[trashId]);
+});
+
+test('native Move to Trash has no confirmation dialog and offers an undo banner',()=>{
+ const library=fs.readFileSync('native/Sources/AIBro/ConversationLibrary.swift','utf8'),main=fs.readFileSync('native/Sources/AIBro/AIBro.swift','utf8'),nav=fs.readFileSync('native/Sources/AIBro/WorkspaceNavigation.swift','utf8');
+ const manager=library.slice(library.indexOf('struct ConversationManager'),library.indexOf('struct ConversationArchive'));
+ assert.doesNotMatch(manager,/confirmationDialog/);assert.match(manager,/"Move to Trash"\),role:\.destructive\)\{run\("delete"\)\}/);
+ for(const source of [main,nav])assert.match(source,/"Move to Trash"\),role:\.destructive\)\{Task\{await model\.manageConversation\(\["kind":"conversation","id":\w+\.id,"action":"delete"/);
+ assert.match(main,/\.overlay\(alignment:\.bottom\)\{TrashUndoBanner\(model:model\)/);assert.match(library,/"action":"undoTrash"/);
+});

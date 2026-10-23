@@ -27,7 +27,7 @@ test('workspace guide has an independent first-use preference and does not reint
 });
 test('boolean readiness must become true before automatic startup',async()=>{let ready=false;const f=fixture({ready:()=>ready});assert.equal(await f.api.maybeStart(),false);assert.equal(f.api.isOpen(),false);ready=true;assert.equal(await f.api.maybeStart(),true);f.api.destroy();});
 test('opening, step navigation and Escape do not mutate documents or drafts',async()=>{
- const f=fixture(),before=JSON.stringify(f.state),opener=f.doc.activeElement;await f.api.start();assert.equal(f.api.currentStep(),'conversation');assert.equal(f.key('ArrowRight'),true);assert.equal(f.api.currentStep(),'files');assert.equal(f.key('Escape'),true);assert.equal(f.api.isOpen(),false);assert.equal(JSON.stringify(f.state),before);assert.equal(f.doc.activeElement,opener);assert.deepEqual(f.finishes,[{version:1,status:'skipped'}]);assert.equal(f.listeners.size,0);
+ const f=fixture(),before=JSON.stringify(f.state),opener=f.doc.activeElement;await f.api.start();assert.equal(f.api.currentStep(),'conversation');assert.equal(f.key('ArrowRight'),true);assert.equal(f.api.currentStep(),'files');assert.equal(f.key('Escape'),true);assert.equal(f.api.isOpen(),false);assert.equal(JSON.stringify(f.state),before);assert.equal(f.doc.activeElement,opener);assert.deepEqual(f.finishes,[{version:1,status:'skipped',resumeStep:1}]);assert.equal(f.listeners.size,0);
 });
 test('completion can be replayed while automatic startup stays quiet in this session',async()=>{
  const f=fixture();assert.equal(await f.api.maybeStart(),true);for(let i=0;i<5;i++)f.api.next();assert.deepEqual(f.finishes,[{version:1,status:'completed'}]);assert.equal(await f.api.maybeStart(),false);assert.equal(await f.api.start(),true);assert.equal(f.api.currentStep(),'conversation');f.api.destroy();assert.equal(f.finishes.length,1);
@@ -72,4 +72,24 @@ test('blocked replay feedback follows the selected interface language',async()=>
  const errors=[],f=fixture({onError:text=>errors.push(text)});f.env.WorkstationI18n={getLanguage:()=> 'en'};
  f.nodes.set('dialog:modal, .note-document-leave:not([hidden])',{});
  assert.equal(await f.api.start(),false);assert.match(errors[0],/Finish or close the current dialog/);f.api.destroy();
+});
+test('leaving the page or clicking outside tucks the tour away and settings resume the same step',async()=>{
+ const toasts=[],f=fixture({toast:t=>toasts.push(t)}),card=f.nodes.get('#workspaceTourCard'),spot=f.nodes.get('#workspaceTourSpotlight');
+ await f.api.start();f.api.go(2);f.listeners.get('doc:pointerdown')({target:card.children[0]});assert.equal(f.api.isOpen(),true);
+ assert.equal(f.api.routeChanged('agent'),false);assert.equal(f.api.isOpen(),true);
+ assert.equal(f.api.routeChanged('captures'),true);assert.equal(f.api.isOpen(),false);assert.equal(spot.hidden,true);assert.equal(f.nodes.get('#workspaceTour').hidden,true);assert.equal(f.listeners.size,0);
+ assert.deepEqual(f.finishes.at(-1),{version:1,status:'skipped',resumeStep:2});assert.match(toasts.at(-1),/设置/);f.state.ui.workspaceTour=f.finishes.at(-1);
+ await f.api.start();assert.equal(f.api.currentStep(),'review');
+ f.listeners.get('doc:pointerdown')({target:f.nodes.get('#composer')});assert.equal(f.api.isOpen(),false);assert.equal(spot.hidden,true);
+ assert.equal(await f.api.maybeStart(),false);
+});
+test('automatic startup waits on another page instead of navigating the user away',async()=>{
+ let view='captures',shown=0;const f=fixture({onWorkspace:()=>view==='agent',showWorkspace:()=>{shown++;}});
+ assert.equal(await f.api.maybeStart(),false);assert.equal(f.api.isOpen(),false);assert.equal(f.api.isWaiting(),true);assert.equal(shown,0);
+ view='agent';assert.equal(await f.api.maybeStart(),true);assert.equal(f.api.isOpen(),true);
+});
+test('a location restore right after an automatic start does not dismiss the tour',async()=>{
+ const realNow=Date.now;let now=5_000_000;Date.now=()=>now;
+ try{const f=fixture();assert.equal(await f.api.maybeStart(),true);now+=500;assert.equal(f.api.routeChanged('dashboard'),false);assert.equal(f.api.isOpen(),true);now+=3000;assert.equal(f.api.routeChanged('captures'),true);assert.equal(f.api.isOpen(),false);}
+ finally{Date.now=realNow;}
 });

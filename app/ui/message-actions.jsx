@@ -44,7 +44,10 @@ export function MessageActionBar({ actions = [], label = '消息操作', moreLab
     {overflow.length > 0 && <details className="message-action-menu message-actions-overflow" onKeyDown={handleActionKeys}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}>
       <summary title={moreLabel} aria-label={moreLabel}><Glyph name="more"/></summary>
-      <span className="message-action-options" onClick={event => {
+      {/* WebKit does not focus a clicked button: without this the summary blurs
+          with no relatedTarget on mousedown, the menu closes, and the click
+          lands behind it (no item in the menu ever ran in the native app). */}
+      <span className="message-action-options" onMouseDown={event => event.preventDefault()} onClick={event => {
         if (event.target.closest('button:not([disabled])')) event.currentTarget.parentElement.open = false;
       }}>{overflow.map(action => <Action key={action.key} action={action}/>)}</span>
     </details>}

@@ -3,15 +3,35 @@ import AppKit
 import WebKit
 import Combine
 
+// The page reports its theme after every preference refresh (sidebar,
+// inspector, startup). Only a visible change made after the first native
+// sync is a user choice; an echo must not turn 跟随系统 into light/dark.
+struct NativeAppearancePolicy {
+    static func shown(saved:String,systemDark:Bool)->String {saved == "system" ? (systemDark ? "dark":"light"):saved}
+    static func acceptsWebRequest(saved:String,requested:String,systemDark:Bool,synced:Bool)->Bool {
+        guard synced,["light","dark"].contains(requested) else {return false}
+        return requested != shown(saved:saved,systemDark:systemDark)
+    }
+    // Startup order: this data directory's choice, then the shared choice, then 跟随系统.
+    static func resolved(perDirectory:String?,global:String?)->String {
+        for value in [perDirectory,global] {if let value,["system","light","dark"].contains(value) {return value}}
+        return "system"
+    }
+    // The shared key belongs to the default data directory. An isolated
+    // directory (AIBRO_NATIVE_DATA_DIR, QA) keeps its look to itself so a
+    // test build never changes the installed app's appearance.
+    static func writesGlobal(dataPath:String,defaultPath:String)->Bool {dataPath == defaultPath}
+}
 struct Item: Identifiable, Decodable, Hashable { let id: String; let title: String; let workspace: String }
 private struct NativeSnapshotStamp:Decodable {let version:Int;let nonce:String;let sequence:Int;let type:String}
-struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bool?;let activityUnread:Int?;let commandSearchOpen:Bool?;let commandSearchNavigationVersion:Int?;let tourOpen:Bool?; let conversationLibrary:[ConversationEntry]?;let conversationFolders:[ConversationFolder]?; let tasks:[ContentRecord]?;let documents:[ContentRecord]?;let modalOpen:Bool?;let taskOpen:Bool?;let taskEntry:[String:String]?;let readingOpen:Bool?;let readerAvailable:Bool?; let projects: [Item]; let conversations: [Item]; let taskCount: Int; let noteCount: Int; let sourceCount: Int; let view: String; let conversationId: String; let busy: Bool; let projectId: String?;let projectSection:String?;let spaceSection:String?;let privateMode:Bool?;let quickWorkbench:NativeQuickWorkbenchSnapshot? }
+struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bool?;let activityUnread:Int?;let commandSearchOpen:Bool?;let commandSearchNavigationVersion:Int?;let tourOpen:Bool?; let conversationLibrary:[ConversationEntry]?;let conversationFolders:[ConversationFolder]?; let tasks:[ContentRecord]?;let documents:[ContentRecord]?;let modalOpen:Bool?;let taskOpen:Bool?;let taskEntry:[String:String]?;let readingOpen:Bool?;let readerAvailable:Bool?; let projects: [Item]; let conversations: [Item]; let taskCount: Int; let noteCount: Int; let sourceCount: Int; let view: String; let conversationId: String; let busy: Bool; let projectId: String?;let projectSection:String?;let spaceSection:String?;let privateMode:Bool?;let quickWorkbench:NativeQuickWorkbenchSnapshot?;let palette:String? }
 
 @MainActor final class Workspace: NSObject, ObservableObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     @Published var conversationProjectFilter=""
     @Published var snapshot: Snapshot?
     @Published var selection: String? = "overview"
     @Published var error: String?
+    @Published var trashUndo: TrashUndo?
     @Published var ready = false
     @Published var spaceContent = false
     @Published var spaceSections:[String:String]=[:]
@@ -45,6 +65,9 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     private var settingsNavigationRequest:UUID?
     private var settingsSelectionPending=false
     @Published var appearance = "system"
+    private var appearanceSynced=false
+    private var systemAppearanceObservation:NSKeyValueObservation?
+    private var browserPresence:AnyCancellable?
     var glassHost:WebGlassHost?
     private var webFocusGeneration=0
     let web: WKWebView
@@ -55,6 +78,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     var log: FileHandle?
     let root: URL
     let dataDirectory:URL
+    private let defaultDataDirectory:URL
     let production:Bool
     var desktop:NativeDesktop?
     var sessionLock:Int32 = -1
@@ -76,14 +100,13 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     override init() {
         production=Bundle.main.object(forInfoDictionaryKey:"AIBroProduction") as? Bool == true
         root = ProcessInfo.processInfo.environment["AIBRO_SOURCE_ROOT"].map{URL(fileURLWithPath:$0)} ?? (production ? Bundle.main.resourceURL! : URL(fileURLWithPath:FileManager.default.currentDirectoryPath))
+        defaultDataDirectory=production ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ai-workstation"):root.deletingLastPathComponent().appendingPathComponent(".aibro-native-preview.noindex/workspace")
         if let isolated=ProcessInfo.processInfo.environment["AIBRO_NATIVE_DATA_DIR"], isolated.hasPrefix("/") {
             // Manual GUI checks on disposable data that must survive a relaunch.
             dataDirectory=URL(fileURLWithPath:isolated,isDirectory:true)
         } else if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] != nil {
             dataDirectory=FileManager.default.temporaryDirectory.appendingPathComponent("aibro-native-qa-"+UUID().uuidString)
-        } else if production {
-            dataDirectory=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ai-workstation")
-        } else {dataDirectory=root.deletingLastPathComponent().appendingPathComponent(".aibro-native-preview.noindex/workspace")}
+        } else {dataDirectory=defaultDataDirectory}
 
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
@@ -97,6 +120,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         config.userContentController.addUserScript(WKUserScript(source:Workspace.reduceTransparencyScript(),injectionTime:.atDocumentStart,forMainFrameOnly:true))
         web = WKWebView(frame: .zero, configuration: config)
         super.init()
+        if let saved=UserDefaults.standard.string(forKey:"AIBro.theme."+dataDirectory.standardizedFileURL.path),StudioPalette.themes.contains(saved) {StudioPalette.theme=saved}
         NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,object:nil,queue:.main){[weak self] _ in
             Task{@MainActor in self?.web.evaluateJavaScript(Workspace.reduceTransparencyScript(),completionHandler:nil)}
         }
@@ -120,7 +144,19 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             let js="const nativeStyle=document.createElement('style');nativeStyle.textContent="+String(decoding:data,as:UTF8.self)+";document.head.append(nativeStyle);"
             config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))
         }
-        appearance=UserDefaults.standard.string(forKey:"NativePreviewAppearance") ?? "system"
+        // Per-data-directory copy, applied before the window exists so a saved dark
+        // appearance does not start light until the first web snapshot arrives.
+        appearance=NativeAppearancePolicy.resolved(perDirectory:UserDefaults.standard.string(forKey:appearanceDefaultsKey),global:UserDefaults.standard.string(forKey:"NativePreviewAppearance"))
+        if appearance != "system" {NSApplication.shared.appearance=NSAppearance(named:appearance == "light" ? .aqua:.darkAqua)}
+        // MainView observes the workspace, not the browser. Its “返回浏览器”
+        // item depends only on these two facts; page loads must not redraw it.
+        browserPresence=browser.$visible.combineLatest(browser.$tabs.map(\.isEmpty)).removeDuplicates{$0==$1}.dropFirst().sink{[weak self] _ in self?.objectWillChange.send()}
+        systemAppearanceObservation=NSApplication.shared.observe(\.effectiveAppearance,options:[.new]){[weak self] _,_ in
+            Task{@MainActor in
+                guard let self,self.appearanceSynced,self.appearance == "system" else{return}
+                self.command("theme",self.systemDark ? "dark":"light")
+            }
+        }
         web.navigationDelegate = self; web.uiDelegate = self
         agenda.onOpen = { [weak self] in self?.selection="agenda" }
         agenda.onChanged = { [weak self] in self?.agendaAgent.refreshContext();self?.requestAgendaSync();self?.web.evaluateJavaScript("document.dispatchEvent(new Event('aibro-agenda-changed'))",completionHandler:nil) }
@@ -436,7 +472,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         var event=AgendaEvent();event.title=document.title;event.documentID=document.id;event.documentKind="note";event.projectID=document.projectId;event.source="随记";event.reminderMinutes=nil
         selection="agenda";agendaDraft=event
     }
-    func proposedAgendaEvent(_ proposal:[String:Any]) throws -> AgendaEvent {
+    func proposedAgendaEvent(_ proposal:[String:Any],automatic:Bool=false) throws -> AgendaEvent {
         guard ready,let id=proposal["id"] as? String,id.hasPrefix("agenda_"),id.count<200,
               let title=proposal["title"] as? String,title.count<=200,let start=proposal["start"] as? Double,let end=proposal["end"] as? Double,start.isFinite,end.isFinite,
               let timeZone=proposal["timeZone"] as? String else{throw AgendaError.message("日程提案或来源不可用。")}
@@ -454,7 +490,9 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         event.projectID=try AgendaProposalProject.resolve(proposal,sourceProjectID:document?.projectId,conversationProjectID:conversationProjectID,availableProjectIDs:snapshot?.projects.map(\.id) ?? [])
         event.source=document == nil ? "对话":"随记"
         if document == nil {event.details=(proposal["details"] as? String ?? "")+"\n\n来源消息："+(proposal["quote"] as? String ?? "")}
-        if proposal["endEstimated"] as? Bool == true {event.details += "\n结束时间未指定，默认时长1小时，请在保存前确认。"}
+        // Automatic saves (full / smart conversations) skip the editor, so the note
+        // says what happened instead of asking for a confirmation that never comes.
+        if proposal["endEstimated"] as? Bool == true {event.details += automatic ? "\n结束时间未指定，已按默认时长1小时保存，可在日程中修改。":"\n结束时间未指定，默认时长1小时，请在保存前确认。"}
         try event.validate();return event
     }
     func reviewAgendaProposal(_ proposal:[String:Any]) throws {
@@ -489,10 +527,16 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         // Synchronize the fresh WebView once even when the saved value matches.
         // Later identical JS echoes must not enqueue another theme command.
         if appearance != value {
-            appearance=value;UserDefaults.standard.set(value,forKey:"NativePreviewAppearance")
+            appearance=value;UserDefaults.standard.set(value,forKey:appearanceDefaultsKey)
+            if NativeAppearancePolicy.writesGlobal(dataPath:dataDirectory.standardizedFileURL.path,defaultPath:defaultDataDirectory.standardizedFileURL.path) {UserDefaults.standard.set(value,forKey:"NativePreviewAppearance")}
         }
         NSApp.appearance=value=="system" ? nil:NSAppearance(named:value=="light" ? .aqua:.darkAqua)
-        command("theme",value=="system" ? (NSApp.effectiveAppearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? "dark":"light"):value)
+        command("theme",NativeAppearancePolicy.shown(saved:value,systemDark:systemDark))
+    }
+    private var systemDark:Bool {NSApp.effectiveAppearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua}
+    func webRequestedAppearance(_ value:String) {
+        guard NativeAppearancePolicy.acceptsWebRequest(saved:appearance,requested:value,systemDark:systemDark,synced:appearanceSynced) else{return}
+        setAppearance(value)
     }
     func dismissTransientModelPicker() {
         guard ready else { return }
@@ -585,6 +629,8 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     func snapshotDestination(_ value:Snapshot)->[String:Any] {
         ["view":value.view,"projectId":value.projectId ?? "","conversationId":value.conversationId,"projectSection":value.projectSection ?? "conversations","spaceSection":value.spaceSection ?? "projects"]
     }
+    private var themeDefaultsKey:String {"AIBro.theme."+dataDirectory.standardizedFileURL.path}
+    private var appearanceDefaultsKey:String {"AIBro.appearance."+dataDirectory.standardizedFileURL.path}
     func persistConfirmedLocation() {
         guard ready,!restoringWorkspaceLocation,projectNavigationRequest == nil,let value=snapshot,value.privateMode != true,
               let location=NativeWorkspaceLocation(selection:selection,projectSection:selection.flatMap{$0.hasPrefix("project:") ? confirmedProjectSections[String($0.dropFirst(8))]:nil} ?? value.projectSection,spaceSections:spaceSections),
@@ -697,6 +743,9 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         }
     }
     private func applyWorkspaceSnapshot(_ value:Snapshot) {
+        if let palette=value.palette,palette != StudioPalette.theme,StudioPalette.themes.contains(palette) {StudioPalette.theme=palette}
+        // Remember the confirmed theme so the next cold start paints it before the web snapshot arrives.
+        if let palette=value.palette,StudioPalette.themes.contains(palette),UserDefaults.standard.string(forKey:themeDefaultsKey) != palette {UserDefaults.standard.set(palette,forKey:themeDefaultsKey)}
         let first = !ready; snapshot = value; ready = true
         if value.privateMode != false {agendaAgent.invalidate()}
         else {agendaAgent.refreshContext()}
@@ -730,7 +779,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         reconcileTaskSurface(taskOpen:value.taskOpen == true,modalOpen:value.modalOpen == true,readingOpen:value.readingOpen == true,entry:projectNavigationRequest == nil ? value.taskEntry:nil)
         if first {
             glassHost?.publishPresentationVisibility(force:true)
-            setAppearance(appearance,force:true)
+            setAppearance(appearance,force:true);appearanceSynced=true
             requestAgendaSync()
             agendaSyncTimer?.invalidate()
             agendaSyncTimer=Timer.scheduledTimer(withTimeInterval:10,repeats:true){[weak self]_ in Task{@MainActor in self?.requestAgendaSync()}}
@@ -1032,12 +1081,15 @@ struct MainView: View {
                     }.coordinateSpace(name:"native-sidebar")
                         .onPreferenceChange(SidebarBounds.self){if sidebarFrames != $0 {sidebarFrames=$0}}
                 }.scrollIndicators(.hidden)
-                HStack {
-                    Button { model.openWorkspaceSettings() } label: { Label(nativeUI("设置", "Settings"),systemImage:"gearshape") }.buttonStyle(LiftStyle()).disabled(!model.ready || model.snapshot?.modalOpen == true)
-                    Spacer()
-                    Button { quickEntry.showPanel(screenIntent: .pointerSummon) } label: { Image(systemName:"rectangle.trailinghalf.inset.filled") }
-                        .buttonStyle(LiftStyle()).help(nativeUI("灵动岛与快捷入口", "Island & quick entry")).accessibilityLabel(nativeUI("灵动岛与快捷入口", "Island & quick entry"))
-                }.padding(20)
+                // Footer buttons fill their row (not just icon + text) and keep a
+                // 32 pt hit height, above the macOS 28 pt minimum. The island
+                // entry carries a text label: an icon alone read as a split-view toggle.
+                HStack(spacing:4) {
+                    Button { model.openWorkspaceSettings() } label: { SidebarFooterLabel(title:nativeUI("设置", "Settings"),symbol:"gearshape").frame(maxWidth:.infinity,alignment:.leading) }
+                        .buttonStyle(LiftStyle()).disabled(!model.ready || model.snapshot?.modalOpen == true)
+                    Button { quickEntry.showPanel(screenIntent: .pointerSummon) } label: { SidebarFooterLabel(title:nativeUI("灵动岛", "Island"),symbol:"rectangle.topthird.inset.filled") }
+                        .buttonStyle(LiftStyle()).help(nativeUI("打开灵动岛与快捷入口（屏幕顶部的快捷面板）", "Open the Island & quick entry panel at the top of the screen")).accessibilityLabel(nativeUI("灵动岛与快捷入口", "Island & quick entry"))
+                }.padding(.horizontal,11).padding(.vertical,10)
             }.navigationSplitViewColumnWidth(min:220,ideal:250,max:330)
         } detail: {
             VStack(spacing:0) {
@@ -1063,11 +1115,13 @@ struct MainView: View {
                 }
             }}}.navigationTitle(title)
             .toolbar {
-                if compactBrowserLayout && !model.browser.tabs.isEmpty && (model.compactWorkspacePreferred || !model.browser.visible) { ToolbarItem {Button {model.browser.visible=true} label:{Label(nativeUI("返回浏览器", "Return to browser"),systemImage:"globe")}.help(nativeUI("继续查看已打开的网页", "Continue with your open browser tabs")).disabled(workspaceOverlay)} }
+                // Hiding the side browser or opening settings keeps its tabs; wide windows
+                // need the same way back as compact ones.
+                if !model.browser.tabs.isEmpty && (!model.browser.visible || (compactBrowserLayout && model.compactWorkspacePreferred)) { ToolbarItem {Button {model.browser.visible=true} label:{Label(nativeUI("返回浏览器", "Return to browser"),systemImage:"globe")}.help(nativeUI("继续查看已打开的网页", "Continue with your open browser tabs")).disabled(workspaceOverlay)} }
                 ToolbarItem {Button {model.command("search")} label:{Label(nativeUI("搜索与命令", "Search and commands"),systemImage:"magnifyingglass")}.help(nativeUI("搜索与命令 ⌘K", "Search and commands ⌘K")).disabled(!model.ready)}
                 ToolbarItem {Button {model.command("activity-center")} label:{Label(nativeUI("通知与变化", "Notifications and changes"),systemImage:(model.snapshot?.activityUnread ?? 0)>0 ? "bell.badge":"bell")}.help(nativeUI("通知与变化", "Notifications and changes")).accessibilityValue(String(model.snapshot?.activityUnread ?? 0)).disabled(!model.ready)}
                 if !nativeContent && model.snapshot?.readerAvailable == true { ToolbarItem {Button {model.command("reader")} label:{Label(model.snapshot?.readingOpen == true ? nativeUI("收起阅读区", "Hide reading pane"):nativeUI("打开阅读区", "Open reading pane"),systemImage:"sidebar.right")}} }
-                ToolbarItem { Button { model.command("new") } label: { Label(nativeUI("新对话", "New chat"),systemImage:"square.and.pencil") }.keyboardShortcut("n").disabled(!model.ready) }
+                ToolbarItem { Button { model.command("new") } label: { Label(nativeUI("新对话", "New chat"),systemImage:"square.and.pencil") }.help(nativeUI("新对话 ⌘N", "New chat ⌘N")).disabled(!model.ready) }
                 ToolbarItem { AppearanceControl(model:model) }
                 ToolbarItem { Button { model.openWorkspaceSettings() } label: { Label(nativeUI("设置", "Settings"),systemImage:"gearshape") }.disabled(!model.ready || model.snapshot?.modalOpen == true) }
             }
@@ -1079,6 +1133,7 @@ struct MainView: View {
         .background(AgendaAgentReviewHost(controller:model.agendaAgent))
         .sheet(item:$model.agendaDraft){event in AgendaEditor(model:model,store:model.agenda,event:event)}
         .sheet(item:$model.agendaCreationReview){review in AgendaCreationReviewView(model:model,store:model.agenda,review:review)}
+        .overlay(alignment:.bottom){TrashUndoBanner(model:model).animation(.snappy,value:model.trashUndo)}
         .sheet(item:$conversationTarget){target in ConversationManager(model:model,target:target)}
         .sheet(isPresented:$archiveOpen){ConversationArchive(model:model)}
         .alert("AI Bro",isPresented:Binding(get:{model.error != nil},set:{if !$0 {model.error=nil}})){Button(nativeUI("好", "OK"),role:.cancel){model.error=nil}} message:{Text(model.error ?? "")}
@@ -1110,7 +1165,7 @@ struct MainView: View {
             Button(item.isPinned ? nativeUI("取消置顶", "Unpin"):nativeUI("置顶对话", "Pin chat")){Task{await model.manageConversation(["kind":"conversation","id":item.id,"action":"pin","pinned":item.isPinned ? "false":"true"])}}
             Button(nativeUI("重命名 / 移动", "Rename / Move")){conversationTarget=ConversationTarget(item)}
             Button(nativeUI("归档", "Archive")){Task{await model.manageConversation(["kind":"conversation","id":item.id,"action":"archive"])}}
-            Button(nativeUI("移入回收站", "Move to Trash"),role:.destructive){conversationTarget=ConversationTarget(item)}
+            Button(nativeUI("移入回收站", "Move to Trash"),role:.destructive){Task{await model.manageConversation(["kind":"conversation","id":item.id,"action":"delete","name":item.title])}}
         }
     }
     var dashboardProject:String? {guard let selection=model.selection,selection.hasPrefix("project:") else{return nil};return String(selection.dropFirst(8))}
@@ -1192,14 +1247,26 @@ enum StudioPalette {
             return NSColor(srgbRed:CGFloat((value>>16)&255)/255,green:CGFloat((value>>8)&255)/255,blue:CGFloat(value&255)/255,alpha:1)
         })
     }
-    static let canvas=adaptive(0xF5FAF8,0x1B1E20)
-    static let panel=adaptive(0xFFFFFF,0x25292B)
-    static let line=adaptive(0xE1EDE7,0x414A47)
-    static let jade=adaptive(0x087F70,0x65D7BB)
-    static let amber=adaptive(0xAA7616,0xE7BE59)
+    /// The web workspace's colour theme (themes.css): "teal" is the native default,
+    /// "blue" and "glass" follow Settings → 主题. Read at draw time by the themed colors below.
+    static var theme="teal"
+    static let themes=["blue","glass","teal"]
+    /// (light, dark) per theme; values mirror the web palettes' --bg, --panel, --line, --accent and --orange.
+    private static func themed(_ values:[String:(UInt32,UInt32)])->Color {
+        Color(nsColor:NSColor(name:nil){appearance in
+            let pair=values[theme] ?? values["teal"]!
+            let value=appearance.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? pair.1:pair.0
+            return NSColor(srgbRed:CGFloat((value>>16)&255)/255,green:CGFloat((value>>8)&255)/255,blue:CGFloat(value&255)/255,alpha:1)
+        })
+    }
+    static let canvas=themed(["teal":(0xF5FAF8,0x1B1E20),"blue":(0xE9ECEF,0x141618),"glass":(0xF7F7F5,0x171719)])
+    static let panel=themed(["teal":(0xFFFFFF,0x25292B),"blue":(0xFCFDFE,0x202326),"glass":(0xFFFFFF,0x202022)])
+    static let line=themed(["teal":(0xE1EDE7,0x414A47),"blue":(0xDCE0E6,0x3A3F48),"glass":(0xE4E4E2,0x3A3A3C)])
+    static let jade=themed(["teal":(0x087F70,0x65D7BB),"blue":(0x476F93,0x9AB9D2),"glass":(0x3D3D40,0xD0D0D2)])
+    static let amber=themed(["teal":(0xAA7616,0xE7BE59),"blue":(0xA46E2A,0xE7B878),"glass":(0xA46E2A,0xE7B878)])
     static let sky=adaptive(0x227FA3,0x76CDEB)
     static let iris=adaptive(0x7463C7,0xB9ACF4)
-    static let coral=adaptive(0xC25766,0xF39CA3)
+    static let coral=themed(["teal":(0xC25766,0xF39CA3),"blue":(0xB74958,0xED989E),"glass":(0xB74958,0xED989E)])
     static let neutral=adaptive(0x8BA39A,0x849F91)
     static func space(_ name:String)->Color { ["科研","Research"].contains(name) ? iris : ["课程","Courses"].contains(name) ? sky : jade }
 }
@@ -1250,6 +1317,12 @@ struct RowEntrance:ViewModifier {
                 guard !Task.isCancelled else{return}
                 withAnimation(.timingCurve(0.2,0.75,0.25,1,duration:0.26).delay(Double(min(order,5))*0.045)){visible=true}
             }
+    }
+}
+struct SidebarFooterLabel: View {
+    let title:String, symbol:String
+    var body:some View {
+        Label(title,systemImage:symbol).lineLimit(1).padding(.horizontal,10).frame(minHeight:32)
     }
 }
 struct LiftStyle: ButtonStyle {

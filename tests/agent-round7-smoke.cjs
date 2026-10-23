@@ -34,7 +34,7 @@ async function run(){
    {id:'qa_plain',name:'说明.txt',originalName:'说明.txt',mimeType:'text/plain',size:32,dataUrl:'data:text/plain;base64,aGk=',content:'hi',status:'parsed',folderPath:'原始资料',createdAt:now,updatedAt:now,tags:[]},
    {id:'qa_image',name:'照片.png',originalName:'照片.png',mimeType:'image/png',size:256,dataUrl:'data:image/png;base64,iVBORw0KGgo=',content:'',status:'original-only',folderPath:'原始资料',createdAt:now,updatedAt:now,tags:[]}
   ];
-  normalizeStateShape(state);save();applyUiPreferences();showView('agent','持续对话');renderAll();})()`);
+  normalizeStateShape(state);save();applyUiPreferences();showView('agent','对话');renderAll();})()`);
  await wait(500);
 
  await step('视频：原件预览渲染为带控件的播放器（不再只给"已保存可下载"）',async()=>{

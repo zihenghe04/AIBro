@@ -6,6 +6,9 @@ import { createHash } from 'node:crypto';
 import { patchHalaskaDataTable } from './halaska-data-table-patch.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// --check rebuilds in memory and fails if the committed bundle or provenance
+// differs, so a hand-patched or stale app/halaska-ui.js cannot ship unnoticed.
+const check = process.argv.includes('--check');
 const upstream = path.join(root, 'app/ui/halaska-kit.jsx');
 const expectedHash = '0ab6ad465c3e0d2659212cce3c4957ff50491c9ac5f4ac690e58ce1832e0de3e';
 const raw = await readFile(upstream, 'utf8');
@@ -66,15 +69,37 @@ const licenses = await Promise.all(['HALASKA-MIT.txt', 'REACT-MIT.txt', 'REACT-D
 
 // Preserve all upstream source and API docs. Tree shaking includes only the
 // allowlisted named imports; no demo screen or timed business pattern ships.
-await build({
-  entryPoints: [path.join(root, 'app/ui/halaska-bridge.jsx')], outfile: path.join(root, 'app/halaska-ui.js'),
+const result = await build({
+  entryPoints: [path.join(root, 'app/ui/halaska-bridge.jsx')], outfile: path.join(root, 'app/halaska-ui.js'), write: !check,
   bundle: true, format: 'iife', platform: 'browser', target: ['safari15', 'chrome110'],
   jsx: 'automatic', minify: true, legalComments: 'inline', charset: 'utf8',
   define: { 'process.env.NODE_ENV': '"production"' }, loader: { '.css': 'text' },
   banner: { js: `/*! AI Bro Halaska integration — third-party notices (including the bundled Geist fonts).\n${licenses.join('\n\n')}\n*/` },
   plugins: [{ name: 'halaska-host-adapter', setup(build) { build.onLoad({ filter: /halaska-kit\.jsx$/ }, () => ({ contents: source, loader: 'jsx', resolveDir: path.dirname(upstream) })); } }],
 });
-for (const [from, to] of [['Geist-Variable.woff2','halaska-geist.woff2'], ['GeistMono-Variable.woff2','halaska-geist-mono.woff2']]) {
+const fonts = [['Geist-Variable.woff2','halaska-geist.woff2'], ['GeistMono-Variable.woff2','halaska-geist-mono.woff2']];
+// Tests reuse this script up to the font-copy loop below; keep that loop's
+// header text unique.
+if (check) {
+  const failures = [];
+  const built = Buffer.from(result.outputFiles[0].contents);
+  const committed = await readFile(path.join(root, 'app/halaska-ui.js'));
+  if (!built.equals(committed)) failures.push(`app/halaska-ui.js differs from a source rebuild (committed ${committed.length} bytes, rebuilt ${built.length} bytes); run npm run build:ui`);
+  for (const [font, asset] of fonts) {
+    if (!(await readFile(path.join(root, 'app/ui/fonts', font))).equals(await readFile(path.join(root, 'app', asset)))) failures.push(`app/${asset} differs from app/ui/fonts/${font}`);
+  }
+  const provenance = JSON.parse(await readFile(path.join(root, 'app/ui/halaska-provenance.json'), 'utf8'));
+  const assets = { 'halaska-ui.js': built };
+  for (const [, asset] of fonts) assets[asset] = await readFile(path.join(root, 'app', asset));
+  for (const [name, content] of Object.entries(assets)) {
+    const entry = provenance.assets.find(item => item.name === name);
+    if (!entry || entry.bytes !== content.length || entry.sha256 !== sha256(content)) failures.push(`halaska-provenance.json is stale for ${name}`);
+  }
+  if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
+  console.log('Halaska bundle matches source rebuild.');
+  process.exit(0);
+}
+for (const [from, to] of fonts) {
   await copyFile(path.join(root, 'app/ui/fonts', from), path.join(root, 'app', to));
 }
 const report = {

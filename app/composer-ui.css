@@ -1,84 +1,84 @@
 /* Composer content, configuration and actions share one Kit surface. */
-.pdf-read-mode-control{display:flex;align-items:center;gap:12px;min-width:0;padding:8px 0}
+.pdf-read-mode-control{display:flex;align-items:center;gap:var(--space-12);min-width:0;padding:var(--space-8) 0}
 .pdf-read-mode-control>.kit-select{flex:0 0 174px;min-width:0}
 .pdf-read-mode-control>div:first-child{flex:0 0 174px;min-width:0}
-.pdf-read-mode-description{font-size:11px;line-height:1.5;color:var(--muted);margin:0;min-width:0}
-.pdf-read-mode-choice>label{display:block;font-size:10px;line-height:1.4;margin-bottom:3px;color:var(--muted)}
-.composer-pdf-read-mode{padding:0 4px}
-@container workstation-main (max-width:560px){.pdf-read-mode-control{align-items:flex-start;flex-wrap:wrap;gap:5px}.pdf-read-mode-description{flex-basis:100%}}
+.pdf-read-mode-description{font-size:var(--font-size-11);line-height:var(--leading-150);color:var(--muted);margin:0;min-width:0}
+.pdf-read-mode-choice>label{display:block;font-size:var(--font-size-10);line-height:var(--leading-140);margin-bottom:var(--space-3);color:var(--muted)}
+.composer-pdf-read-mode{padding:0 var(--space-4)}
+@container workstation-main (max-width:560px){.pdf-read-mode-control{align-items:flex-start;flex-wrap:wrap;gap:var(--space-5)}.pdf-read-mode-description{flex-basis:100%}}
 /* Keep the selected PDF mode visible; explanation belongs to an explicit,
    keyboard-accessible disclosure instead of a persistent composer paragraph. */
-.pdf-read-mode-control--compact{flex-wrap:wrap;align-items:center;column-gap:12px;row-gap:6px;padding:3px 0 5px}
-.pdf-read-mode-control.pdf-read-mode-control--compact>.pdf-read-mode-choice{display:flex;align-items:center;gap:8px;flex:0 1 auto;max-width:100%;min-width:0}
-.pdf-read-mode-control--compact .pdf-read-mode-choice>label{flex:0 0 auto;font-size:11px;line-height:1.4;margin:0;color:var(--muted)}
+.pdf-read-mode-control--compact{flex-wrap:wrap;align-items:center;column-gap:var(--space-12);row-gap:var(--space-6);padding:var(--space-3) 0 var(--space-5)}
+.pdf-read-mode-control.pdf-read-mode-control--compact>.pdf-read-mode-choice{display:flex;align-items:center;gap:var(--space-8);flex:0 1 auto;max-width:100%;min-width:0}
+.pdf-read-mode-control--compact .pdf-read-mode-choice>label{flex:0 0 auto;font-size:var(--font-size-11);line-height:var(--leading-140);margin:0;color:var(--muted)}
 .pdf-read-mode-control--compact .kit-select-wrap{width:146px;max-width:100%;min-width:0;flex:1 1 146px}
 .pdf-read-mode-help{min-width:0;max-width:100%;margin:0;padding:0;border:0;background:none;box-shadow:none;color:var(--muted)}
-.pdf-read-mode-help>summary{width:max-content;max-width:100%;padding:5px 0;font-size:11px;line-height:1.5;cursor:pointer;border-radius:4px}
+.pdf-read-mode-help>summary{width:max-content;max-width:100%;padding:var(--space-5) 0;font-size:var(--font-size-11);line-height:var(--leading-150);cursor:pointer;border-radius:var(--radius-4)}
 .pdf-read-mode-help>summary:hover{color:var(--text)}
 .pdf-read-mode-help>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .pdf-read-mode-help[open]{flex-basis:100%}
-.pdf-read-mode-help .pdf-read-mode-description{max-width:64ch;margin:2px 0 3px;overflow-wrap:anywhere}
+.pdf-read-mode-help .pdf-read-mode-description{max-width:64ch;margin:var(--space-2) 0 var(--space-3);overflow-wrap:anywhere}
 @media(prefers-reduced-motion:reduce){.pdf-read-mode-help,.pdf-read-mode-help>*{animation:none!important;transition:none!important}}
 body.reduce-motion .pdf-read-mode-help,body.reduce-motion .pdf-read-mode-help>*{animation:none!important;transition:none!important}
 /* Adapt the real Halaska PromptInputPattern: one growing editor and one rail.
    Keep the host's palette and durable input controller; no demo prompt state. */
-#composer.composer-kit{--composer-content-inset:16px;--composer-control-inset:12px;container:message-composer / inline-size;border-radius:18px!important;background:var(--panel-raised,var(--panel))!important;box-shadow:0 2px 12px color-mix(in srgb,var(--text) 4%,transparent)!important;overflow:visible}
+#composer.composer-kit{--composer-content-inset:16px;--composer-control-inset:12px;container:message-composer / inline-size;border-radius:var(--radius-18)!important;background:var(--panel-raised,var(--panel))!important;box-shadow:0 2px 12px color-mix(in srgb,var(--text) 4%,transparent)!important;overflow:visible}
 #composer.composer-kit:focus-within{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))!important}
-#composer.composer-kit .composer-main{padding:14px var(--composer-content-inset) 4px!important;min-height:0!important}
+#composer.composer-kit .composer-main{padding:var(--space-14) var(--composer-content-inset) var(--space-4)!important;min-height:0!important}
 #composer.composer-kit .kit-composer-editor{width:100%;min-width:0}
-#composer.composer-kit .kit-composer-editor textarea{display:block;box-sizing:border-box;width:100%;font-size:14px!important;line-height:24px!important;min-height:36px!important;max-height:min(180px,28vh)!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;resize:none!important;box-shadow:none!important;transition:color 140ms ease!important}
+#composer.composer-kit .kit-composer-editor textarea{display:block;box-sizing:border-box;width:100%;font-size:var(--font-size-14)!important;line-height:24px!important;min-height:36px!important;max-height:min(180px,28vh)!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;resize:none!important;box-shadow:none!important;transition:color var(--duration-140) ease!important}
 #composer.composer-kit .kit-composer-editor textarea:focus-visible{outline:none!important}
 #composer.composer-kit .kit-composer-editor textarea + div{display:none!important}
-#composer.composer-kit .composer-footer{display:flex;flex-direction:column;align-items:stretch;flex-wrap:nowrap;padding:4px var(--composer-control-inset) 10px!important;gap:0!important;border:0!important}
+#composer.composer-kit .composer-footer{display:flex;flex-direction:column;align-items:stretch;flex-wrap:nowrap;padding:var(--space-4) var(--composer-control-inset) var(--space-10)!important;gap:0!important;border:0!important}
 #composer.composer-kit [data-composer-control]{display:inline-flex;min-width:0;max-width:100%;flex:0 1 auto}
 #composer.composer-kit .kit-composer-action{display:inline-flex;min-width:0;max-width:100%}
 #composer.composer-kit .kit-composer-action>button{max-width:100%!important;min-width:0!important;white-space:nowrap!important;flex-shrink:1!important}
 #composer.composer-kit .kit-composer-action>button>span:empty{display:none}
 #composer.composer-kit .kit-composer-action>button>span:has(>.kit-composer-copy){display:flex;flex:1 1 auto;min-width:0}
 #composer.composer-kit .kit-composer-action>button>span:has(>.kit-composer-glyph){flex:0 0 auto}
-#composer.composer-kit .kit-composer-copy{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden}
+#composer.composer-kit .kit-composer-copy{display:flex;align-items:center;gap:var(--space-6);min-width:0;overflow:hidden}
 #composer.composer-kit .kit-composer-label{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
-#composer.composer-kit .kit-composer-detail{font-size:10px;color:var(--muted);flex-shrink:0}
-#composer.composer-kit .composer-primary-row{display:flex;align-items:center;gap:4px;min-width:0;width:100%;min-height:34px}
-#composer.composer-kit .composer-context-row{display:flex;align-items:center;flex:1 1 auto;min-width:0;padding:0;border:0;gap:4px}
+#composer.composer-kit .kit-composer-detail{font-size:var(--font-size-10);color:var(--muted);flex-shrink:0}
+#composer.composer-kit .composer-primary-row{display:flex;align-items:center;gap:var(--space-4);min-width:0;width:100%;min-height:34px}
+#composer.composer-kit .composer-context-row{display:flex;align-items:center;flex:1 1 auto;min-width:0;padding:0;border:0;gap:var(--space-4)}
 #composer.composer-kit .composer-context-row>[data-composer-control="composerContext"]{flex:0 1 160px;max-width:44%}
 #composer.composer-kit .composer-context-row>[data-composer-control="composerModel"]{margin-left:auto;flex:0 1 auto;max-width:70%}
-#composer.composer-kit .composer-context-row :is(#composerContext,#composerModel){height:30px!important;max-width:100%!important;margin:0!important;padding:5px 7px!important;font-size:12px!important;gap:5px!important;background:transparent!important;color:var(--muted);border:0;box-shadow:none!important}
+#composer.composer-kit .composer-context-row :is(#composerContext,#composerModel){height:30px!important;max-width:100%!important;margin:0!important;padding:var(--space-5) var(--space-7)!important;font-size:var(--font-size-12)!important;gap:var(--space-5)!important;background:transparent!important;color:var(--muted);border:0;box-shadow:none!important}
 #composer.composer-kit .composer-context-row :is(#composerContext,#composerModel):hover{background:var(--panel-hover)!important;color:var(--text)}
 #composer.composer-kit .composer-context-row svg{width:14px;height:14px;flex-shrink:0}
 #composer.composer-kit #composerModel::after,#composer.composer-kit #composerContext::before{content:none!important;display:none!important}
 #composer.composer-kit .composer-primary-row>:is([data-composer-control="chatAttach"],[data-composer-control="composerPermission"],[data-composer-control="composerMore"],[data-composer-control="agentSend"]){flex:0 0 auto}
 #composer.composer-kit .composer-primary-row>[data-composer-control="agentSend"]{margin-left:0}
-#composer.composer-kit .composer-primary-row #agentSend{margin:0!important;padding:7px!important;width:34px!important;height:34px!important;flex-basis:34px!important;border-radius:50%!important}
-#composer.composer-kit .composer-primary-row :is(#chatAttach,#composerReference,#composerMore,#composerPermission){display:inline-flex;align-items:center;justify-content:center;width:30px!important;height:30px!important;min-height:30px;flex:0 0 30px;padding:6px!important;border-radius:8px;font-size:16px;color:var(--muted)}
+#composer.composer-kit .composer-primary-row #agentSend{margin:0!important;padding:var(--space-7)!important;width:34px!important;height:34px!important;flex-basis:34px!important;border-radius:var(--radius-round)!important}
+#composer.composer-kit .composer-primary-row :is(#chatAttach,#composerReference,#composerMore,#composerPermission){display:inline-flex;align-items:center;justify-content:center;width:30px!important;height:30px!important;min-height:30px;flex:0 0 30px;padding:var(--space-6)!important;border-radius:var(--radius-8);font-size:var(--font-size-16);color:var(--muted)}
 #composer.composer-kit .composer-primary-row #composerPermission>span:has(>.kit-composer-copy){display:none}
 #composer.composer-kit .composer-primary-row :is(#chatAttach,#composerReference,#composerMore,#composerPermission):hover{color:var(--text);background:var(--panel-hover)}
 #composer.composer-kit :is(#chatAttach,#composerReference,#composerMore,#composerPermission,#agentSend):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #composer.composer-kit .composer-extra-tools [data-composer-control],#composer.composer-kit .composer-extra-tools .kit-composer-action{display:flex;width:100%;max-width:100%}
 #composer.composer-kit .composer-extra-tools .kit-composer-action>button{width:100%;justify-content:flex-start}
 #composer.composer-kit .composer-extra-tools #composerLocal::after{content:none}
-#composer.composer-kit #composerContextWorkbench button{width:100%;justify-content:flex-start;font-size:12px;min-height:32px;padding:6px 8px!important}
+#composer.composer-kit #composerContextWorkbench button{width:100%;justify-content:flex-start;font-size:var(--font-size-12);min-height:32px;padding:var(--space-6) var(--space-8)!important}
 #composer.composer-kit .composer-extra-tools{bottom:52px;left:auto;right:var(--composer-control-inset);min-width:224px}
 /* References and attachment controls align with the text, without turning
    a long title into another full-width panel or hiding its action buttons. */
-#composer.composer-kit :is(.staged-attachments,.file-context-chips){box-sizing:border-box;display:flex;flex-wrap:wrap;gap:6px;padding:12px var(--composer-content-inset) 0;margin:0;max-height:106px;overflow:auto;scrollbar-width:thin}
+#composer.composer-kit :is(.staged-attachments,.file-context-chips){box-sizing:border-box;display:flex;flex-wrap:wrap;gap:var(--space-6);padding:var(--space-12) var(--composer-content-inset) 0;margin:0;max-height:106px;overflow:auto;scrollbar-width:thin}
 #composer.composer-kit :is(.staged-attachments,.file-context-chips):empty{display:none}
-#composer.composer-kit .staged-attachments:not(:empty)~.file-context-chips:not([hidden]){padding-top:6px}
-#composer.composer-kit :is(.staged-chip,.file-context-chip){box-sizing:border-box;display:inline-flex;align-items:center;gap:2px;width:max-content;max-width:min(290px,100%);min-width:0;height:32px;padding:3px;border:1px solid var(--line);border-radius:9px;background:color-mix(in srgb,var(--text) 3%,transparent);color:var(--text)}
-#composer.composer-kit .file-context-chip-name{display:block;flex:1 1 auto;min-width:0;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 6px;font-size:12px;line-height:18px;font-weight:500}
-#composer.composer-kit .file-context-chip-action{width:24px;height:24px;flex:0 0 24px;padding:0;line-height:24px;font-size:15px;color:var(--muted);border-radius:6px}
-#composer.composer-kit .staged-chip{gap:5px;padding-left:8px;font-size:12px;line-height:18px}
+#composer.composer-kit .staged-attachments:not(:empty)~.file-context-chips:not([hidden]){padding-top:var(--space-6)}
+#composer.composer-kit :is(.staged-chip,.file-context-chip){box-sizing:border-box;display:inline-flex;align-items:center;gap:var(--space-2);width:max-content;max-width:min(290px,100%);min-width:0;height:32px;padding:var(--space-3);border:1px solid var(--line);border-radius:var(--radius-9);background:color-mix(in srgb,var(--text) 3%,transparent);color:var(--text)}
+#composer.composer-kit .file-context-chip-name{display:block;flex:1 1 auto;min-width:0;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:var(--space-3) var(--space-6);font-size:var(--font-size-12);line-height:18px;font-weight:var(--font-weight-500)}
+#composer.composer-kit .file-context-chip-action{width:24px;height:24px;flex:0 0 24px;padding:0;line-height:24px;font-size:var(--font-size-15);color:var(--muted);border-radius:var(--radius-6)}
+#composer.composer-kit .staged-chip{gap:var(--space-5);padding-left:var(--space-8);font-size:var(--font-size-12);line-height:18px}
 #composer.composer-kit .staged-chip .wi{width:14px;height:14px;flex-shrink:0;color:var(--muted)}
 #composer.composer-kit .staged-chip-name{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-#composer.composer-kit .staged-chip button{display:grid;place-items:center;width:24px;height:24px;flex:0 0 24px;padding:0;border-radius:6px;font-size:15px}
+#composer.composer-kit .staged-chip button{display:grid;place-items:center;width:24px;height:24px;flex:0 0 24px;padding:0;border-radius:var(--radius-6);font-size:var(--font-size-15)}
 #composer.composer-kit .staged-chip button:hover{background:var(--panel-hover)}
-#composer.composer-kit .composer-pdf-read-mode{padding:6px var(--composer-content-inset) 0}
-#composer.composer-kit .pdf-read-mode-control--compact{gap:5px 10px;padding:0;min-height:28px}
-#composer.composer-kit .pdf-read-mode-control--compact .pdf-read-mode-choice{gap:6px}
+#composer.composer-kit .composer-pdf-read-mode{padding:var(--space-6) var(--composer-content-inset) 0}
+#composer.composer-kit .pdf-read-mode-control--compact{gap:var(--space-5) var(--space-10);padding:0;min-height:28px}
+#composer.composer-kit .pdf-read-mode-control--compact .pdf-read-mode-choice{gap:var(--space-6)}
 #composer.composer-kit .pdf-read-mode-control--compact .kit-select-wrap{width:124px;flex-basis:124px}
-#composer.composer-kit .pdf-read-mode-control--compact .kit-input-presentation button{min-height:28px!important;height:28px!important;padding:4px 8px!important;font-size:11px!important;box-shadow:none!important}
-#composer.composer-kit .context-strip{padding-inline:var(--composer-content-inset);font-size:11px}
-#composer.composer-kit .composer-hint{padding:0 var(--composer-content-inset) 10px;font-size:10px;line-height:1.5}
+#composer.composer-kit .pdf-read-mode-control--compact .kit-input-presentation button{min-height:28px!important;height:28px!important;padding:var(--space-4) var(--space-8)!important;font-size:var(--font-size-11)!important;box-shadow:none!important}
+#composer.composer-kit .context-strip{padding-inline:var(--composer-content-inset);font-size:var(--font-size-11)}
+#composer.composer-kit .composer-hint{padding:0 var(--composer-content-inset) var(--space-10);font-size:var(--font-size-10);line-height:var(--leading-150)}
 @container message-composer (max-width:540px){
  #composer.composer-kit .kit-composer-detail{display:none}
  #composer.composer-kit .composer-context-row>[data-composer-control="composerContext"]{max-width:40%}
@@ -86,12 +86,12 @@ body.reduce-motion .pdf-read-mode-help,body.reduce-motion .pdf-read-mode-help>*{
 }
 @container message-composer (max-width:420px){
  #composer.composer-kit .composer-context-row>[data-composer-control="composerContext"]{flex:0 0 30px;max-width:30px}
- #composer.composer-kit #composerContext{width:30px;justify-content:center!important;padding:6px!important}
+ #composer.composer-kit #composerContext{width:30px;justify-content:center!important;padding:var(--space-6)!important}
  #composer.composer-kit #composerContext>span:has(>.kit-composer-copy),#composer.composer-kit #composerContext>span:has(>.kit-composer-glyph--chevron){display:none}
  #composer.composer-kit #composerModel>span:has(>.kit-composer-glyph--model){display:none}
  #composer.composer-kit .composer-context-row>[data-composer-control="composerModel"]{flex:1 1 auto;max-width:calc(100% - 34px)}
- #composer.composer-kit .composer-context-row #composerModel{padding-inline:4px!important;font-size:11px!important;gap:3px!important}
- #composer.composer-kit .composer-primary-row{gap:2px}
+ #composer.composer-kit .composer-context-row #composerModel{padding-inline:var(--space-4)!important;font-size:var(--font-size-11)!important;gap:var(--space-3)!important}
+ #composer.composer-kit .composer-primary-row{gap:var(--space-2)}
 }
 @media(prefers-reduced-motion:reduce){#composer.composer-kit .kit-composer-editor textarea{transition:none!important}}
 body.reduce-motion #composer.composer-kit .kit-composer-editor textarea{transition:none!important}

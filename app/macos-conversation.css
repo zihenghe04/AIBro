@@ -5,12 +5,12 @@
    render it; this file only draws markers and spacing around it. */
 html body.aibro-native[data-view] .agent-progress .conversation-flow {
   position: relative;
-  margin: 6px 0 2px;
-  padding: 0 0 0 24px;
+  margin: var(--space-6) 0 var(--space-2);
+  padding: 0 0 0 var(--space-24);
 }
 html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversation-flow-item {
   position: relative;
-  padding: 6px 0;
+  padding: var(--space-6) 0;
   margin: 0;
 }
 html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversation-flow-item + .conversation-flow-item { margin-top: 0 }
@@ -25,9 +25,9 @@ html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversa
   width: 7px;
   height: 7px;
   box-sizing: border-box;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: color-mix(in srgb, var(--muted) 55%, transparent);
-  transition: background-color 220ms ease, border-color 220ms ease, transform 280ms cubic-bezier(.2, .1, .15, 1);
+  transition: background-color var(--duration-220) ease, border-color var(--duration-220) ease, transform 280ms cubic-bezier(.2, .1, .15, 1);
 }
 /* Hairline from this marker down to the next one. */
 html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversation-flow-item::after {
@@ -68,7 +68,7 @@ html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversa
   background: transparent;
   border-radius: 0;
   color: var(--faint);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   line-height: 11px;
   text-align: center;
 }
@@ -76,7 +76,7 @@ html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversa
 html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversation-flow-item[data-flow-status=timed_out]::before { color: var(--red) }
 
 /* Subtask steps hang off the main line, one level in. */
-html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversation-flow-item[data-flow-parent] { margin-left: 16px }
+html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversation-flow-item[data-flow-parent] { margin-left: var(--space-16) }
 html body.aibro-native[data-view] .agent-progress .conversation-flow > .conversation-flow-item[data-flow-parent]::after { left: -33px }
 
 /* Tool rows: the timeline replaces their own left rule. */
@@ -108,7 +108,7 @@ html body.aibro-native.reduce-motion[data-view] .agent-progress .conversation-fl
    "正在思考 6 秒 · 读取出行笔记". The entry count is noise while a turn runs
    (the timeline itself shows the steps); it returns, faint, once settled.
    Order changes only the visual sequence; text and DOM order are unchanged. */
-html body.aibro-native[data-view] .halaska-lifecycle-line { gap: 6px 8px }
+html body.aibro-native[data-view] .halaska-lifecycle-line { gap: var(--space-6) var(--space-8) }
 html body.aibro-native[data-view] .halaska-lifecycle-line > .progress-phase-label { order: 1 }
 html body.aibro-native[data-view] .halaska-lifecycle-line > :first-child:not(.progress-heading-mark) { order: 1 }
 html body.aibro-native[data-view] .halaska-lifecycle-line > .progress-elapsed { order: 2; margin-left: 0; color: var(--faint) }
@@ -128,9 +128,9 @@ html body.aibro-native[data-view] .halaska-lifecycle-line:not([data-lifecycle-st
   background: transparent !important;
   text-transform: none !important;
   letter-spacing: 0 !important;
-  font-size: 12px !important;
+  font-size: var(--font-size-12) !important;
   color: var(--text) !important;
-  gap: 6px !important;
+  gap: var(--space-6) !important;
 }
 html body.aibro-native[data-view] .halaska-lifecycle-line:not([data-lifecycle-status=running]) > :first-child > span:first-child { display: none !important }
 html body.aibro-native[data-view] .halaska-lifecycle-line:not([data-lifecycle-status=running]) > :first-child::before {
@@ -138,7 +138,7 @@ html body.aibro-native[data-view] .halaska-lifecycle-line:not([data-lifecycle-st
   flex: none;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: color-mix(in srgb, var(--muted) 45%, transparent);
 }
 html body.aibro-native[data-view] .halaska-lifecycle-line:is([data-lifecycle-status=completed],[data-lifecycle-status=completed-local],[data-lifecycle-status=done]) > :first-child::before {
@@ -161,30 +161,30 @@ html body.aibro-native[data-view] .agent-progress .conversation-flow .tool-ledge
 }
 /* The disclosure chevron appears on hover, focus or when the row is open; the
    timeline marker is the resting affordance. */
-html body.aibro-native[data-view] .agent-progress .conversation-flow .tool-ledger.tool-ledger > .tool-ledger-row > summary::before { opacity: 0; transition: opacity 140ms ease, transform 220ms cubic-bezier(.2, 0, 0, 1) }
+html body.aibro-native[data-view] .agent-progress .conversation-flow .tool-ledger.tool-ledger > .tool-ledger-row > summary::before { opacity: 0; transition: opacity var(--duration-140) ease, transform var(--duration-220) var(--motion-ease) }
 html body.aibro-native[data-view] .agent-progress .conversation-flow .tool-ledger.tool-ledger > .tool-ledger-row:is([open], :hover, :focus-within) > summary::before { opacity: .7 }
 @media (hover: none) {
   html body.aibro-native[data-view] .agent-progress .conversation-flow .tool-ledger.tool-ledger > .tool-ledger-row > summary::before { opacity: .7 }
 }
 
 /* Result chips under a finished search/list step (records it returned). */
-.conversation-flow-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 2px; min-width: 0 }
+.conversation-flow-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-6); margin: var(--space-6) 0 var(--space-2); min-width: 0 }
 .conversation-flow-chip {
-  display: inline-flex; align-items: center; gap: 5px; max-width: 220px; min-width: 0;
-  height: 24px; padding: 0 10px 0 8px; box-sizing: border-box;
-  border: 0; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: var(--space-5); max-width: 220px; min-width: 0;
+  height: 24px; padding: 0 var(--space-10) 0 var(--space-8); box-sizing: border-box;
+  border: 0; border-radius: var(--radius-pill);
   background: var(--panel); color: var(--text);
   box-shadow: 0 0 0 .5px var(--line-strong), 0 1px 2px rgba(0, 0, 0, .04);
-  font: inherit; font-size: 12px; line-height: 24px; white-space: nowrap; cursor: default;
+  font: inherit; font-size: var(--font-size-12); line-height: 24px; white-space: nowrap; cursor: default;
 }
-button.conversation-flow-chip { cursor: pointer; transition: background-color 120ms ease, box-shadow 120ms ease }
+button.conversation-flow-chip { cursor: pointer; transition: background-color var(--duration-120) ease, box-shadow var(--duration-120) ease }
 button.conversation-flow-chip:hover { background: var(--panel-hover) }
 button.conversation-flow-chip:active { scale: .97 }
 button.conversation-flow-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .conversation-flow-chip-icon { display: inline-flex; flex: none; color: var(--accent) }
 .conversation-flow-chip-icon .wi { width: 12px; height: 12px }
 .conversation-flow-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis }
-.conversation-flow-chip-more { font-size: 12px; color: var(--faint) }
+.conversation-flow-chip-more { font-size: var(--font-size-12); color: var(--faint) }
 @media (prefers-contrast: more) { .conversation-flow-chip { box-shadow: 0 0 0 1px var(--text) } }
 @media (forced-colors: active) { .conversation-flow-chip { border: 1px solid CanvasText; box-shadow: none } }
 @media (prefers-reduced-motion: reduce) { button.conversation-flow-chip { transition: none } button.conversation-flow-chip:active { scale: 1 } }

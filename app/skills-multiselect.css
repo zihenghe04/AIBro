@@ -2,7 +2,7 @@
 #skillsDialog { background: var(--panel-raised,var(--bg)); border-color:var(--line); }
 #skillsDialog .skills-toolbar { flex-wrap:wrap; }
 #skillsDialog .skills-toolbar > div { flex-wrap:wrap; }
-#skillsDialog .skills-selection-summary { padding:12px 28px 0; font-size:12px; }
+#skillsDialog .skills-selection-summary { padding:var(--space-12) var(--space-28) 0; font-size:var(--font-size-12); }
 #skillsDialog .skills-name { flex-wrap:wrap; }
 #skillsDialog .skills-command { overflow-wrap:anywhere; }
 #skillsDialog .skills-actions { align-items:center; flex:0 0 auto; }
@@ -12,16 +12,16 @@
 #skillsDialog .skill-selection-control .kit-input-presentation label > div { box-shadow:inset 0 0 0 1px var(--line-strong,var(--line)); }
 #skillsDialog .skill-selection-control .kit-input-presentation label > span { display:none; }
 #skillsDialog .skill-selection-control .kit-input-hit { width:24px; height:24px; }
-#skillsDialog .skills-done { position:sticky; bottom:0; display:flex; justify-content:flex-end; padding:12px 28px 18px; background:var(--panel-raised,var(--bg)); border-top:1px solid var(--line); }
-.composer-selected-skills { display:flex; flex-wrap:wrap; gap:5px; padding:0 14px 6px; max-height:116px; overflow:auto; }
+#skillsDialog .skills-done { position:sticky; bottom:0; display:flex; justify-content:flex-end; padding:var(--space-12) var(--space-28) var(--space-18); background:var(--panel-raised,var(--bg)); border-top:1px solid var(--line); }
+.composer-selected-skills { display:flex; flex-wrap:wrap; gap:var(--space-5); padding:0 var(--space-14) var(--space-6); max-height:116px; overflow:auto; }
 .composer-selected-skills[hidden] { display:none!important; }
 .composer-selected-skills[data-paused=true] { opacity:.7; }
 .composer-selected-skills .skill-selected-chip { min-width:0; max-width:100%; }
-.composer-selected-skills .skill-selected-chip button { display:block!important; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px!important; min-height:28px; }
-#skillPicker .skill-option-added { color:var(--muted); font-size:11px; flex:0 0 auto; }
+.composer-selected-skills .skill-selected-chip button { display:block!important; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--font-size-11)!important; min-height:28px; }
+#skillPicker .skill-option-added { color:var(--muted); font-size:var(--font-size-11); flex:0 0 auto; }
 #skillPicker .skill-option:disabled { opacity:.45; cursor:not-allowed; }
 @media(max-width:580px) {
-  #skillsDialog .skills-selection-summary { padding:12px 20px 0; }
-  #skillsDialog .skills-done { padding:12px 20px; }
+  #skillsDialog .skills-selection-summary { padding:var(--space-12) var(--space-20) 0; }
+  #skillsDialog .skills-done { padding:var(--space-12) var(--space-20); }
   #skillsDialog .skills-actions { align-self:flex-end; }
 }

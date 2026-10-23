@@ -20,9 +20,10 @@ final class NativeVectorStore {enum Failure:Error{case invalidRecord};init(folde
  let agenda=AgendaStore(),browser=SpeechHostBrowser()
  let agendaAgent=AgendaAgentController()
  func navigateWorkspace(_ view:String,section:String?,requestId:String?)async->Bool{false}
- func proposedAgendaEvent(_ value:[String:Any])throws->AgendaEvent {throw AgendaError.message("Typecheck-only host")}
+ func proposedAgendaEvent(_ value:[String:Any],automatic:Bool=false)throws->AgendaEvent {throw AgendaError.message("Typecheck-only host")}
  func reviewAgendaProposal(_ value:[String:Any])throws{}
  func draftAgenda(_ id:String)throws{}
  func openLinkedAgenda(_ id:String)throws{}
  func setAppearance(_ value:String){}
+ func webRequestedAppearance(_ value:String){}
 }

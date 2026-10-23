@@ -130,7 +130,7 @@ app.whenReady().then(async () => {
   await step('task delete and restore synchronize dashboard', async () => {
     await evaluate(`toggleTaskStatus(${JSON.stringify(taskId)}); showView('dashboard');`);
     assert.ok(await evaluate(`document.querySelector('#dashboardTasks [data-open-task="${taskId}"]')!==null`));
-    await evaluate(`openTask(${JSON.stringify(taskId)}); document.querySelector('#deleteTask').click(); document.querySelector('#confirmContentDelete').click();`);
+    await evaluate(`openTask(${JSON.stringify(taskId)}); document.querySelector('#deleteTask').click();`);
     assert.equal(await evaluate(`!!document.querySelector('#dashboardTasks [data-open-task="${taskId}"]')`), false);
     await evaluate(`showView('trash'); restoreTrash(state.trash.findIndex(x=>x.type==='content'&&x.data.tasks.some(t=>t.id===${JSON.stringify(taskId)})));`);
     assert.ok(await evaluate(`state.tasks.some(x=>x.id===${JSON.stringify(taskId)})`));

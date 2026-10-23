@@ -34,7 +34,7 @@ function fixture(baseline) {
     MathRender: { ...require('../app/math-render.js') }, CodeHighlight: { ...require('../app/code-highlight.js') },
     ConversationLink: { ...require('../app/conversation-link.js') }, state: {} };
   env.window = env; vm.createContext(env);
-  for (const file of ['conversation-flow.js','conversation-stream-body.js','stream-code.js','stream-markdown.js','streaming-body.js','tool-scheduler.js','agent-progress.js','conversation-process.js']) vm.runInContext(source(file, baseline), env);
+  for (const file of ['conversation-flow.js','conversation-stream-body.js','stream-code.js','stream-markdown.js','streaming-body.js','json-schema-lite.js','tool-registry.js','tool-specs.js','tool-scheduler.js','agent-progress.js','conversation-process.js']) vm.runInContext(source(file, baseline), env);
   const app = source('app.js', baseline), parser = app.slice(app.indexOf('function renderRichText('), app.indexOf('\nfunction renderMessage('));
   const render = vm.runInContext(`(${parser})`, env);
   const metrics = { parses: 0, parserCharacters: 0, htmlWrites: 0, htmlCharacters: 0 };

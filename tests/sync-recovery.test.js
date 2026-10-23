@@ -46,7 +46,7 @@ function harness(options = {}) {
     restoreDocumentWorkspace: async () => {}, repairRelationships() {}, applyUiPreferences() {}, renderAll() {}, renderSettings() {}, renderDashboard() {}, renderConversation() {}, renderResults() {}, renderSpace() {}, renderTrash() {}, renderProject() {}, renderSidebar() {},
     dataUrlToBlob: () => null, fileStorePut: async () => {},
     Blob, URL: { createObjectURL: blob => { createdBlob = blob; return 'blob:isolated-recovery'; }, revokeObjectURL() {} },
-    console, window: {}, viewLabels: { agent: '持续对话', dashboard: '总览' },
+    console, window: {}, viewLabels: { agent: '对话', dashboard: '总览' },
   };
   vm.createContext(context);
   vm.runInContext([

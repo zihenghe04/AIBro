@@ -27,7 +27,7 @@ async function run(){
   state.conversations=[{id:'qa_normal',title:'普通对话 · 隔离验收',workspace:'日常',permissionMode:'auto',attachments:[],draftAttachmentIds:[],draft:'',createdAt:now,updatedAt:now,messages:[{id:'n1',role:'user',at:now,text:'这条属于普通对话。'}]}];
   state.currentConversationId='qa_normal';state.settings.permissions={'日常':'auto','课程':'auto','科研':'auto'};
   // 设置页开关的勾选状态由模块同步。
-  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','持续对话');renderAll();})()`);
+  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','对话');renderAll();})()`);
  await wait(500);
 
  await step('开启无痕模式：状态条出现并明确告知"永久删除、不可恢复"',async()=>{

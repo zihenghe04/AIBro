@@ -1,0 +1,117 @@
+/* AI Bro design tokens (M1).
+   Layer 1 = base scales: raw values, named after the value, no meaning attached.
+   Layer 2 = semantic aliases: what a value is for. New CSS should use layer 2 where one exists.
+   Colour palettes (dark :root / body.light-mode / liquid-glass) are listed in the Colour section at the bottom.
+   Every value below is an exact copy of a value that already shipped; adopting a token must not change a pixel.
+   Loaded before styles.css (see index.html and asset-manifest.json). Inventory + counts: docs/m1/reports/design-tokens.md */
+:root {
+  /* ---- Spacing (px). Grid steps 4/8/12/16/20/24 are the core; the rest are legacy off-grid values kept for zero visual change. ---- */
+  --space-4:4px; --space-8:8px; --space-12:12px; --space-16:16px; --space-20:20px; --space-24:24px;
+  /* off-grid, legacy */
+  --space-1:1px; --space-2:2px; --space-3:3px; --space-5:5px; --space-6:6px; --space-7:7px; --space-9:9px; --space-10:10px; --space-11:11px; --space-13:13px; --space-14:14px; --space-15:15px; --space-17:17px; --space-18:18px; --space-22:22px; --space-26:26px; --space-28:28px; --space-30:30px;
+
+  /* ---- Radius (px) ---- */
+  --radius-2:2px; --radius-3:3px; --radius-4:4px; --radius-5:5px; --radius-6:6px; --radius-7:7px; --radius-8:8px; --radius-9:9px; --radius-10:10px; --radius-12:12px; --radius-14:14px; --radius-16:16px; --radius-18:18px; --radius-20:20px; --radius-22:22px;
+  --radius-pill:999px; --radius-round:50%;
+
+  /* ---- Typography ---- */
+  /* size (px). 11/12/13 carry most of the UI; 9, 10 and 15-21 are one-offs that a later pass may merge. */
+  --font-size-9:9px; --font-size-10:10px; --font-size-11:11px; --font-size-12:12px; --font-size-13:13px; --font-size-14:14px; --font-size-15:15px; --font-size-16:16px; --font-size-17:17px; --font-size-18:18px; --font-size-19:19px; --font-size-20:20px; --font-size-21:21px;
+  /* weight. 550 and 650 rely on the variable system font; 450/620/640 etc. stay raw (under 10 uses). */
+  --font-weight-400:400; --font-weight-500:500; --font-weight-550:550; --font-weight-600:600; --font-weight-650:650;
+  /* line-height, unitless; name = value x 100 */
+  --leading-100:1; --leading-140:1.4; --leading-145:1.45; --leading-150:1.5; --leading-155:1.55; --leading-160:1.6; --leading-165:1.65; --leading-170:1.7; --leading-175:1.75; --leading-180:1.8; --leading-185:1.85;
+  --tracking-tight:-.02em;
+
+  /* ---- Motion ---- */
+  /* duration (ms) */
+  --duration-120:120ms; --duration-140:140ms; --duration-150:150ms; --duration-160:160ms; --duration-180:180ms; --duration-200:200ms; --duration-220:220ms; --duration-240:240ms; --duration-260:260ms; --duration-380:380ms; --duration-420:420ms;
+  /* easing (ease / ease-out / linear keywords stay inline) */
+  --motion-ease:cubic-bezier(.2,0,0,1); --motion-spring:cubic-bezier(.34,1.3,.64,1);
+  --ease-decelerate:cubic-bezier(.2,.8,.2,1); --ease-out-quint:cubic-bezier(.22,1,.36,1);
+  /* semantic durations (previously in interaction-system.css) */
+  --motion-fast:150ms; --motion-enter:260ms; --motion-layout:350ms;
+
+  /* ---- Stacking (z-index). Raw levels; the overlay levels 20-1000 are unnamed pending a review of what sits above what. ---- */
+  --z-behind:-1; --z-1:1; --z-2:2; --z-3:3; --z-4:4; --z-20:20; --z-30:30; --z-90:90; --z-220:220; --z-1000:1000;
+
+  /* ---- Fixed colours that do not change with the theme ---- */
+  --color-white:#fff;
+  /* black at low alpha, used for shadows; name = approx. percent alpha, hex in the comment */
+  --black-a13:#0002; --black-a20:#0003; --black-a27:#0004; --black-a33:#0005; --black-a2:#00000005; --black-a3:#00000008; --black-a4:#0000000a; --black-a6:#00000010; --black-a7:#00000012; --black-a8:#00000014; --black-a9:#00000018;
+}
+
+/* =====================================================================
+   Layer 2 - semantic tokens (what a value is for). Adopt these in new CSS.
+   They are aliases of layer 1, so changing a role is a one-line edit here.
+   Nothing in the shipped CSS uses them yet: the M1 pass was value-identical only.
+   ===================================================================== */
+:root {
+  /* type roles */
+  --font-caption:var(--font-size-11); --font-small:var(--font-size-12); --font-body:var(--font-size-13); --font-lead:var(--font-size-14); --font-title:var(--font-size-16);
+  /* spacing roles (4px grid) */
+  --space-xs:var(--space-4); --space-sm:var(--space-8); --space-md:var(--space-12); --space-lg:var(--space-16); --space-xl:var(--space-24);
+  /* radius roles */
+  --radius-chip:var(--radius-6); --radius-control:var(--radius-8); --radius-card:var(--radius-12); --radius-panel:var(--radius-16);
+  /* motion roles (hover/press 140ms, popovers 180ms, panels 240ms are the three most used durations) */
+  --motion-hover:var(--duration-140); --motion-popover:var(--duration-180); --motion-panel:var(--duration-240);
+}
+
+/* =====================================================================
+   Colour. Three palettes exist at runtime; only the first lives here.
+     1. Default (this file): dark in :root, light under body.light-mode. Identity: blue-grey.
+     2. Liquid glass (liquid-glass.css, body.liquid-glass[data-view]): neutral grey, overrides 1 in both themes.
+     3. Native app (native/Resources/workspace.css, body.aibro-native): teal-green, injected by the Swift shell.
+   Palettes 2 and 3 are listed in docs/m1/reports/design-tokens.md; they were not moved (specificity-sensitive).
+   Role names below are the shipped short names (--bg, --panel, ...). --color-* are the same roles under
+   self-describing names; they are declared on body, not :root, so they follow body.light-mode and
+   body.liquid-glass overrides. Do not read them on html.
+   ===================================================================== */
+:root {
+  color-scheme: dark;
+  --bg:#141618; --panel:#202326; --panel-raised:#292d32; --panel-hover:#32373d;
+  --canvas:rgba(28,31,34,.94); --sidebar:rgba(30,34,38,.60); --glass:rgba(42,47,53,.76);
+  --line:rgba(191,204,234,.12); --line-strong:rgba(191,204,234,.24); --rim:rgba(230,239,255,.10);
+  --text:#eef0f6; --muted:#a0a7b8; --faint:#858c9d;
+  --accent:#9ab9d2; --accent-soft:rgba(138,174,202,.11); --accent-solid:#7c9bb5;
+  --green:#80d1b5; --orange:#e7b878; --red:#ed989e;
+  --ambient:radial-gradient(ellipse at 10% 0%,rgba(119,143,164,.18),transparent 53%),radial-gradient(ellipse at 97% 100%,rgba(103,114,131,.13),transparent 52%);
+  --surface-wash:linear-gradient(145deg,rgba(226,235,255,.04),transparent 60%);
+  --shadow-canvas:inset 0 1px 0 var(--rim),0 2px 5px #0003,0 22px 64px #0004;
+  --shadow-card:inset 0 1px 0 var(--rim),0 2px 3px #0002,0 6px 20px #0001;
+  --shadow-float:inset 0 1px 0 var(--rim),0 0 0 1px #0002,0 8px 20px #0004,0 32px 80px #0007;
+  --shadow-button:inset 0 1px 0 var(--rim),0 1px 2px #0003;
+  --scrim:rgba(3,6,15,.58); --radius:14px; --surface:var(--panel); --border:var(--line);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
+}
+body.light-mode {
+  color-scheme:light;
+  --bg:#e9ecef; --panel:#fcfdfe; --panel-raised:#ffffff; --panel-hover:#edf0f3;
+  --canvas:rgba(250,251,252,.95); --sidebar:rgba(243,245,247,.58); --glass:rgba(255,255,255,.76);
+  --line:rgba(41,56,84,.10); --line-strong:rgba(41,56,84,.21); --rim:rgba(255,255,255,.98);
+  --text:#242935; --muted:#5e6877; --faint:#67707e;
+  --accent:#476f93; --accent-soft:rgba(72,118,157,.085); --accent-solid:#43698b;
+  --green:#328568; --orange:#a46e2a; --red:#b74958;
+  --ambient:radial-gradient(ellipse at 8% 0%,rgba(165,185,205,.28),transparent 50%),radial-gradient(ellipse at 95% 95%,rgba(166,178,193,.20),transparent 48%);
+  --surface-wash:linear-gradient(145deg,rgba(255,255,255,.96),rgba(246,248,250,.48) 70%);
+  --shadow-canvas:inset 0 1px 0 var(--rim),0 1px 3px #25355510,0 16px 50px #273b6220;
+  --shadow-card:inset 0 1px 0 var(--rim),0 1px 2px #22365b07,0 4px 15px #22365b06;
+  --shadow-float:inset 0 1px 0 var(--rim),0 0 0 1px #30436405,0 8px 20px #20355614,0 30px 75px #20355628;
+  --shadow-button:inset 0 1px 0 var(--rim),0 1px 3px #2035560e;
+  --scrim:rgba(40,49,70,.26);
+}
+
+body {
+  --color-bg:var(--bg); --color-surface:var(--panel); --color-surface-raised:var(--panel-raised); --color-surface-hover:var(--panel-hover);
+  --color-canvas:var(--canvas); --color-sidebar:var(--sidebar); --color-glass:var(--glass);
+  --color-border:var(--line); --color-border-strong:var(--line-strong); --color-rim:var(--rim);
+  --color-text:var(--text); --color-text-muted:var(--muted); --color-text-faint:var(--faint);
+  --color-accent:var(--accent); --color-accent-soft:var(--accent-soft); --color-accent-solid:var(--accent-solid);
+  --color-success:var(--green); --color-warning:var(--orange); --color-danger:var(--red); --color-scrim:var(--scrim);
+  /* Semantic status colours and font stacks (M1 ui-followup). Each theme supplies its own
+     --red/--orange/--green/--muted (tokens.css, liquid-glass.css, themes.css, native workspace.css),
+     so these follow the active theme in light and dark. Use them instead of var(--x,#fallback). */
+  --danger:var(--red); --warning:var(--orange); --success:var(--green); --text-muted:var(--muted);
+  --font-sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
+  --font-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+}

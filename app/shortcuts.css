@@ -3,7 +3,7 @@
   max-width: 560px;
   width: min(560px, 92vw);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-14);
   padding: 0;
   background: var(--canvas);
   box-shadow: var(--shadow-float);
@@ -14,32 +14,32 @@
 .shortcuts-body {
   max-height: 66vh;
   overflow: auto;
-  padding: 4px 18px 18px;
+  padding: var(--space-4) var(--space-18) var(--space-18);
 }
 
-.shortcuts-group { margin-top: 14px; }
-.shortcuts-group h3 { margin: 0 0 6px; font-size: 12px; opacity: .78; font-weight: 600; }
+.shortcuts-group { margin-top: var(--space-14); }
+.shortcuts-group h3 { margin: 0 0 var(--space-6); font-size: var(--font-size-12); opacity: .78; font-weight: var(--font-weight-600); }
 
 .shortcut-row {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  padding: 5px 0;
+  gap: var(--space-12);
+  padding: var(--space-5) 0;
   border-bottom: 1px solid var(--line);
 }
 
 .shortcut-row:last-child { border-bottom: 0; }
-.shortcut-keys { flex: 0 0 auto; min-width: 132px; font-size: 12px; opacity: .9; }
+.shortcut-keys { flex: 0 0 auto; min-width: 132px; font-size: var(--font-size-12); opacity: .9; }
 
 .shortcut-keys kbd {
   display: inline-block;
-  padding: 1px 6px;
+  padding: var(--space-1) var(--space-6);
   border: 1px solid var(--line);
   border-bottom-width: 2px;
-  border-radius: 5px;
+  border-radius: var(--radius-5);
   background: var(--surface-wash);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 
-.shortcut-label { flex: 1 1 auto; font-size: 13px; line-height: 1.5; }
+.shortcut-label { flex: 1 1 auto; font-size: var(--font-size-13); line-height: var(--leading-150); }

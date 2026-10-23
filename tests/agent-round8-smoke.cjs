@@ -34,7 +34,7 @@ async function run(){
   state.projects=[];state.notes=[];state.tasks=[];state.imports=[];state.agentRuns=[];
   state.conversations=[{id:'qa_r8',title:'富文本验收',workspace:'日常',permissionMode:'auto',attachments:[],draftAttachmentIds:[],draft:'',createdAt:now,updatedAt:now,messages:[{id:'m8',role:'assistant',at:now,text:body}]}];
   state.currentConversationId='qa_r8';state.settings.permissions={'日常':'auto','课程':'auto','科研':'auto'};
-  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','持续对话');renderAll();
+  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','对话');renderAll();
   const layer=document.querySelector('#onboardingLayer');if(layer)layer.remove();})()`);
  await wait(800);
 

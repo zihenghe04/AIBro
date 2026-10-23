@@ -1,7 +1,11 @@
 /* One durable ledger for read tools, provider tools and controlled commands. */
 (function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;else root.ToolScheduler=api;})(globalThis,root=>{
   'use strict';
-  const reads=new Set(['agenda_list','agenda_read','project_list','task_list','list','search','neighbors','read','read_page','read_file','wiki_list','memory_read','delegate','capabilities','history_search','history_read','library_overview','evidence_log']);
+  // Classification, labels and the argument whitelist come from the tool
+  // declarations (tool-specs.js), not from lists kept here.
+  const Tools=(typeof module==='object'&&module.exports?require('./tool-specs'):root.AIBroTools)?.registry;
+  if(!Tools)throw Error('ToolScheduler needs the tool registry (tool-specs.js) loaded first');
+  const reads=Tools.readTypes(),parallel=Tools.parallelTypes();
   const pending=new Set(['queued','running','awaiting-approval']);
   // A tool that settles without a receipt gets one of two recorded outcomes.
   // "unknown": it was dispatched (or a provider reported it running), so it may
@@ -13,7 +17,7 @@
   // Opening a panel or reading a page is not an effect to verify either. Any
   // type not listed here (terminal, browser_click/type, future tools) is
   // treated as able to act.
-  const viewOnly=new Set(['quick_panel_open','web_read','web_search','browser_open','browser_snapshot','browser_screenshot','browser_scroll','browser_handoff','browser_close']);
+  const viewOnly=Tools.viewTypes();
   const readOnly=call=>reads.has(call?.type)||viewOnly.has(call?.type)||String(call?.id||'').startsWith('provider:');
   const LEGACY_UNRECEIVED='未收到工具完成结果，请核对执行记录。';
   const UNKNOWN_TEXT='已发出请求但未收到结果，无法确认是否已执行。请核对实际效果；不会自动重跑。';
@@ -26,20 +30,8 @@
   }
   const clone=x=>JSON.parse(JSON.stringify(x));
   const cancelled=()=>Object.assign(Error('已停止工具执行'),{code:'CANCELLED'});
-  const label=type=>({agenda_list:'查询日程',agenda_read:'读取日程',quick_panel_open:'打开灵动岛',evidence_log:'读取账本',library_overview:'资料概览',capabilities:'操作说明',history_search:'搜索对话',history_read:'读取对话',project_list:'\u9879\u76ee\u76ee\u5f55',task_list:'任务目录',list:'资料目录',search:'检索',neighbors:'相邻证据',read:'读取正文',read_page:'读取原件',read_file:'工作区文件',wiki_list:'Wiki 目录',memory_read:'项目记忆',delegate:'子代理',terminal:'终端',web_read:'网页读取',web_search:'网页搜索'})[type]||type;
-  function safeRequest(request){
-    if(['agenda_list','agenda_read'].includes(request.type)){
-      const allowed=request.type==='agenda_list'?['type','query','from','to','limit','offset']:['type','eventId','expectedVersion'];
-      if(Object.keys(request).some(key=>!allowed.includes(key)))throw Object.assign(Error('日程工具不接受模型指定的权限范围'),{code:'INVALID_AGENDA_REQUEST'});
-      return clone(request);
-    }
-    if(request.type==='quick_panel_open'){
-      if(Object.keys(request).some(key=>!['type','section','recordType','recordId'].includes(key))||typeof request.section!=='string'||request.section.length>32||['recordType','recordId'].some(key=>request[key]!==undefined&&(typeof request[key]!=='string'||!request[key]||request[key].length>512))||('recordType' in request)!==('recordId' in request))throw Object.assign(Error('无效灵动岛请求：只接受 section 及配对的 recordType/recordId'),{code:'INVALID_QUICK_PANEL_REQUEST'});
-      return clone(request);
-    }
-    const out={};for(const key of ['type','id','recordType','query','offset','page','refKey','variant','chunkId','version','radius','argv','cwd','timeout','task','title','url','name','messageId','maxTokens','runId','tabId','sessionId','snapshotId','ref','text','x','y'])if(request[key]!==undefined)out[key]=clone(request[key]);
-    return out;
-  }
+  const label=Tools.label;
+  const safeRequest=Tools.safeRequest;
   function resultSnapshot(value){
     // Model context is bounded separately by KnowledgeAccess. The durable
     // execution record must retain received text, including long tool output.
@@ -103,8 +95,8 @@
       try{
         let start=0;
         while(start<entries.length){
-          checkBatch();if(!reads.has(entries[start].type)){await invoke(start++);continue;}
-          let end=start;while(end<entries.length&&reads.has(entries[end].type))end++;
+          checkBatch();if(!parallel.has(entries[start].type)){await invoke(start++);continue;}
+          let end=start;while(end<entries.length&&parallel.has(entries[end].type))end++;
           let cursor=start;const workers=Array.from({length:Math.min(Math.max(1,concurrency),end-start)},async()=>{while(cursor<end){checkBatch();const i=cursor++;await invoke(i);}});
           const settled=await Promise.allSettled(workers);const failure=settled.find(x=>x.status==='rejected');if(failure)throw failure.reason;start=end;
         }

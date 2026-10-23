@@ -1,12 +1,12 @@
 .message-list > .message-window-placeholder{padding:0!important;border:0!important;min-height:0!important;pointer-events:none;}
-.conversation-reading-mode{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 28px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted);}
+.conversation-reading-mode{flex:none;display:flex;align-items:center;justify-content:space-between;gap:var(--space-12);padding:var(--space-6) var(--space-28);border-bottom:1px solid var(--line);font-size:var(--font-size-11);color:var(--muted);}
 .conversation-reading-mode[hidden]{display:none;}
-.conversation-reading-mode-copy{display:flex;gap:8px;align-items:center;min-width:0;}
+.conversation-reading-mode-copy{display:flex;gap:var(--space-8);align-items:center;min-width:0;}
 .conversation-reading-mode button{white-space:nowrap;}
 .conversation-search-scratch{position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none;contain:layout style;}
-@media(max-width:600px){.conversation-reading-mode{padding:5px 12px;gap:6px;}.conversation-reading-mode-hint{display:none;}}
+@media(max-width:600px){.conversation-reading-mode{padding:var(--space-5) var(--space-12);gap:var(--space-6);}.conversation-reading-mode-hint{display:none;}}
 
 /* A long transcript has its own reading controls. Keep Find in normal flow
    here so its overlay cannot cover the complete-reading button. */
-.conversation-pane:has(.conversation-reading-mode:not([hidden])) .find-bar{position:static;flex:none;align-self:flex-end;margin:0 28px 6px;max-width:calc(100% - 56px);box-sizing:border-box;}
-@media(max-width:600px){.conversation-pane:has(.conversation-reading-mode:not([hidden])) .find-bar{margin:0 12px 6px;max-width:calc(100% - 24px);flex-wrap:wrap;}.conversation-pane:has(.conversation-reading-mode:not([hidden])) .find-bar input{min-width:70px;flex:1;width:120px;}.conversation-pane:has(.conversation-reading-mode:not([hidden])) .find-count{min-width:0;}}
+.conversation-pane:has(.conversation-reading-mode:not([hidden])) .find-bar{position:static;flex:none;align-self:flex-end;margin:0 var(--space-28) var(--space-6);max-width:calc(100% - 56px);box-sizing:border-box;}
+@media(max-width:600px){.conversation-pane:has(.conversation-reading-mode:not([hidden])) .find-bar{margin:0 var(--space-12) var(--space-6);max-width:calc(100% - 24px);flex-wrap:wrap;}.conversation-pane:has(.conversation-reading-mode:not([hidden])) .find-bar input{min-width:70px;flex:1;width:120px;}.conversation-pane:has(.conversation-reading-mode:not([hidden])) .find-count{min-width:0;}}

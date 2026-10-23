@@ -15,9 +15,20 @@ test('full, smart and explicit automatic space settings authorize definite creat
  f.chat.permissionMode='legacy';f.s.settings.permissions.日常='approval';assert.equal(allowed(f),false);
  delete f.s.settings.permissions.日常;assert.equal(allowed(f),false);
 });
-test('estimated end, explicit review, uncommitted state and routing remain reviewable but never automatic',()=>{
- for(const mutate of [f=>f.p[0].endEstimated=true,f=>f.run.approvalIntent={human:true},f=>f.run.routingReview={required:true},f=>f.run.executionReceipt.phase='applied']){
-  const f=fixture();mutate(f);assert.equal(allowed(f),false);assert.equal(allowed(f,false),true);
+test('explicit review, uncommitted state and routing remain reviewable but never automatic',()=>{
+ for(const mode of ['full','smart','legacy'])for(const mutate of [f=>f.run.approvalIntent={human:true},f=>f.run.routingReview={required:true},f=>f.run.executionReceipt.phase='applied']){
+  const f=fixture(mode);mutate(f);assert.equal(allowed(f),false);assert.equal(allowed(f,false),true);
+ }
+});
+test('an estimated end saves automatically in full and smart modes; space settings and manual mode still review it',()=>{
+ for(const mode of ['full','smart']){const f=fixture(mode);f.p[0].endEstimated=true;assert.equal(allowed(f),true);}
+ for(const mode of ['legacy','request']){const f=fixture(mode);f.p[0].endEstimated=true;assert.equal(allowed(f),false);assert.equal(allowed(f,false),true);}
+});
+test('autoCreate includes estimated-end proposals only for full and smart conversations',async()=>{
+ for(const [mode,expected] of [['full',1],['smart',1],['legacy',0]]){
+  const f=fixture(mode);f.p[0].endEstimated=true;global.state=f.s;global.saveDocumentDurably=async()=>true;
+  let sent=0;global.workstationDesktop={agendaCreateBatch:async p=>{sent+=p.length;return {status:'committed',persisted:true};}};
+  await A.autoCreate(f.run);assert.equal(sent,expected,mode);assert.equal(f.run.agendaAutoSaved,expected?true:undefined);
  }
 });
 test('stale sources, scopes, duplicates and private workspaces cannot commit',()=>{
@@ -66,4 +77,22 @@ test('batch confirmation omits exact duplicates from earlier messages, without r
 test('changed native events, different conversations and cancellations never suppress a new proposal',async()=>{
  const changes=[f=>f.event.title='人工修改',f=>f.event.end+=60000,f=>f.event.projectID='other',f=>f.event.frequency='weekly',f=>f.event.reminderMinutes=10,f=>f.event.details+='manual edit',f=>f.event.deleted=true,f=>f.s.agentRuns[0].conversationId='other',f=>f.p[0].location='另一地点'];
  for(const change of changes){const f=repeatedFixture();change(f);global.state=f.s;global.workstationDesktop={agendaRelated:async()=>[f.event]};await A.refresh();assert.equal(A.hasPending(f.run),true);}
+});
+test('an estimated end reads as saved once the event exists and as pending review before that',async()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const f=fixture('full');f.p[0].endEstimated=true;global.state=f.s;
+ global.workstationDesktop={agendaRelated:async()=>[]};await A.refresh();
+ assert.equal(A.estimatedNote(f.run,f.p[0]),'默认时长 1 小时，待确认');
+ const q=f.p[0],details='\n\n来源消息：'+q.quote+'\n结束时间未指定，已按默认时长1小时保存，可在日程中修改。';
+ global.workstationDesktop={agendaRelated:async()=>[{...q,id:q.id,details,kind:'event',allDay:false,deleted:false}]};await A.refresh();
+ assert.equal(A.estimatedNote(f.run,q),'已按默认 1 小时保存，可修改');
+ // A later identical proposal in the same conversation recognises the automatically saved note.
+ const later={...f.run,id:'r2',userMessageId:'u'};f.s.agentRuns.push(later);
+ const copy={...q,id:'other'};assert.equal(A.estimatedNote(later,copy),'已按默认 1 小时保存，可修改');
+ assert.equal(A.estimatedNote(f.run,{...q,endEstimated:false}),'');
+ // Only the automatic native path writes the saved wording; the reviewed path keeps asking.
+ const swift=fs.readFileSync(path.join(__dirname,'../native/Sources/AIBro/NativeDesktop.swift'),'utf8');
+ assert.match(swift,/proposedAgendaEvent\(\$0,automatic:automatic\)/);
+ const host=fs.readFileSync(path.join(__dirname,'../native/Sources/AIBro/AIBro.swift'),'utf8');
+ assert.match(host,/automatic \? "\\n结束时间未指定，已按默认时长1小时保存，可在日程中修改。":"\\n结束时间未指定，默认时长1小时，请在保存前确认。"/);
 });

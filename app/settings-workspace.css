@@ -1,15 +1,15 @@
 /* Sectioned settings use the native palette; business fields keep their owners. */
 #settings.settings-sectioned { container-type: inline-size; }
-#settings.settings-sectioned > .page-heading { align-items: center; gap: 16px; margin-bottom: 18px; }
+#settings.settings-sectioned > .page-heading { align-items: center; gap: var(--space-16); margin-bottom: var(--space-18); }
 #settings.settings-sectioned > .page-heading > div:first-child { flex: 1; min-width: 0; }
 #settings.settings-sectioned > .settings-grid:empty { display: none; }
 .settings-navigation-kit { min-width: 0; }
-.settings-tabs-scroll { overflow-x: auto; overscroll-behavior-x: contain; padding: 4px 2px; scrollbar-width: thin; }
+.settings-tabs-scroll { overflow-x: auto; overscroll-behavior-x: contain; padding: var(--space-4) var(--space-2); scrollbar-width: thin; }
 .settings-tabs-scroll .kit-tabs { min-width: max-content; }
-.settings-section-intro { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 23px 2px 18px; }
+.settings-section-intro { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-20); padding: 23px var(--space-2) var(--space-18); }
 .settings-section-intro > div { min-width: 0; }
-.settings-section-intro > :last-child { max-width: 240px; flex: 0 1 auto; text-align: right; line-height: 1.6; padding-top: 4px; }
-#settings .settings-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; }
+.settings-section-intro > :last-child { max-width: 240px; flex: 0 1 auto; text-align: right; line-height: var(--leading-160); padding-top: var(--space-4); }
+#settings .settings-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-18); min-width: 0; }
 #settings .settings-section[hidden] { display: none !important; }
 #settings .settings-section > * { min-width: 0; max-width: 100%; }
 #settings .settings-section > .card { margin: 0; }
@@ -20,9 +20,9 @@
 #settings .settings-section .setting-help, #settings .settings-section .muted { overflow-wrap: anywhere; }
 #settings .settings-section .settings-connection-card { grid-column: 1 / -1; }
 #settings .settings-section .settings-connection-card > h2 { margin-top: 0; }
-#settings .settings-section .settings-connection-card > #provider { max-width: 440px; margin-bottom: 18px; }
-.settings-save-bar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 16px; border: 1px solid var(--line); background: var(--panel); border-radius: 14px; }
-.settings-save-bar p { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0; max-width: 620px; }
+#settings .settings-section .settings-connection-card > #provider { max-width: 440px; margin-bottom: var(--space-18); }
+.settings-save-bar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: var(--space-20); padding: var(--space-14) var(--space-16); border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius-14); }
+.settings-save-bar p { font-size: var(--font-size-12); color: var(--muted); line-height: var(--leading-160); margin: 0; max-width: 620px; }
 .settings-save-bar button { flex: 0 0 auto; white-space: nowrap; }
 #settings .settings-section .build-info { grid-column: 1 / -1; margin: 0; }
 @container (min-width: 820px) {
@@ -30,8 +30,8 @@
   #settings #settings-panel-appearance .language-settings-card { grid-column: 1 / -1; }
 }
 @container (max-width: 580px) {
-  .settings-section-intro { flex-direction: column; gap: 6px; }
+  .settings-section-intro { flex-direction: column; gap: var(--space-6); }
   .settings-section-intro > :last-child { max-width: none; text-align: left; }
-  .settings-save-bar { flex-direction: column; align-items: stretch; gap: 12px; }
+  .settings-save-bar { flex-direction: column; align-items: stretch; gap: var(--space-12); }
   .settings-save-bar button { align-self: flex-start; }
 }

@@ -33,13 +33,42 @@ struct ConversationTarget:Identifiable {
     init(_ item:ConversationEntry){kind="conversation";id=item.id;title=item.title;folderId=item.folderId;archived=item.archived}
     init(_ item:ConversationFolder){kind="folder";id=item.id;title=item.title;archived=item.archived}
 }
+/// One undo for the chat or folder just moved to Trash, matching the web workspace's undo toast.
+struct TrashUndo:Identifiable,Equatable {let id:String;let title:String;let folder:Bool}
 extension Workspace {
     @discardableResult func manageConversation(_ command:[String:String]) async -> Bool {
         do {
             guard ready else{throw CocoaError(.validationMissingMandatoryProperty)}
             let result=try await web.callAsyncJavaScript("return window.NativeConversationActions.perform(command)",arguments:["command":command],in:nil,contentWorld:.page)
+            // A delete answers with the new trash record's id so it can be undone.
+            if command["action"]=="delete",let trashID=result as? String,!trashID.isEmpty {trashUndo=TrashUndo(id:trashID,title:command["name"] ?? "",folder:command["kind"]=="folder");return true}
             return result as? Bool == true
         }catch{self.error=error.localizedDescription;return false}
+    }
+    func undoTrash(_ undo:TrashUndo) async {
+        if trashUndo?.id==undo.id {trashUndo=nil}
+        do {
+            let result=try await web.callAsyncJavaScript("return window.NativeConversationActions.perform(command)",arguments:["command":["action":"undoTrash","id":undo.id]],in:nil,contentWorld:.page)
+            if result as? Bool != true {error=nativeUI("这条记录已不在回收站，无法撤销。", "This item is no longer in Trash, so it can't be undone.")}
+        }catch{self.error=error.localizedDescription}
+    }
+}
+/// Bottom capsule offering Undo for six seconds after a chat moves to Trash.
+struct TrashUndoBanner:View {
+    @ObservedObject private var nativeLanguage = NativeL10n.shared
+    @ObservedObject var model:Workspace
+    var body:some View {
+        if let undo=model.trashUndo {
+            HStack(spacing:12) {
+                Text(undo.folder ? nativeUI("已将文件夹“\(undo.title)”移入回收站", "Moved folder “\(undo.title)” to Trash"):nativeUI("已将“\(undo.title)”移入回收站", "Moved “\(undo.title)” to Trash")).lineLimit(2)
+                Button(nativeUI("撤销", "Undo")){Task{await model.undoTrash(undo)}}.buttonStyle(.borderless).fontWeight(.semibold)
+            }
+            .font(.callout).padding(.horizontal,18).padding(.vertical,9)
+            .background(.regularMaterial,in:Capsule()).shadow(color:.black.opacity(0.12),radius:10,y:3)
+            .padding(.bottom,28).transition(.move(edge:.bottom).combined(with:.opacity))
+            .accessibilityElement(children:.contain)
+            .task(id:undo.id){try? await Task.sleep(nanoseconds:6_000_000_000);if model.trashUndo?.id==undo.id {withAnimation{model.trashUndo=nil}}}
+        }
     }
 }
 struct ConversationManager:View {
@@ -48,7 +77,6 @@ struct ConversationManager:View {
     let target:ConversationTarget
     @State private var name=""
     @State private var folder=""
-    @State private var deleting=false
     @State private var working=false
     @State private var failed=false
     @Environment(\.dismiss) private var dismiss
@@ -64,15 +92,14 @@ struct ConversationManager:View {
                 HStack {
                     Button(target.archived ? nativeUI("取消归档", "Unarchive"):nativeUI("归档", "Archive")){run(target.archived ? "restore":"archive")}
                     Spacer()
-                    Button(nativeUI("移入回收站", "Move to Trash"),role:.destructive){deleting=true}
+                    Button(nativeUI("移入回收站", "Move to Trash"),role:.destructive){run("delete")}
                 }
-                Text(target.kind=="folder" ? nativeUI("归档会收起文件夹中的对话；取消归档时会恢复。", "Archiving hides the chats in this folder. Unarchive it to restore them."):nativeUI("归档后的对话可在“对话”页面的归档入口恢复。", "Restore archived chats from the archive on the Chats page.")).font(.caption).foregroundStyle(.secondary)
+                Text(target.kind=="folder" ? nativeUI("归档会收起文件夹中的对话；取消归档时会恢复。移入回收站后可立即撤销，或在回收站恢复。", "Archiving hides the chats in this folder. Unarchive it to restore them. Moving to Trash can be undone right away or restored from Trash."):nativeUI("归档后的对话可在“对话”页面的归档入口恢复。移入回收站后可立即撤销，或在回收站恢复。", "Restore archived chats from the archive on the Chats page. Moving to Trash can be undone right away or restored from Trash.")).font(.caption).foregroundStyle(.secondary)
             }
             if failed{Text(nativeUI("保存未完成，请关闭后重试。", "Could not save. Close this dialog and try again.")).font(.caption).foregroundStyle(.red)}
             HStack{Spacer();Button(working ? nativeUI("正在保存…", "Saving…"):nativeUI("保存", "Save")){run(target.id.isEmpty ? "create":"save")}.buttonStyle(.borderedProminent).disabled(name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}
         }.padding(26).frame(width:440).background(StudioPalette.canvas).disabled(working)
         .onAppear{name=target.title;folder=(model.snapshot?.conversationFolders ?? []).contains(where:{$0.id==target.folderId && !$0.archived}) ? target.folderId:""}
-        .confirmationDialog(target.kind=="folder" ? nativeUI("将文件夹及其中的对话移入回收站？", "Move this folder and its chats to Trash?"):nativeUI("将此对话移入回收站？", "Move this chat to Trash?"),isPresented:$deleting,titleVisibility:.visible){Button(nativeUI("移入回收站", "Move to Trash"),role:.destructive){run("delete")};Button(nativeUI("取消", "Cancel"),role:.cancel){}}message:{Text(nativeUI("可以从回收站恢复。项目中的笔记、任务和原始资料会保留。", "You can restore these from Trash. Project notes, tasks and source files are kept."))}
     }
     private func run(_ action:String){working=true;Task{let ok=await model.manageConversation(["kind":target.kind,"id":target.id,"action":action,"name":name,"folderId":folder]);working=false;if ok{dismiss()}else{failed=true}}}
 }

@@ -2,7 +2,7 @@
    cadence is retained; palette, active state and reduced motion belong to AI Bro. */
 .aicss-thinking-label {
   font: inherit;
-  font-weight: 500;
+  font-weight: var(--font-weight-500);
   color: var(--text);
 }
 .aicss-thinking-label[data-aicss-thinking-state="running"] {
@@ -48,15 +48,15 @@ body.reduce-motion .aicss-thinking-label[data-aicss-thinking-state="running"] {
 /* These are the host layout rules for the actual Halaska primitives adjacent
    to the AICSS status. Native details/summary remains the disclosure owner. */
 .halaska-activity-summary { display: block; flex: 1; min-width: 0; }
-.halaska-activity-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: 100%; min-width: 0; }
-.halaska-activity-heading { display: inline-flex; align-items: baseline; flex: 1 1 140px; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.halaska-activity-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-6) var(--space-10); width: 100%; min-width: 0; }
+.halaska-activity-heading { display: inline-flex; align-items: baseline; flex: 1 1 140px; gap: var(--space-8); min-width: 0; overflow-wrap: anywhere; }
 .halaska-activity-heading > span:first-child { min-width: 0; }
-.halaska-activity-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; font-variant-numeric: tabular-nums; }
+.halaska-activity-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-6); min-width: 0; font-variant-numeric: tabular-nums; }
 .halaska-activity-state { display: inline-flex; flex: none; }
-.halaska-activity-state > span { padding: 2px 7px !important; font-size: 10px !important; line-height: 1.6; white-space: nowrap; }
+.halaska-activity-state > span { padding: var(--space-2) var(--space-7) !important; font-size: var(--font-size-10) !important; line-height: var(--leading-160); white-space: nowrap; }
 .halaska-activity-group-detail { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 500px) {
-  .halaska-activity-line { gap: 4px 7px; }
+  .halaska-activity-line { gap: var(--space-4) var(--space-7); }
   .halaska-activity-heading { flex-basis: 100px; }
-  .halaska-activity-meta { gap: 4px; }
+  .halaska-activity-meta { gap: var(--space-4); }
 }

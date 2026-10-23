@@ -11,7 +11,7 @@ function fixture(calls,{language='zh',status='completed'}={}){
  let focused=document.body,selection=null,saves=0;
  window.HTMLElement.prototype.focus=function(){focused=this;};Object.defineProperty(document,'activeElement',{get:()=>focused});
  const context={document,console,Date,Intl,getSelection:()=>selection,WorkstationI18n:{getLanguage:()=>language}};context.window=context;vm.createContext(context);
- for(const file of ['tool-scheduler.js','agent-progress.js'])vm.runInContext(source(file),context);
+ for(const file of ['json-schema-lite.js','tool-registry.js','tool-specs.js','tool-scheduler.js','agent-progress.js'])vm.runInContext(source(file),context);
  const run={id:'details-run',status,toolCalls:calls},message={id:'details-message',role:'agent',runId:run.id};
  context.state={agentRuns:[run],conversations:[{id:'details-chat',messages:[message]}]};context.save=()=>saves++;vm.runInContext(app.slice(pinStart,pinEnd),context);
  document.addEventListener('click',event=>{const summary=event.target.closest?.('summary');if(!summary||event.defaultPrevented)return;summary.parentElement.open=!summary.parentElement.open;summary.parentElement.dispatchEvent(new window.Event('toggle'));});

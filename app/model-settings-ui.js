@@ -1,6 +1,8 @@
 /* Retain host inputs/actions: no secret values enter the React bridge. */
 (function(root){'use strict';
- let record=null;
+ let record=null,catalogProvider=null;
+ // The model list is plain public metadata supplied by app.js; it never carries a key.
+ const catalog=()=>{try{return catalogProvider?.()||null;}catch(_){return null;}};
  const IDS=['apiBase','apiProtocol','apiKey','model','apiModelOptions','apiCredentialStatus','apiCredentialUnlock','clearApiKey','testApi','apiStatus','workspaceModel-daily','workspaceModel-course','workspaceModel-research'];
  const BUTTONS=new Set(['testApi','clearApiKey']);
  const SELECTS=new Set(['apiProtocol']);
@@ -14,7 +16,8 @@
   }
   return controls;
  }
- function refresh(){if(record)record.island.update({controls:snapshot(record.nodes)});}
+ function refresh(){if(record)record.island.update({controls:snapshot(record.nodes),catalog:catalog()});}
+ function setCatalogProvider(fn){catalogProvider=typeof fn==='function'?fn:null;refresh();}
  function mount(){
   const host=document.getElementById('apiCredentials');if(!host||!root.HalaskaUI)return false;
   if(record?.host===host){refresh();return true;}if(record)unmount();
@@ -26,7 +29,7 @@
   const islandHost=document.createElement('div');islandHost.className='model-settings-root';host.append(parking,islandHost);
   const attach=(id,slot)=>{const node=nodes.get(id),marker=markers.get(id);if(!node||!slot)return;slot.append(node);return()=>{if(marker.parentNode)marker.after(node);};};
   let island;
-  try{island=root.HalaskaUI.mount(islandHost,'ModelSettingsSurface',{controls:snapshot(nodes),attach});}
+  try{island=root.HalaskaUI.mount(islandHost,'ModelSettingsSurface',{controls:snapshot(nodes),attach,catalog:catalog()});}
   catch(_){
    // Restore the original form even if a component fails after taking slots.
    for(const [id,node]of nodes){const marker=markers.get(id);if(marker.parentNode)marker.after(node);}
@@ -48,5 +51,5 @@
   for(const [id,node]of old.nodes){const marker=old.markers.get(id);if(marker.parentNode)marker.after(node);}
   old.island.unmount();old.host.replaceChildren(...old.children);for(const marker of old.markers.values())marker.remove();
  }
- root.ModelSettingsUI={mount,refresh,unmount};
+ root.ModelSettingsUI={mount,refresh,unmount,setCatalogProvider};
 })(globalThis);

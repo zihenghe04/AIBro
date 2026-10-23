@@ -13,7 +13,7 @@ const refracting = async label => { for (let n = 0; n < 100; n++) { if (await ru
 app.whenReady().then(async () => {
   window = new BrowserWindow({ width: 1440, height: 1000, show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
   await window.loadFile(path.join(directory, 'app', 'index.html'));
-  await run(`window.WorkstationOnboarding?.close(); document.querySelector('#onboardingLayer')?.remove(); window.LiquidGlass?.init(); window.showView('agent','持续对话');`);
+  await run(`window.WorkstationOnboarding?.close(); document.querySelector('#onboardingLayer')?.remove(); window.LiquidGlass?.init(); window.showView('agent','对话');`);
   const report = [];
   for (const width of [1440, 650]) {
     window.setSize(width, 1000);

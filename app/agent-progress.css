@@ -1,73 +1,73 @@
 /* Transcript activity is quieter than the answer, with a readable live tail. */
-.agent-progress{margin:10px 0 18px;min-width:0;color:var(--muted);font-size:12px;line-height:1.6}
-.agent-progress>summary{display:flex;align-items:center;gap:9px;cursor:pointer;list-style:none;min-height:32px;padding:3px 0;user-select:none}
+.agent-progress{margin:var(--space-10) 0 var(--space-18);min-width:0;color:var(--muted);font-size:var(--font-size-12);line-height:var(--leading-160)}
+.agent-progress>summary{display:flex;align-items:center;gap:var(--space-9);cursor:pointer;list-style:none;min-height:32px;padding:var(--space-3) 0;user-select:none}
 .agent-progress summary::-webkit-details-marker{display:none}
 .progress-heading-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:62ch}
-.progress-elapsed{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--faint)}
-.progress-cost{margin-left:6px;font-size:10px;font-variant-numeric:tabular-nums;color:var(--faint);white-space:nowrap}
-.progress-count{font-size:11px;white-space:nowrap;opacity:.75;margin-left:auto}
-.progress-chevron{font-size:16px;width:16px;height:16px;line-height:1;flex:none;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;transition:transform 140ms ease}
+.progress-elapsed{font-size:var(--font-size-11);font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--faint)}
+.progress-cost{margin-left:var(--space-6);font-size:var(--font-size-10);font-variant-numeric:tabular-nums;color:var(--faint);white-space:nowrap}
+.progress-count{font-size:var(--font-size-11);white-space:nowrap;opacity:.75;margin-left:auto}
+.progress-chevron{font-size:var(--font-size-16);width:16px;height:16px;line-height:var(--leading-100);flex:none;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;transition:transform var(--duration-140) ease}
 .agent-progress[open]>summary .progress-chevron{transform:rotate(90deg)}
 .progress-heading-mark,.progress-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 16px;min-height:20px}
-.progress-spinner{width:12px;height:12px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:progress-turn 900ms linear infinite}
+.progress-spinner{width:12px;height:12px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:var(--radius-round);display:inline-block;animation:progress-turn 900ms linear infinite}
 /* 展开必须是真的展开：段正文与时间线都不设内部高度上限、不使用内层滚动。
    嵌套滚动会把滚轮捕获在局部（overscroll-behavior 还会阻止滚动传给页面），
    于是“自动展开”的段只能在一个小窗口里查看——滚动统一交给对话消息区。 */
-.progress-timeline{list-style:none;margin:8px 0 0;padding:0 0 0 1px}
-.progress-item{display:flex;align-items:flex-start;gap:10px;position:relative;padding:6px 0;min-width:0}
+.progress-timeline{list-style:none;margin:var(--space-8) 0 0;padding:0 0 0 var(--space-1)}
+.progress-item{display:flex;align-items:flex-start;gap:var(--space-10);position:relative;padding:var(--space-6) 0;min-width:0}
 .progress-item:before{content:"";position:absolute;width:1px;background:var(--line);left:7px;top:27px;bottom:-1px}
 .progress-item:last-child:before{display:none}
 .progress-item-content{min-width:0;flex:1;overflow-wrap:anywhere}
-.progress-item-content summary{cursor:pointer;list-style:none;display:flex;gap:6px;align-items:baseline}
-.progress-item-content summary:after{content:"›";opacity:.6;width:16px;height:16px;line-height:1;flex:none;overflow:hidden;display:inline-flex;align-items:center;justify-content:center}
+.progress-item-content summary{cursor:pointer;list-style:none;display:flex;gap:var(--space-6);align-items:baseline}
+.progress-item-content summary:after{content:"›";opacity:.6;width:16px;height:16px;line-height:var(--leading-100);flex:none;overflow:hidden;display:inline-flex;align-items:center;justify-content:center}
 .progress-item-content details[open] summary:after{transform:rotate(90deg)}
-.progress-item-body{padding:8px 12px;margin:6px 0 4px;border-left:2px solid var(--line);white-space:pre-wrap;line-height:1.75;font-size:12px;color:var(--muted);background:var(--surface-wash,transparent);border-radius:0 6px 6px 0}
+.progress-item-body{padding:var(--space-8) var(--space-12);margin:var(--space-6) 0 var(--space-4);border-left:2px solid var(--line);white-space:pre-wrap;line-height:var(--leading-175);font-size:var(--font-size-12);color:var(--muted);background:var(--surface-wash,transparent);border-radius:0 var(--radius-6) var(--radius-6) 0}
 .progress-item.is-running{color:var(--text)}
-.progress-item.is-failed .progress-mark{color:var(--danger,#d87878)}
+.progress-item.is-failed .progress-mark{color:var(--danger)}
 /* A group owns one disclosure and keeps every original call inside it. Status
    counts stay visible when closed; expanded output uses the transcript scroll. */
-.progress-group{list-style:none;padding:4px 0;min-width:0;color:var(--muted)}
+.progress-group{list-style:none;padding:var(--space-4) 0;min-width:0;color:var(--muted)}
 .progress-group-details{min-width:0}
-.progress-group-details>summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:28px;list-style:none;cursor:pointer;min-width:0}
-.progress-group-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 16px;font-size:11px;color:var(--faint)}
+.progress-group-details>summary{display:flex;align-items:center;gap:var(--space-8);flex-wrap:wrap;min-height:28px;list-style:none;cursor:pointer;min-width:0}
+.progress-group-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 16px;font-size:var(--font-size-11);color:var(--faint)}
 .progress-group.is-running>.progress-group-details>summary .progress-group-mark{color:var(--accent)}
 .progress-group.is-failed>.progress-group-details>summary .progress-group-mark{color:var(--red)}
-.progress-group-text{min-width:0;flex:1 1 110px;overflow-wrap:anywhere;font-size:12px;color:var(--muted)}
-.progress-group-status,.progress-group-cost{font-size:10px;color:var(--faint);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.progress-group-text{min-width:0;flex:1 1 110px;overflow-wrap:anywhere;font-size:var(--font-size-12);color:var(--muted)}
+.progress-group-status,.progress-group-cost{font-size:var(--font-size-10);color:var(--faint);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .progress-group-details>summary>.progress-chevron{margin-left:auto}
 .progress-group-details[open]>summary>.progress-chevron{transform:rotate(90deg)}
-.progress-group-details>summary:has(>.halaska-activity-summary):after{content:"›";display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;flex:none;color:var(--faint);font-size:14px;transition:transform 220ms cubic-bezier(.2,0,0,1)}
+.progress-group-details>summary:has(>.halaska-activity-summary):after{content:"›";display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;flex:none;color:var(--faint);font-size:var(--font-size-14);transition:transform var(--duration-220) var(--motion-ease)}
 .progress-group-details[open]>summary:has(>.halaska-activity-summary):after{transform:rotate(90deg)}
-.progress-group-items{list-style:none;min-width:0;margin:3px 0 3px 7px;padding:0 0 0 18px;border-left:1px solid var(--line)}
+.progress-group-items{list-style:none;min-width:0;margin:var(--space-3) 0 var(--space-3) var(--space-7);padding:0 0 0 var(--space-18);border-left:1px solid var(--line)}
 .progress-group-items>.progress-item:before{display:none}
-@media(max-width:500px){.progress-group-status{flex-basis:100%;order:4;padding-left:24px}.progress-group-items{padding-left:12px}}
-.agent-progress summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:4px}
+@media(max-width:500px){.progress-group-status{flex-basis:100%;order:4;padding-left:var(--space-24)}.progress-group-items{padding-left:var(--space-12)}}
+.agent-progress summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:var(--radius-4)}
 @keyframes progress-turn{to{transform:rotate(360deg)}}
-@media(max-width:700px){.progress-elapsed{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--faint)}
+@media(max-width:700px){.progress-elapsed{font-size:var(--font-size-11);font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--faint)}
 .progress-count{display:none}.progress-heading-text{max-width:100%}}
 @media(prefers-reduced-motion:reduce){.progress-spinner{animation:none;border-style:dotted}.progress-chevron{transition:none}}
 
 /* Halaska lifecycle hierarchy: one activity signal, an open timeline, no card
    inside a card. Specificity keeps earlier experimental workbench skins from
    turning this back into a tinted orbit panel. Original palette is inherited. */
-.agent-progress.agent-progress{border:0;border-radius:0;background:transparent;padding:0;margin:10px 0 18px;box-shadow:none;transition:none}
+.agent-progress.agent-progress{border:0;border-radius:0;background:transparent;padding:0;margin:var(--space-10) 0 var(--space-18);box-shadow:none;transition:none}
 .agent-progress.agent-progress[open]{padding:0;border:0;background:transparent;border-radius:0}
-.agent-progress.agent-progress>summary{min-height:34px;gap:8px;padding:3px 0}
+.agent-progress.agent-progress>summary{min-height:34px;gap:var(--space-8);padding:var(--space-3) 0}
 .agent-progress.agent-progress .progress-heading-mark{flex-basis:16px;color:var(--muted)}
-.agent-progress.agent-progress .progress-phase-label{background:none;color:var(--text);-webkit-text-fill-color:currentColor;animation:none!important;font-weight:550}
+.agent-progress.agent-progress .progress-phase-label{background:none;color:var(--text);-webkit-text-fill-color:currentColor;animation:none!important;font-weight:var(--font-weight-550)}
 .agent-progress.agent-progress .progress-heading-text{max-width:40ch;color:var(--muted)}
-.agent-progress.agent-progress .progress-count{color:var(--faint);font-size:10px;opacity:1}
-.agent-progress.agent-progress .progress-timeline{padding:0 0 0 1px;margin:6px 0 0}
-.agent-progress.agent-progress .progress-item{padding:5px 0;gap:10px}
+.agent-progress.agent-progress .progress-count{color:var(--faint);font-size:var(--font-size-10);opacity:1}
+.agent-progress.agent-progress .progress-timeline{padding:0 0 0 var(--space-1);margin:var(--space-6) 0 0}
+.agent-progress.agent-progress .progress-item{padding:var(--space-5) 0;gap:var(--space-10)}
 .agent-progress.agent-progress .progress-item-content>details>summary{min-height:24px;align-items:center;color:var(--muted)}
 .agent-progress.agent-progress .progress-item-content>details[open]>summary,.agent-progress.agent-progress .progress-item.is-running summary{color:var(--text)}
-.agent-progress.agent-progress .progress-item-content summary:after{font-size:14px;transition:transform 220ms cubic-bezier(.2,0,0,1)}
-.agent-progress.agent-progress .progress-item-body{border:0;border-radius:0;background:transparent;margin:2px 0 4px;padding:4px 0 6px;line-height:1.75;color:var(--muted)}
-.agent-progress.agent-progress .progress-cost{padding:0;background:transparent;color:var(--faint);font-size:10px}
-.agent-progress.agent-progress .progress-mark{font-size:11px;min-height:24px;color:var(--faint);transition:color 180ms ease}
+.agent-progress.agent-progress .progress-item-content summary:after{font-size:var(--font-size-14);transition:transform var(--duration-220) var(--motion-ease)}
+.agent-progress.agent-progress .progress-item-body{border:0;border-radius:0;background:transparent;margin:var(--space-2) 0 var(--space-4);padding:var(--space-4) 0 var(--space-6);line-height:var(--leading-175);color:var(--muted)}
+.agent-progress.agent-progress .progress-cost{padding:0;background:transparent;color:var(--faint);font-size:var(--font-size-10)}
+.agent-progress.agent-progress .progress-mark{font-size:var(--font-size-11);min-height:24px;color:var(--faint);transition:color var(--duration-180) ease}
 .agent-progress.agent-progress .progress-item.is-running .progress-mark{color:var(--accent)}
 .agent-progress.agent-progress .progress-item.is-failed .progress-mark{color:var(--red)}
-.progress-active-mark{width:6px;height:6px;display:block;border-radius:50%;background:currentColor}
+.progress-active-mark{width:6px;height:6px;display:block;border-radius:var(--radius-round);background:currentColor}
 .progress-activity{display:flex;width:16px;height:16px;align-items:center;justify-content:center}
 .progress-activity svg{width:16px;height:16px;stroke:currentColor;stroke-width:1.5;animation:progress-turn 1.5s linear infinite}
 .progress-activity circle{opacity:.18}.progress-activity path{stroke-linecap:round}
@@ -80,82 +80,82 @@ body.reduce-motion .agent-progress.agent-progress summary:after{transition:none}
 /* Real Halaska islands retain the host palette, message layout and open-state
    owner. Full tool output remains below, without a nested scroll or clamp. */
 .halaska-lifecycle-summary{display:block;min-width:0;width:100%}
-.halaska-lifecycle-line{display:flex;align-items:center;gap:8px;min-width:0;width:100%;flex-wrap:wrap}
+.halaska-lifecycle-line{display:flex;align-items:center;gap:var(--space-8);min-width:0;width:100%;flex-wrap:wrap}
 /* Bound only the live headline. The expandable process body keeps every line. */
-.halaska-lifecycle-line .progress-heading-text{flex:1 1 140px;min-width:0;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;line-height:1.65;max-height:3.3em;max-width:none!important;font-size:12px}
-.halaska-lifecycle-line .progress-phase-label{font-size:12px;white-space:nowrap}
+.halaska-lifecycle-line .progress-heading-text{flex:1 1 140px;min-width:0;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;line-height:var(--leading-165);max-height:3.3em;max-width:none!important;font-size:var(--font-size-12)}
+.halaska-lifecycle-line .progress-phase-label{font-size:var(--font-size-12);white-space:nowrap}
 .halaska-lifecycle-line .progress-chevron{margin-left:auto}
 .halaska-lifecycle-line .progress-count{margin-left:0}
 .halaska-lifecycle-line .progress-activity{width:20px;flex-basis:20px!important}
-.halaska-lifecycle-key{display:none;align-items:center;gap:4px;color:var(--faint);font-size:10px}
+.halaska-lifecycle-key{display:none;align-items:center;gap:var(--space-4);color:var(--faint);font-size:var(--font-size-10)}
 .agent-progress>summary:focus-visible .halaska-lifecycle-key{display:inline-flex}
-.halaska-lifecycle-card{display:grid;gap:10px;min-width:0}
-.halaska-lifecycle-card-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;min-width:0}
+.halaska-lifecycle-card{display:grid;gap:var(--space-10);min-width:0}
+.halaska-lifecycle-card-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--space-10);flex-wrap:wrap;min-width:0}
 .halaska-lifecycle-card-heading h6{min-width:0;overflow-wrap:anywhere}
-.halaska-lifecycle-description{margin:0!important;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;font-size:12px;color:var(--muted)}
-.halaska-lifecycle-buttons{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+.halaska-lifecycle-description{margin:0!important;white-space:pre-wrap;overflow-wrap:anywhere;line-height:var(--leading-170);font-size:var(--font-size-12);color:var(--muted)}
+.halaska-lifecycle-buttons{display:flex;gap:var(--space-8);align-items:center;flex-wrap:wrap;min-width:0}
 .halaska-lifecycle-buttons>span{min-width:0;max-width:100%}
 .halaska-lifecycle-buttons button{max-width:100%;overflow-wrap:anywhere;box-sizing:border-box}
 .pending-actions>[data-halaska-conversation],.message-actions>[data-halaska-conversation]{width:100%;min-width:0}
 .message-actions:has(>[data-halaska-conversation]){display:block}
-.halaska-agent-receipt{display:grid;gap:4px;min-width:0}
-.halaska-lifecycle-stop{margin-top:10px}
+.halaska-agent-receipt{display:grid;gap:var(--space-4);min-width:0}
+.halaska-lifecycle-stop{margin-top:var(--space-10)}
 .halaska-lifecycle-stop .stop-run{position:static!important;transform:none!important}
-.conversation-process-navigation{min-width:0;margin:4px 0 10px}
-.progress-issues{font-size:11px;line-height:1.6;color:var(--red,var(--text));white-space:nowrap}
-.conversation-tool-filters{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:7px 0 0;min-width:0}
+.conversation-process-navigation{min-width:0;margin:var(--space-4) 0 var(--space-10)}
+.progress-issues{font-size:var(--font-size-11);line-height:var(--leading-160);color:var(--red,var(--text));white-space:nowrap}
+.conversation-tool-filters{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-4) var(--space-8);padding:var(--space-7) 0 0;min-width:0}
 .conversation-tool-filters button[aria-pressed="true"]{background:var(--surface-wash)!important;color:var(--text)!important}
 .conversation-tool-filters>span:last-child{min-width:0;overflow-wrap:anywhere}
-.conversation-tools-empty{font-size:12px;line-height:1.65;color:var(--muted);margin:10px 0}
+.conversation-tools-empty{font-size:var(--font-size-12);line-height:var(--leading-165);color:var(--muted);margin:var(--space-10) 0}
 .agent-progress .tool-ledger-row[hidden],.conversation-tools-empty[hidden]{display:none!important}
 .agent-progress[open]:has(>.conversation-process-navigation:not([hidden]))>summary .progress-count{display:none}
-.halaska-process-tabs{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);min-width:0}
+.halaska-process-tabs{display:flex;align-items:center;justify-content:space-between;gap:var(--space-12);border-bottom:1px solid var(--line);min-width:0}
 .halaska-process-tabs .kit-navigation{min-width:0;flex:0 1 auto}
-.halaska-process-tabs>.kit-navigation+*{text-align:right;color:var(--faint);padding:4px 0}
+.halaska-process-tabs>.kit-navigation+*{text-align:right;color:var(--faint);padding:var(--space-4) 0}
 .agent-progress [data-live-key="process-progress-panel"],.agent-progress [data-live-key="process-tools-panel"]{min-width:0}
 .agent-progress .tool-ledger{margin:0;padding:0;border:0;background:transparent;box-shadow:none}
 .agent-progress [role="tabpanel"][hidden],.conversation-process-navigation[hidden],.message-body[hidden]{display:none!important}
-@media(max-width:500px){.halaska-process-tabs{align-items:flex-start;flex-wrap:wrap;gap:0}.halaska-process-tabs>.kit-navigation+*{flex-basis:100%;text-align:left;padding:3px 0 6px}}
-@media(max-width:500px){.halaska-lifecycle-line{gap:6px}.halaska-lifecycle-line .progress-heading-text{flex-basis:100%;order:5}.halaska-lifecycle-line .progress-elapsed{margin-left:auto}.halaska-lifecycle-line .progress-chevron{margin-left:0}.halaska-lifecycle-key{display:none!important}}
+@media(max-width:500px){.halaska-process-tabs{align-items:flex-start;flex-wrap:wrap;gap:0}.halaska-process-tabs>.kit-navigation+*{flex-basis:100%;text-align:left;padding:var(--space-3) 0 var(--space-6)}}
+@media(max-width:500px){.halaska-lifecycle-line{gap:var(--space-6)}.halaska-lifecycle-line .progress-heading-text{flex-basis:100%;order:5}.halaska-lifecycle-line .progress-elapsed{margin-left:auto}.halaska-lifecycle-line .progress-chevron{margin-left:0}.halaska-lifecycle-key{display:none!important}}
 
 /* Status-only stages stay legible without implying hidden details. */
 .agent-progress .progress-stage-label{display:block;min-height:24px;line-height:24px;color:var(--faint);overflow-wrap:anywhere}
 .agent-progress .progress-item.is-running .progress-stage-label,.agent-progress .progress-item.is-failed .progress-stage-label{color:var(--muted)}
-.conversation-reasoning-note{font-size:12px;line-height:1.7;color:var(--faint);margin:12px 0 4px;padding-top:10px;border-top:1px solid var(--line)}
+.conversation-reasoning-note{font-size:var(--font-size-12);line-height:var(--leading-170);color:var(--faint);margin:var(--space-12) 0 var(--space-4);padding-top:var(--space-10);border-top:1px solid var(--line)}
 
 /* One ordered stream of recorded responses, reasoning and real tool receipts.
    It shares the transcript scroll and never puts the final answer in a second
    body. Only the small collapsed reasoning preview is visually clipped. */
-.conversation-flow{list-style:none;margin:4px 0 0;padding:0;min-width:0}
-.conversation-flow-item{list-style:none;min-width:0;padding:7px 0}
-.conversation-flow-item+.conversation-flow-item{margin-top:2px}
-.conversation-flow-owner{display:block;font-size:10px;line-height:1.6;color:var(--faint);margin-bottom:4px;overflow-wrap:anywhere}
-.conversation-flow-missing-tool{color:var(--faint);font-size:12px}
-.conversation-flow-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75;color:var(--text);font-size:13px;min-width:0}
+.conversation-flow{list-style:none;margin:var(--space-4) 0 0;padding:0;min-width:0}
+.conversation-flow-item{list-style:none;min-width:0;padding:var(--space-7) 0}
+.conversation-flow-item+.conversation-flow-item{margin-top:var(--space-2)}
+.conversation-flow-owner{display:block;font-size:var(--font-size-10);line-height:var(--leading-160);color:var(--faint);margin-bottom:var(--space-4);overflow-wrap:anywhere}
+.conversation-flow-missing-tool{color:var(--faint);font-size:var(--font-size-12)}
+.conversation-flow-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:var(--leading-175);color:var(--text);font-size:var(--font-size-13);min-width:0}
 .conversation-flow-rich{white-space:normal}
 .conversation-flow-rich p{margin:.5em 0 .8em}
 .conversation-flow-rich>:first-child{margin-top:0}
 .conversation-flow-rich>:last-child{margin-bottom:0}
-.conversation-flow-rich :is(h1,h2,h3,h4,h5,h6){font-size:1.08em;line-height:1.5;margin:1em 0 .5em}
+.conversation-flow-rich :is(h1,h2,h3,h4,h5,h6){font-size:1.08em;line-height:var(--leading-150);margin:1em 0 .5em}
 .conversation-flow-rich :is(ul,ol){margin:.65em 0 .95em;padding-inline-start:1.65em;list-style-position:outside}
 .conversation-flow-rich li{padding-block:.18em}
 .conversation-flow-rich li::marker{color:var(--muted)}
 .conversation-flow-rich li>p{margin:.45em 0}
 .conversation-flow-rich blockquote{margin:1em 0;padding:.1em 0 .1em 1em;border-inline-start:2px solid var(--line-strong);color:var(--muted)}
-.conversation-flow-rich strong{font-weight:600}
-.conversation-flow-rich code:not(.message-code code){padding:2px 5px;border:1px solid var(--line);background:var(--panel-hover);border-radius:4px;font-size:.92em}
-.conversation-flow-rich .message-code{max-width:100%;white-space:pre;overflow-wrap:normal;line-height:1.7}
-.conversation-flow-rich .message-code:has(>.message-code-lang){padding-top:30px}
+.conversation-flow-rich strong{font-weight:var(--font-weight-600)}
+.conversation-flow-rich code:not(.message-code code){padding:var(--space-2) var(--space-5);border:1px solid var(--line);background:var(--panel-hover);border-radius:var(--radius-4);font-size:.92em}
+.conversation-flow-rich .message-code{max-width:100%;white-space:pre;overflow-wrap:normal;line-height:var(--leading-170)}
+.conversation-flow-rich .message-code:has(>.message-code-lang){padding-top:var(--space-30)}
 .conversation-flow-rich .message-code>code{display:block;white-space:inherit;overflow-wrap:normal}
 .conversation-flow-rich .markdown-task-item>label{display:flex;align-items:baseline;gap:.4em;color:inherit;font:inherit}
 .conversation-flow-rich .markdown-task-item>label>input{flex:none;width:.95em;height:.95em;margin:0;accent-color:var(--accent)}
 .conversation-flow-rich ul>.markdown-task-item{list-style:none}
-.conversation-flow-commentary>.conversation-flow-text{color:var(--muted);font-size:12px}
-.agent-progress.agent-progress .conversation-flow-reasoning{display:block;padding:5px 0}
+.conversation-flow-commentary>.conversation-flow-text{color:var(--muted);font-size:var(--font-size-12)}
+.agent-progress.agent-progress .conversation-flow-reasoning{display:block;padding:var(--space-5) 0}
 .conversation-flow-reasoning:before{display:none}
-.conversation-flow-reasoning-details>.conversation-flow-text{padding:8px 0 4px;color:var(--muted);font-size:12px}
+.conversation-flow-reasoning-details>.conversation-flow-text{padding:var(--space-8) 0 var(--space-4);color:var(--muted);font-size:var(--font-size-12)}
 .conversation-flow-reasoning-details>summary{min-width:0;overflow:hidden}
-.conversation-flow-reasoning-preview{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font-size:11px}
+.conversation-flow-reasoning-preview{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font-size:var(--font-size-11)}
 .conversation-flow-reasoning-details[open]>summary .conversation-flow-reasoning-preview,
 .conversation-flow-reasoning-details[open]>summary .halaska-activity-group-detail{display:none}
 .conversation-flow-reasoning-details .halaska-activity-group-detail{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
@@ -163,11 +163,11 @@ body.reduce-motion .agent-progress.agent-progress summary:after{transition:none}
 .conversation-flow-reasoning-details .halaska-activity-summary{width:100%;min-width:0}
 .conversation-flow-reasoning-details .halaska-activity-line{min-width:0}
 .conversation-flow-tool .tool-ledger-row{min-width:0}
-.conversation-flow-diagnostics{margin-top:10px;color:var(--faint);font-size:11px}
-.conversation-flow-diagnostics>summary{cursor:pointer;list-style:none;padding:4px 0;display:flex;align-items:center;gap:6px}
-.conversation-flow-diagnostics>summary:before{content:'›';display:inline-block;transition:transform 140ms ease}
+.conversation-flow-diagnostics{margin-top:var(--space-10);color:var(--faint);font-size:var(--font-size-11)}
+.conversation-flow-diagnostics>summary{cursor:pointer;list-style:none;padding:var(--space-4) 0;display:flex;align-items:center;gap:var(--space-6)}
+.conversation-flow-diagnostics>summary:before{content:'›';display:inline-block;transition:transform var(--duration-140) ease}
 .conversation-flow-diagnostics[open]>summary:before{transform:rotate(90deg)}
-.conversation-flow-stages{padding-left:18px;margin:4px 0;line-height:1.75}
-.conversation-flow-stages .conversation-flow-text{font-size:11px;color:var(--muted)}
+.conversation-flow-stages{padding-left:var(--space-18);margin:var(--space-4) 0;line-height:var(--leading-175)}
+.conversation-flow-stages .conversation-flow-text{font-size:var(--font-size-11);color:var(--muted)}
 body.reduce-motion .conversation-flow-diagnostics>summary:before{transition:none}
 @media(prefers-reduced-motion:reduce){.conversation-flow-diagnostics>summary:before{transition:none}}

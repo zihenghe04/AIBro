@@ -41,7 +41,7 @@
   function createController(hooks, env = root) {
     const document = env.document;
     if (!document) throw Error('新手引导需要工作站界面。');
-    let index = 0, opened = false, opener = null, activeAnchor = null, pendingFrame = null, generation = 0, starting = null, navigating = false, destroyed = false;
+    let automaticAt = 0, index = 0, opened = false, opener = null, originView = null, activeAnchor = null, pendingFrame = null, generation = 0, starting = null, navigating = false, destroyed = false;
     const create = (tag, className, text) => { const node = document.createElement(tag); node.className = className || ''; if (text !== undefined) node.textContent = text; return node; };
     const makeButton = (className, text, click) => { const node = create('button', className, text); node.type = 'button'; node.onclick = click; return node; };
     const layer = create('div', 'onboarding-layer'); layer.id = 'onboardingLayer'; layer.hidden = true;
@@ -82,7 +82,30 @@
     function scheduleLayout() { if (!opened || pendingFrame !== null) return; pendingFrame = (env.requestAnimationFrame || (fn => env.setTimeout(fn, 0)))(layout); }
     function listen(enabled) {
       const method = enabled ? 'addEventListener' : 'removeEventListener';
-      env[method]?.('resize', scheduleLayout); document[method]('scroll', scheduleLayout, true); document[method]('keydown', keydown);
+      env[method]?.('resize', scheduleLayout); document[method]('scroll', scheduleLayout, true); document[method]('keydown', keydown); document[method]('pointerdown', pointerdown, true);
+    }
+    // The card floats over a live workspace. Working elsewhere (another page,
+    // a click outside the card, Esc) tucks it away; settings can resume it.
+    function dismiss(options = {}) {
+      if (!opened) return false;
+      const step = index; close('skipped', { ...options, resumeStep: step });
+      hooks.toast?.(env.WorkstationI18n?.getLanguage?.() === 'en' ? 'Introduction hidden. Resume it from Settings → Introduction.' : '新手引导已收起，可在“设置”里点“新手引导”继续。');
+      return true;
+    }
+    function startupGrace() { return !!automaticAt && Date.now() - automaticAt < 2500; }
+    function pointerdown(event) {
+      if (!opened || blocked()) return;
+      const target = event.target;
+      if (!target || card.contains(target) || entry.contains(target)) return;
+      dismiss({ restoreFocus: false, returnToOrigin: false });
+    }
+    function routeChanged(view) {
+      // The guide's own navigation always lands on the current step's page.
+      if (!opened || navigating || view === steps[index].view) return false;
+      // The native shell restores the last location right after launch, at the
+      // same moment the first-run guide appears; that is not the user leaving.
+      if (startupGrace()) { scheduleLayout(); return false; }
+      return dismiss({ restoreFocus: false, returnToOrigin: false });
     }
     async function paint() {
       const own = ++generation, step = steps[index]; navigating = true; back.disabled = next.disabled = action.disabled = true; notice.textContent = '';
@@ -93,9 +116,9 @@
       if (!opened || own !== generation) return;
       navigating = false; back.disabled = index === 0; next.disabled = false; action.disabled = !hooks.showView; layout(); card.focus({ preventScroll: true });
     }
-    async function persist(status) {
+    async function persist(status, resumeStep) {
       const state = hooks.getState?.(); if (!state) return;
-      state.ui ||= {}; state.ui.onboarding = { version: VERSION, status, updatedAt: Date.now() };
+      state.ui ||= {}; state.ui.onboarding = { version: VERSION, status, updatedAt: Date.now(), ...(Number.isInteger(resumeStep) ? { resumeStep } : {}) };
       try { if (await hooks.save?.() === false) hooks.toast?.('入门记录尚未保存，下次可能再次显示。'); }
       catch (_) { hooks.toast?.('入门记录尚未保存，下次可能再次显示。'); }
     }
@@ -105,7 +128,8 @@
       // Explicit replay can switch guides, while automatic setup never interrupts another guide.
       if (blocked()) { if (!options.automatic) hooks.toast?.(env.WorkstationI18n?.getLanguage?.() === 'en' ? 'Finish or close the current dialog before opening the introduction.' : '请先完成或关闭当前弹窗，再打开新手引导。'); return false; }
       if (env.WorkspaceTour?.isOpen?.()) { if (options.automatic) return false; env.WorkspaceTour.close('skipped', { restoreFocus: false }); }
-      opener = document.activeElement; opened = true; index = 0; layer.hidden = false; entry.setAttribute('aria-expanded', 'true'); listen(true); await paint(); return opened;
+      const saved = hooks.getState?.()?.ui?.onboarding, resume = options.automatic ? 0 : saved?.resumeStep; automaticAt = options.automatic ? Date.now() : 0;
+      opener = document.activeElement; originView = document.body?.dataset?.view || null; opened = true; index = Number.isInteger(resume) && resume > 0 && resume < steps.length ? resume : 0; layer.hidden = false; entry.setAttribute('aria-expanded', 'true'); listen(true); await paint(); return opened;
     }
     function close(status = 'skipped', options = {}) {
       if (!opened) return false;
@@ -115,19 +139,26 @@
         const focusTarget = [opener, entry, document.querySelector('.primary-nav .active'), document.querySelector('#agentInput')].find(visible);
         focusTarget?.focus?.({ preventScroll: true });
       }
-      void persist(status); return true;
+      void persist(status, options.resumeStep);
+      // The guide moved through settings and other pages. Skipping or finishing
+      // returns to where the user was; only “use this entry” stays on its page.
+      const origin = originView; originView = null;
+      if (options.returnToOrigin !== false && origin && hooks.showView && document.body?.dataset?.view !== origin) {
+        Promise.resolve().then(() => hooks.showView(origin)).catch(() => {});
+      }
+      return true;
     }
     async function move(direction) { if (!opened || navigating) return; if (direction > 0 && index === steps.length - 1) { close('completed'); return; } index = Math.max(0, Math.min(steps.length - 1, index + direction)); await paint(); }
     async function useStep() {
       if (!opened || navigating || !hooks.showView) return;
-      const step = steps[index]; close(index === steps.length - 1 ? 'completed' : 'skipped', { restoreFocus: false });
+      const step = steps[index]; close(index === steps.length - 1 ? 'completed' : 'skipped', { restoreFocus: false, returnToOrigin: false });
       try { await hooks.showView(step.view); if (step.id === 'connection') env.SettingsWorkspace?.reveal('models'); const target = document.querySelector(step.focus); if (visible(target)) target.focus({ preventScroll: true }); }
       catch (_) { hooks.toast?.('暂时无法打开入口，请通过侧栏打开对应页面。'); }
     }
     function keydown(event) {
       if (!opened) return;
       if (blocked()) return;
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close('skipped'); return; }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); dismiss(); return; }
       // The surrounding app stays interactive. Never consume arrows used to
       // edit a message or select an option outside this tour card.
       if (!card.contains(document.activeElement) || event.altKey || event.metaKey || event.ctrlKey || event.isComposing) return;
@@ -138,11 +169,11 @@
       starting = Promise.resolve(hooks.ready?.()).then(ready => { starting = null; return !destroyed && ready !== false && shouldStart(hooks.getState?.()) ? open({ automatic: true }) : false; }).finally(() => { starting = null; });
       return starting;
     }
-    function destroy() { destroyed = true; if (opened) close('skipped'); layer.remove(); entry.remove(); }
-    const api = { open, close, maybeStart, next: () => move(1), previous: () => move(-1), layout, destroy, isOpen: () => opened, currentStep: () => steps[index].id };
+    function destroy() { destroyed = true; if (opened) close('skipped', { returnToOrigin: false }); layer.remove(); entry.remove(); }
+    const api = { open, close, dismiss, routeChanged, maybeStart, next: () => move(1), previous: () => move(-1), layout, destroy, isOpen: () => opened, currentStep: () => steps[index].id };
     if (hooks.autoStart !== false) void maybeStart().catch(() => {});
     return api;
   }
   let controller = null;
-  return { VERSION, steps, shouldStart, placement, createController, init(hooks) { if (!controller) controller = createController(hooks); return controller; }, open: options => controller?.open(options), isOpen: () => !!controller?.isOpen(), maybeStart: () => controller?.maybeStart(), close: (...args) => controller?.close(...args) };
+  return { VERSION, steps, shouldStart, placement, createController, init(hooks) { if (!controller) controller = createController(hooks); return controller; }, open: options => controller?.open(options), isOpen: () => !!controller?.isOpen(), maybeStart: () => controller?.maybeStart(), close: (...args) => controller?.close(...args), routeChanged: view => !!controller?.routeChanged(view) };
 });

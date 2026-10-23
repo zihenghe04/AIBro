@@ -1,0 +1,79 @@
+/* Colour themes, chosen in Settings → 界面 → 主题; independent of light/dark.
+   Without html[data-palette] nothing here applies and each platform keeps its built-in
+   palette: liquid glass (neutral grey) in the browser/Electron, teal in the native app.
+   html[data-palette] is set only when the chosen theme differs from that built-in one.
+   Themes swap colour roles only. Layout, materials (--lg-*) and shadows stay with the platform.
+   Selectors are (0,4,2) so they beat liquid-glass.css (0,3,1) and the native workspace.css
+   that the Swift shell injects last (0,3,2). Values are copied from those three palettes:
+     blue  = tokens.css :root / body.light-mode
+     glass = liquid-glass.css body.liquid-glass[data-view] (+ tokens.css green/orange/red)
+     teal  = native/Resources/workspace.css body.aibro-native */
+
+html[data-palette="blue"]:root body[data-view]:not(.light-mode) {
+  --bg:#141618; --panel:#202326; --panel-raised:#292d32; --panel-hover:#32373d;
+  --canvas:rgba(28,31,34,.94); --sidebar:rgba(30,34,38,.60); --glass:rgba(42,47,53,.76);
+  --line:rgba(191,204,234,.12); --line-strong:rgba(191,204,234,.24); --rim:rgba(230,239,255,.10);
+  --text:#eef0f6; --muted:#a0a7b8; --faint:#858c9d;
+  --accent:#9ab9d2; --accent-soft:rgba(138,174,202,.11); --accent-solid:#7c9bb5;
+  --green:#80d1b5; --orange:#e7b878; --red:#ed989e;
+  --ambient:radial-gradient(ellipse at 10% 0%,rgba(119,143,164,.18),transparent 53%),radial-gradient(ellipse at 97% 100%,rgba(103,114,131,.13),transparent 52%);
+  --surface-wash:linear-gradient(145deg,rgba(226,235,255,.04),transparent 60%);
+}
+html[data-palette="blue"]:root body[data-view].light-mode {
+  --bg:#e9ecef; --panel:#fcfdfe; --panel-raised:#ffffff; --panel-hover:#edf0f3;
+  --canvas:rgba(250,251,252,.95); --sidebar:rgba(243,245,247,.58); --glass:rgba(255,255,255,.76);
+  --line:rgba(41,56,84,.10); --line-strong:rgba(41,56,84,.21); --rim:rgba(255,255,255,.98);
+  --text:#242935; --muted:#5e6877; --faint:#67707e;
+  --accent:#476f93; --accent-soft:rgba(72,118,157,.085); --accent-solid:#43698b;
+  --green:#328568; --orange:#a46e2a; --red:#b74958;
+  --ambient:radial-gradient(ellipse at 8% 0%,rgba(165,185,205,.28),transparent 50%),radial-gradient(ellipse at 95% 95%,rgba(166,178,193,.20),transparent 48%);
+  --surface-wash:linear-gradient(145deg,rgba(255,255,255,.96),rgba(246,248,250,.48) 70%);
+}
+
+html[data-palette="glass"]:root body[data-view]:not(.light-mode) {
+  --bg:#171719; --panel:#202022; --panel-raised:#2a2a2c; --panel-hover:#303032;
+  --canvas:#202022; --sidebar:rgba(37,37,37,.53); --glass:rgba(48,48,48,.66);
+  --line:rgba(255,255,255,.075); --line-strong:rgba(255,255,255,.14); --rim:rgba(255,255,255,.09);
+  --text:#f0f0f0; --muted:#aaaaaa; --faint:#929294;
+  --accent:#d0d0d2; --accent-soft:rgba(220,220,222,.07); --accent-solid:#555558;
+  --green:#80d1b5; --orange:#e7b878; --red:#ed989e;
+  --ambient:radial-gradient(ellipse at -8% 5%,#ffffff08,transparent 43%),radial-gradient(ellipse at 110% 105%,#00000012,transparent 42%);
+  --surface-wash:linear-gradient(155deg,#ffffff04,transparent 56%);
+}
+html[data-palette="glass"]:root body[data-view].light-mode {
+  --bg:#f7f7f5; --panel:#ffffff; --panel-raised:#ffffff; --panel-hover:#f0f0ee;
+  --canvas:#f7f7f5; --sidebar:rgba(244,244,244,.44); --glass:rgba(251,251,251,.61);
+  --line:rgba(0,0,0,.075); --line-strong:rgba(0,0,0,.14); --rim:rgba(255,255,255,.52);
+  --text:#252527; --muted:#626264; --faint:#6b6b6e;
+  --accent:#3d3d40; --accent-soft:rgba(40,40,42,.055); --accent-solid:#39393c;
+  --green:#328568; --orange:#a46e2a; --red:#b74958;
+  --ambient:radial-gradient(ellipse at -8% 5%,#ffffff40,transparent 42%),linear-gradient(130deg,#f7f7f5,#f0f0ee 80%,#e9e9e7);
+  --surface-wash:linear-gradient(155deg,#ffffff77,transparent 56%);
+}
+
+html[data-palette="teal"]:root body[data-view]:not(.light-mode) {
+  --bg:#1b1e20; --panel:#25292b; --panel-raised:#2b3032; --panel-hover:#303937;
+  --canvas:#1d2022; --glass:#25292bed;
+  --line:#e1e8d812; --line-strong:#e1e8d827; --rim:#ffffff18;
+  --text:#eef1f0; --muted:#b4bfbb; --faint:#839c90;
+  --accent:#65d7bb; --accent-soft:#65d7bb14; --accent-solid:var(--accent);
+  --green:#65d7bb; --orange:#e7be59; --red:#f39ca3;
+  --surface-wash:linear-gradient(125deg,#ffffff03,transparent);
+  --workbench-accent:var(--accent); --workbench-on-accent:var(--canvas);
+}
+html[data-palette="teal"]:root body[data-view].light-mode {
+  --bg:#f5faf8; --panel:#ffffff; --panel-raised:#fff; --panel-hover:#ebf8f2;
+  --canvas:#f8fcfa; --glass:#fbfffded;
+  --line:#30382d12; --line-strong:#30382d24; --rim:#ffffffbd;
+  --text:#20382e; --muted:#59756a; --faint:#839c90;
+  --accent:#087f70; --accent-soft:#087f7012; --accent-solid:var(--accent);
+  --green:#087f70; --orange:#aa7616; --red:#c25766;
+  --surface-wash:linear-gradient(125deg,#fff8,transparent);
+  --workbench-accent:var(--accent); --workbench-on-accent:#fff;
+}
+
+/* Increase Contrast keeps working under a chosen theme (same rule as liquid-glass.css). */
+@media (prefers-contrast: more) {
+  html[data-palette]:root body[data-view]:not(.light-mode),
+  html[data-palette]:root body[data-view].light-mode { --line:var(--line-strong); --muted:var(--text) }
+}

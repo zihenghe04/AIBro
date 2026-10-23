@@ -65,7 +65,7 @@ async function run(){
     await click('#trashPurgeDialog .secondary');await until(()=>evaluate('!purgeTrash.confirming'),'cancel purge');
     assert.equal(await evaluate('JSON.stringify(state.trash)'),before,'cancel preserves all trash records');assert.equal(purgeRequests.length,requests,'cancel must not contact purge endpoint');
   };
-  const deleteOne=async(group,type,id)=>{await space(group,type==='task'?'tasks':'knowledge');await click(`#${group.route}${type==='task'?'TaskCollection':'Collection'} [data-cui-key="${type}:${id}"] [data-cui-delete]`);await click('#confirmContentDelete');await settled();return evaluate(`state.trash.find(entry=>entry.data?.[${JSON.stringify({task:'tasks',note:'notes',import:'imports'}[type])}]?.some(item=>item.id===${JSON.stringify(id)})).id`);};
+  const deleteOne=async(group,type,id)=>{await space(group,type==='task'?'tasks':'knowledge');await click(`#${group.route}${type==='task'?'TaskCollection':'Collection'} [data-cui-key="${type}:${id}"] [data-cui-delete]`);await settled();return evaluate(`state.trash.find(entry=>entry.data?.[${JSON.stringify({task:'tasks',note:'notes',import:'imports'}[type])}]?.some(item=>item.id===${JSON.stringify(id)})).id`);};
   // First-run onboarding/tour cards float over the page; dismiss them as a returning user would.
   const dismissOnboarding=()=>evaluate("WorkstationOnboarding?.close();WorkspaceTour?.close();state.ui.onboarding={version:WorkstationOnboarding.VERSION,status:'skipped'};state.ui.workspaceTour={version:WorkspaceTour.VERSION,status:'skipped'};true");
   await win.loadURL(ORIGIN);await until(()=>evaluate('storageHydrated'),'hydrate');await dismissOnboarding();
@@ -81,15 +81,17 @@ async function run(){
     await projectTab(group.project,'knowledge');assert.equal(await rows('#projectCollection'),ownKnowledge);await projectTab(group.project,'tasks');assert.equal(await evaluate(`document.querySelectorAll('#projectTasks [data-board-task]').length`),1);
     await space(group,'tasks');await click(`${tasks} [data-cui-all]`);assert.equal(await evaluate(`!!document.querySelector('${tasks} [data-cui-reopen]')`),true,'completed tasks can reopen');
     await space(group);await click(`${knowledge} [data-cui-all]`);
-    await click(`${knowledge} [data-cui-delete-selected]`);await until(()=>evaluate(`!!document.querySelector('#contentDeleteDialog[open]')`),'content confirmation');
-    assert.match(await evaluate(`document.querySelector('#contentDeleteTitle').textContent`),/3 项/);
-    if(group.route==='daily')await snapshot('qa-content-delete-confirm-light.png',1440,'light');
-    if(group.route==='research')await snapshot('qa-content-delete-confirm-dark.png',650,'dark');
-    const dialogLayout=await evaluate(`(()=>{const d=document.querySelector('#contentDeleteDialog'),r=d.getBoundingClientRect(),b=document.querySelector('#confirmContentDelete').getBoundingClientRect();return{overflow:d.scrollWidth>d.clientWidth,visible:b.left>=0&&b.right<=innerWidth&&b.bottom<=innerHeight}})()`);assert.equal(dialogLayout.overflow,false);assert.equal(dialogLayout.visible,true);
-    await click('#contentDeleteDialog .secondary');assert.equal(await checked(knowledge),3,'cancel keeps selection');
-    await click(`${knowledge} [data-cui-delete-selected]`);await click('#confirmContentDelete');await settled();assert.equal(await rows(knowledge),'','removed from collection');
-    await space(group,'tasks');assert.equal(await checked(tasks),1,'task selection survives the other tab');await click(`${tasks} [data-cui-delete-selected]`);await until(()=>evaluate(`!!document.querySelector('#contentDeleteDialog[open]')`),'task confirmation');
-    assert.match(await evaluate(`document.querySelector('#contentDeleteTitle').textContent`),/1 项/);await click('#confirmContentDelete');await settled();assert.equal(await rows(tasks),'','task removed from collection');
+    // 批量删除不再弹确认框：直接移入回收站，撤销提示里撤销一次即全部恢复，然后再删一次。
+    await click(`${knowledge} [data-cui-delete-selected]`);await settled();
+    assert.equal(await evaluate(`!!document.querySelector('dialog[open]')`),false,'batch delete opens no confirmation');assert.equal(await rows(knowledge),'','removed without confirmation');
+    assert.match(await evaluate(`document.querySelector('#actionToast').textContent`),/已将 3 项内容移入回收站/);
+    if(group.route==='daily')await snapshot('qa-content-delete-undo-light.png',1440,'light');
+    if(group.route==='research')await snapshot('qa-content-delete-undo-dark.png',650,'dark');
+    await click('#actionToast .toast-action');await settled();assert.equal(await rows(knowledge),ownKnowledge,'undo restores the whole batch');
+    assert.deepEqual(await ownedTrash([group.task,group.note,group.import,group.paper]),[],'undo leaves no trash record behind');
+    await click(`${knowledge} [data-cui-all]`);await click(`${knowledge} [data-cui-delete-selected]`);await settled();assert.equal(await rows(knowledge),'','removed from collection');
+    await space(group,'tasks');assert.equal(await checked(tasks),1,'task selection survives the other tab');await click(`${tasks} [data-cui-delete-selected]`);await settled();
+    assert.match(await evaluate(`document.querySelector('#actionToast').textContent`),/1 项/);assert.equal(await rows(tasks),'','task removed from collection');
     await search(group.token,0);
     await projectTab(group.project,'knowledge');assert.equal(await rows('#projectCollection'),'');await projectTab(group.project,'tasks');assert.equal(await evaluate(`document.querySelectorAll('#projectTasks [data-board-task]').length`),0);
     const other=groups.filter(item=>item.route!==group.route);for(const item of other)assert.equal(await evaluate(`state.tasks.some(t=>t.id===${JSON.stringify(item.task)})`),true,'other spaces preserved');
@@ -98,22 +100,22 @@ async function run(){
     for(const trashId of trashIds){await click(`[data-restore-trash="${trashId}"]`);await settled();}
     assert.deepEqual(await ownedTrash([group.task,group.note,group.import,group.paper]),[]);
     await space(group);assert.equal(await rows(knowledge),ownKnowledge);await space(group,'tasks');assert.equal(await rows(tasks),`task:${group.task}`);await search(group.token,4);
-    console.log('PASS mixed delete/cancel/restore and scope/search/project consistency:',group.workspace);
+    console.log('PASS mixed delete/undo/restore and scope/search/project consistency:',group.workspace);
   }
   win.setSize(1440,960);await settled();await win.loadURL(ORIGIN);await until(()=>evaluate('storageHydrated'),'reload restored workspace');await dismissOnboarding();
   for(const group of groups)assert.equal(await evaluate(`state.imports.some(i=>i.id===${JSON.stringify(group.import)})&&state.papers.some(i=>i.id===${JSON.stringify(group.paper)})`),true);
   console.log('PASS restore survives reload');
   // Delete one original while keeping the task/note/paper that cite it. Permanent
   // deletion may remove the trash record, but referenced source bytes must remain.
-  const daily=groups[0];await space(daily);await click(`#dailyCollection [data-cui-key="import:${daily.import}"] [data-cui-delete]`);await click('#confirmContentDelete');await settled();
+  const daily=groups[0];await space(daily);await click(`#dailyCollection [data-cui-key="import:${daily.import}"] [data-cui-delete]`);await settled();
   let trashId=await evaluate(`state.trash.find(e=>e.data?.imports?.some(i=>i.id===${JSON.stringify(daily.import)})).id`);
   await evaluate(`window.__qaTrashDelegation=[];document.addEventListener('click',event=>{if(event.target.closest('[data-restore-trash],[data-purge-trash]'))window.__qaTrashDelegation.push(event.target.textContent)});showView('trash','回收站')`);await click(`[data-purge-trash="${trashId}"]`);await confirmPurge([trashId]);
   assert.equal(await evaluate(`state.trash.some(e=>e.id===${JSON.stringify(trashId)})`),false);assert.equal((await request(`/__files/${daily.import}`)).status,200,'still referenced original retained');
   console.log('PASS permanent deletion retains referenced original');
   // Full independent bundle can release its managed blob after explicit purge.
   // Knowledge and tasks are deleted from their own tabs, so the bundle is two trash entries purged in one batch.
-  const research=groups[2];await space(research);await click('#researchCollection [data-cui-all]');await click('#researchCollection [data-cui-delete-selected]');await click('#confirmContentDelete');await settled();
-  await space(research,'tasks');await click('#researchTaskCollection [data-cui-all]');await click('#researchTaskCollection [data-cui-delete-selected]');await click('#confirmContentDelete');await settled();
+  const research=groups[2];await space(research);await click('#researchCollection [data-cui-all]');await click('#researchCollection [data-cui-delete-selected]');await settled();
+  await space(research,'tasks');await click('#researchTaskCollection [data-cui-all]');await click('#researchTaskCollection [data-cui-delete-selected]');await settled();
   const researchTrash=await ownedTrash([research.task,research.note,research.import,research.paper]);assert.equal(researchTrash.length,2);
   await evaluate(`showView('trash','回收站')`);for(const id of researchTrash)await click(`[data-trash-select="${id}"]`);await click('#trashDeleteSelected');await confirmPurge(researchTrash);
   assert.deepEqual(await ownedTrash([research.task,research.note,research.import,research.paper]),[]);assert.equal((await request(`/__files/${research.import}`)).status,404,'unreferenced managed blob removed');

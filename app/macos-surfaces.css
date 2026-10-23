@@ -39,8 +39,8 @@ html body.aibro-native[data-view] :is(#modelPicker, #skillPicker, #polishDialog,
   color: var(--text);
 }
 /* Radii: compact menus 12, larger popovers 16 (concentric with 26pt windows). */
-html body.aibro-native[data-view] :is(#skillPicker, .composer-extra-tools, .message-action-options, .native-select-panel) { border-radius: 12px; padding: 5px }
-html body.aibro-native[data-view] :is(#modelPicker, #polishDialog, #sourcePeek, .workspace-context-popover) { border-radius: 16px }
+html body.aibro-native[data-view] :is(#skillPicker, .composer-extra-tools, .message-action-options, .native-select-panel) { border-radius: var(--radius-12); padding: var(--space-5) }
+html body.aibro-native[data-view] :is(#modelPicker, #polishDialog, #sourcePeek, .workspace-context-popover) { border-radius: var(--radius-16) }
 html body.aibro-native[data-view] .composer-add-menu-host .crt-body {
   border: 0;
   background: var(--mac-glass-tint);
@@ -54,8 +54,8 @@ html body.aibro-native[data-view] #modelPicker :is(.model-picker-heading, .model
 /* Menu rows: full-width, rounded 7, accent-tinted hover like a macOS menu. */
 html body.aibro-native[data-view] :is(.composer-extra-tools, .message-action-options) :is(button, .meta-action) {
   min-height: 28px;
-  border-radius: 7px;
-  transition: background-color 120ms var(--mac-ease-out);
+  border-radius: var(--radius-7);
+  transition: background-color var(--duration-120) var(--mac-ease-out);
 }
 html body.aibro-native[data-view] :is(.composer-extra-tools, .message-action-options) :is(button, .meta-action):hover:not(:disabled) { background: var(--mac-row-hover); box-shadow: none; filter: none }
 html body.aibro-native[data-view] :is(.composer-extra-tools, .message-action-options) :is(button, .meta-action):active:not(:disabled) { background: var(--mac-row-press); scale: 1 }
@@ -90,7 +90,7 @@ html body.aibro-native[data-view] .composer-extra-tools > #polishControls > #pol
    !important focus outline. Scope the override to rows inside this menu only. */
 html body.aibro-native[data-view] .composer-extra-tools [data-halaska-root] button {
   width: 100%;
-  border-radius: 7px !important;
+  border-radius: var(--radius-7) !important;
 }
 html body.aibro-native[data-view] .composer-extra-tools [data-halaska-root] button:focus-visible {
   outline: none !important;
@@ -100,19 +100,19 @@ html body.aibro-native[data-view] .composer-extra-tools [data-halaska-root] butt
 @media (prefers-contrast: more) {
   html body.aibro-native[data-view] .composer-extra-tools [data-halaska-root] button:focus-visible { box-shadow: inset 0 0 0 2px var(--accent) !important }
 }
-html body.aibro-native[data-view] .native-select-options > button { min-height: 28px; padding: 6px 9px; border-radius: 7px }
+html body.aibro-native[data-view] .native-select-options > button { min-height: 28px; padding: var(--space-6) var(--space-9); border-radius: var(--radius-7) }
 html body.aibro-native[data-view] .native-select-options > button:is(:hover, :focus-visible):not(:disabled) { background: var(--mac-row-hover) }
 
 /* Toast: a glass capsule rising from the bottom edge. */
 html body.aibro-native[data-view] :is(.toast, #toast) {
   border: 0;
-  border-radius: 999px;
-  padding: 9px 16px;
+  border-radius: var(--radius-pill);
+  padding: var(--space-9) var(--space-16);
   background: var(--mac-glass-tint);
   -webkit-backdrop-filter: var(--mac-glass-filter);
   backdrop-filter: var(--mac-glass-filter);
   box-shadow: var(--mac-glass-rim), var(--mac-glass-hairline), var(--mac-glass-shadow);
-  transition: opacity 160ms var(--mac-ease-out), transform 380ms var(--mac-spring-snappy);
+  transition: opacity var(--duration-160) var(--mac-ease-out), transform var(--duration-380) var(--mac-spring-snappy);
 }
 /* In the conversation the toast would land on the composer's controls; rise
    above it instead. The composer is about 106px tall plus its 20px margin. */
@@ -131,7 +131,7 @@ html body.aibro-native[data-view] .conversation-latest {
 @keyframes mac-surface-grow { from { transform: scale(.93) } to { transform: none } }
 @keyframes mac-surface-fade { from { opacity: 0 } to { opacity: 1 } }
 html body.aibro-native[data-view] :is(.composer-extra-tools, .message-action-options, #modelPicker, #skillPicker, #polishDialog, #sourcePeek, .native-select-panel, .workspace-context-popover):not([hidden]) {
-  animation: mac-surface-grow 380ms var(--mac-spring-snappy), mac-surface-fade 130ms var(--mac-ease-out);
+  animation: mac-surface-grow var(--duration-380) var(--mac-spring-snappy), mac-surface-fade 130ms var(--mac-ease-out);
 }
 html body.aibro-native[data-view] :is(.composer-extra-tools, .message-action-options) { transform-origin: calc(100% - 18px) 100% }
 html body.aibro-native[data-view] :is(#modelPicker, #skillPicker, #polishDialog) { transform-origin: 50% 100% }
@@ -139,10 +139,10 @@ html body.aibro-native[data-view] :is(#sourcePeek, .native-select-panel, .worksp
 
 /* Reduce Motion: a short crossfade, no scale or spring. */
 @media (prefers-reduced-motion: reduce) {
-  html body.aibro-native[data-view] :is(.composer-extra-tools, .message-action-options, #modelPicker, #skillPicker, #polishDialog, #sourcePeek, .native-select-panel, .workspace-context-popover):not([hidden]) { animation: mac-surface-fade 120ms linear }
-  html body.aibro-native[data-view] :is(.toast, #toast) { transition: opacity 120ms linear }
+  html body.aibro-native[data-view] :is(.composer-extra-tools, .message-action-options, #modelPicker, #skillPicker, #polishDialog, #sourcePeek, .native-select-panel, .workspace-context-popover):not([hidden]) { animation: mac-surface-fade var(--duration-120) linear }
+  html body.aibro-native[data-view] :is(.toast, #toast) { transition: opacity var(--duration-120) linear }
 }
-html body.aibro-native.reduce-motion[data-view] :is(.composer-extra-tools, .message-action-options, #modelPicker, #skillPicker, #polishDialog, #sourcePeek, .native-select-panel, .workspace-context-popover):not([hidden]) { animation: mac-surface-fade 120ms linear }
+html body.aibro-native.reduce-motion[data-view] :is(.composer-extra-tools, .message-action-options, #modelPicker, #skillPicker, #polishDialog, #sourcePeek, .native-select-panel, .workspace-context-popover):not([hidden]) { animation: mac-surface-fade var(--duration-120) linear }
 
 /* Reduce Transparency (flag set by the host; WebKit has no media query) and
    Increase Contrast: opaque surfaces with a visible edge. */
@@ -190,19 +190,19 @@ html body.aibro-native[data-view] .kit-tabs { flex: 0 1 auto; width: auto; max-w
 html body.aibro-native[data-view] .kit-workspace-tabs > .kit-workspace-tabs-host { flex: 0 1 auto }
 html body.aibro-native[data-view] .kit-tabs > div {
   width: max-content;
-  padding: 3px;
-  gap: 2px !important;
+  padding: var(--space-3);
+  gap: var(--space-2) !important;
   border: 0 !important;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--mac-track);
 }
 html body.aibro-native[data-view] .kit-tabs > div > button {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-1);
   min-height: 28px;
-  padding: 5px 14px !important;
-  border-radius: 999px;
-  font-size: 12px !important;
+  padding: var(--space-5) var(--space-14) !important;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-12) !important;
   line-height: 18px;
 }
 html body.aibro-native[data-view] .kit-tabs > div > div[aria-hidden="true"] {
@@ -210,14 +210,14 @@ html body.aibro-native[data-view] .kit-tabs > div > div[aria-hidden="true"] {
   top: 3px;
   bottom: 3px !important;
   height: auto !important;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--mac-thumb) !important;
   box-shadow: var(--mac-thumb-shadow);
 }
 @media (prefers-reduced-motion: reduce) {
-  html body.aibro-native[data-view] .kit-tabs > div > div[aria-hidden="true"] { transition: opacity 120ms linear !important }
+  html body.aibro-native[data-view] .kit-tabs > div > div[aria-hidden="true"] { transition: opacity var(--duration-120) linear !important }
 }
-html body.aibro-native.reduce-motion[data-view] .kit-tabs > div > div[aria-hidden="true"] { transition: opacity 120ms linear !important }
+html body.aibro-native.reduce-motion[data-view] .kit-tabs > div > div[aria-hidden="true"] { transition: opacity var(--duration-120) linear !important }
 @media (prefers-contrast: more) {
   html body.aibro-native[data-view] .kit-tabs > div { box-shadow: inset 0 0 0 1px var(--line-strong) }
   html body.aibro-native[data-view] .kit-tabs > div > div[aria-hidden="true"] { box-shadow: 0 0 0 1px var(--text) }
@@ -238,7 +238,7 @@ html body.aibro-native.reduce-motion[data-view] .kit-tabs > div > div[aria-hidde
 /* One movement for the page instead of the older per-child stagger. */
 html body.aibro-native.native-enter[data-view] .view.active-view:not(.agent-view) > * { animation: none }
 html body.aibro-native.native-enter[data-view] .view.active-view:not(.agent-view) {
-  animation: mac-page-forward 420ms var(--mac-spring-smooth) both;
+  animation: mac-page-forward var(--duration-420) var(--mac-spring-smooth) both;
 }
 html body.aibro-native.native-enter[data-view][data-native-enter-direction=back] .view.active-view:not(.agent-view) {
   animation-name: mac-page-back;
@@ -246,23 +246,23 @@ html body.aibro-native.native-enter[data-view][data-native-enter-direction=back]
 /* Entering a conversation: the transcript rises into place; the composer and
    its glass stay put. */
 @keyframes mac-transcript-in { from { opacity: 0; translate: 0 10px } to { opacity: 1; translate: 0 0 } }
-html body.aibro-native.native-enter[data-view=agent] #messageList { animation: mac-transcript-in 380ms var(--mac-spring-smooth) both }
+html body.aibro-native.native-enter[data-view=agent] #messageList { animation: mac-transcript-in var(--duration-380) var(--mac-spring-smooth) both }
 /* Reading pane: fades in while its contents slide from the trailing edge.
    The pane itself never moves, so nothing extends past the window edge: the
    pane clips its sliding children (overflow:hidden). */
 @keyframes mac-reader-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes mac-reader-content-in { from { translate: 22px 0 } to { translate: 0 0 } }
-html body.aibro-native[data-view] .reading-pane { animation: mac-reader-in 380ms var(--mac-spring-smooth) }
-html body.aibro-native[data-view] .reading-pane > * { animation: mac-reader-content-in 380ms var(--mac-spring-smooth) }
+html body.aibro-native[data-view] .reading-pane { animation: mac-reader-in var(--duration-380) var(--mac-spring-smooth) }
+html body.aibro-native[data-view] .reading-pane > * { animation: mac-reader-content-in var(--duration-380) var(--mac-spring-smooth) }
 @media (prefers-reduced-motion: reduce) {
   html body.aibro-native.native-enter[data-view] .view.active-view:not(.agent-view),
   html body.aibro-native.native-enter[data-view=agent] #messageList,
-  html body.aibro-native[data-view] .reading-pane { animation: mac-page-fade 140ms linear both }
+  html body.aibro-native[data-view] .reading-pane { animation: mac-page-fade var(--duration-140) linear both }
   html body.aibro-native[data-view] .reading-pane > * { animation: none }
 }
 html body.aibro-native.reduce-motion.native-enter[data-view] .view.active-view:not(.agent-view),
 html body.aibro-native.reduce-motion.native-enter[data-view=agent] #messageList,
-html body.aibro-native.reduce-motion[data-view] .reading-pane { animation: mac-page-fade 140ms linear both }
+html body.aibro-native.reduce-motion[data-view] .reading-pane { animation: mac-page-fade var(--duration-140) linear both }
 html body.aibro-native.reduce-motion[data-view] .reading-pane > * { animation: none }
 /* A resize drag, or a frozen background window, never replays an entrance. */
 html body.aibro-native.workspace-resizing[data-view] :is(.view.active-view, #messageList, .reading-pane, .reading-pane > *) { animation: none }
@@ -278,11 +278,11 @@ html body.aibro-native[data-view] {
 }
 html body.aibro-native[data-view] :is(.primary, .secondary, .danger-button) {
   min-height: 30px;
-  padding: 5px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background-color 140ms ease, box-shadow 140ms ease, filter 140ms ease, scale 260ms var(--mac-spring-snappy);
+  padding: var(--space-5) var(--space-14);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-500);
+  transition: background-color var(--duration-140) ease, box-shadow var(--duration-140) ease, filter var(--duration-140) ease, scale var(--duration-260) var(--mac-spring-snappy);
 }
 html body.aibro-native[data-view] .secondary {
   border-color: transparent;
@@ -293,25 +293,25 @@ html body.aibro-native[data-view] .secondary:hover:not(:disabled) { background: 
 html body.aibro-native[data-view] .secondary:active:not(:disabled) { background: var(--mac-fill-press) }
 html body.aibro-native[data-view] .primary { box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent) }
 html body.aibro-native[data-view] .primary:hover:not(:disabled) { filter: brightness(1.06) }
-html body.aibro-native[data-view] :is(.primary, .secondary, .danger-button):active:not(:disabled) { transform: none; scale: .97; transition-duration: 140ms, 140ms, 140ms, 90ms }
+html body.aibro-native[data-view] :is(.primary, .secondary, .danger-button):active:not(:disabled) { transform: none; scale: .97; transition-duration: var(--duration-140), var(--duration-140), var(--duration-140), 90ms }
 html body.aibro-native[data-view] :is(.primary, .secondary, .danger-button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 
 /* Cards: concentric with the 26pt window corner (26 − 8 padding ≈ 18; cards
    inside a view use 16). A hairline and a soft single shadow replace the
    heavier two-layer card shadow, so cards read as surfaces, not floating tiles. */
 html body.aibro-native[data-view] :is(.card, .panel, .planning-card, .overview-card, .project-metric, .result-card, .entity-card) {
-  border-radius: 16px;
+  border-radius: var(--radius-16);
   border-color: transparent;
   box-shadow: 0 0 0 .5px var(--line-strong), 0 1px 2px rgba(0, 0, 0, .04);
 }
 html body.aibro-native[data-view]:not(.light-mode) :is(.card, .panel, .planning-card, .overview-card, .project-metric, .result-card, .entity-card) {
   box-shadow: 0 0 0 .5px var(--line-strong), 0 1px 2px rgba(0, 0, 0, .25);
 }
-html body.aibro-native[data-view] .entity-row { border-radius: 10px }
+html body.aibro-native[data-view] .entity-row { border-radius: var(--radius-10) }
 html body.aibro-native[data-view] .entity-row:hover { background: var(--mac-fill); box-shadow: none }
 
 @media (prefers-reduced-motion: reduce) {
-  html body.aibro-native[data-view] :is(.primary, .secondary, .danger-button) { transition: background-color 140ms ease }
+  html body.aibro-native[data-view] :is(.primary, .secondary, .danger-button) { transition: background-color var(--duration-140) ease }
   html body.aibro-native[data-view] :is(.primary, .secondary, .danger-button):active:not(:disabled) { scale: 1 }
 }
 @media (prefers-contrast: more) {

@@ -8,10 +8,10 @@
   z-index: 40;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-8);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-12);
   background: var(--canvas);
   box-shadow: var(--shadow-card);
 }
@@ -28,18 +28,18 @@
 
 .find-bar input {
   width: 190px;
-  padding: 4px 6px;
+  padding: var(--space-4) var(--space-6);
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   outline: none;
 }
 
 .find-count {
   min-width: 96px;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   opacity: .72;
   white-space: nowrap;
   text-align: right;
@@ -56,7 +56,7 @@
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-7);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -68,9 +68,9 @@
 
 /* 命中高亮走 CSS Custom Highlight API：不改 DOM 结构，因此不与流式重绘冲突。 */
 ::highlight(find-all) { background: #ffe08a; color: #1f2937; }
-::highlight(find-current) { background: #f59e0b; color: #ffffff; }
+::highlight(find-current) { background: #f59e0b; color: var(--color-white); }
 
 @media (prefers-color-scheme: dark) {
   ::highlight(find-all) { background: #8a6d1f; color: #fdf6e3; }
-  ::highlight(find-current) { background: #d97706; color: #ffffff; }
+  ::highlight(find-current) { background: #d97706; color: var(--color-white); }
 }

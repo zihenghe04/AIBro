@@ -30,7 +30,7 @@ body.light-mode {
   position: absolute;
   top: 7px;
   right: 11px;
-  font-size: 10px;
+  font-size: var(--font-size-10);
   letter-spacing: .04em;
   color: var(--faint);
   text-transform: lowercase;
@@ -55,8 +55,8 @@ body.light-mode {
 .message-body blockquote > :first-child { margin-top: 0; }
 .message-body blockquote > :last-child { margin-bottom: 0; }
 .message-body blockquote blockquote { margin-block: .65em; }
-.message-body .message-code { max-width: 100%; white-space: pre; overflow-wrap: normal; line-height: 1.7; }
-.message-body .message-code:has(> .message-code-lang) { padding-top: 30px; }
+.message-body .message-code { max-width: 100%; white-space: pre; overflow-wrap: normal; line-height: var(--leading-170); }
+.message-body .message-code:has(> .message-code-lang) { padding-top: var(--space-30); }
 .message-body .message-code > code { display: block; white-space: inherit; overflow-wrap: normal; }
 
 /* ── 数学排版（HTML 实现，零依赖） ───────────────────────── */
@@ -64,9 +64,9 @@ body.light-mode {
 .math-inline { font-style: italic; white-space: nowrap; }
 .math-block {
   display: block;
-  margin: 14px 0;
+  margin: var(--space-14) 0;
   text-align: center;
-  font-size: 15px;
+  font-size: var(--font-size-15);
   line-height: 2.1;
 }
 .math-line { display: block; font-style: italic; }
@@ -89,7 +89,7 @@ body.light-mode {
 .math-op { font-style: normal; padding: 0 .06em; }
 .math-upright { font-style: normal; }
 .math-text { font-style: normal; }
-.math-bold { font-weight: 650; }
+.math-bold { font-weight: var(--font-weight-650); }
 .math-italic { font-style: italic; }
 .math-space { display: inline-block; }
 
@@ -100,7 +100,7 @@ body.light-mode {
 .math-op + sup, .math-op + sub { margin-left: -.02em; }
 
 /* Floating "copy code" for settled conversation code blocks (code-copy.js). */
-.code-copy-float { position: fixed; z-index: 23; transform: translateX(-100%); height: 26px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel, var(--bg)); color: var(--muted); font-size: 11px; cursor: pointer; }
+.code-copy-float { position: fixed; z-index: 23; transform: translateX(-100%); height: 26px; padding: 0 var(--space-10); border: 1px solid var(--line-strong); border-radius: var(--radius-8); background: var(--panel, var(--bg)); color: var(--muted); font-size: var(--font-size-11); cursor: pointer; }
 .code-copy-float:hover, .code-copy-float:focus-visible { color: var(--text); background: var(--panel-hover); }
 .code-copy-float[hidden] { display: none !important; }
 body:has(dialog[open]) .code-copy-float { display: none !important; }

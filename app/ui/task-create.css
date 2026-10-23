@@ -1,20 +1,20 @@
 #planningCreateDialog.planning-dialog{padding:0;overflow:hidden}
 .task-create-form{display:flex;flex-direction:column;gap:0;min-width:0;max-height:calc(100dvh - 44px)}
-.task-create-heading{display:flex;flex:none;align-items:center;justify-content:space-between;gap:16px;padding:22px 22px 18px}
-.task-create-content{display:flex;flex-direction:column;gap:18px;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 22px 20px}
-.task-create-heading h2{margin:0;font-size:19px!important;font-weight:600!important}
-.task-create-location{color:var(--muted);font-size:12px;line-height:1.5;margin:0;overflow-wrap:anywhere}
-.task-create-field{min-width:0}.task-create-form label{display:block;color:var(--muted);font-size:12px;margin:0 0 6px}
-.task-create-form input,.task-create-form textarea{font-size:13px!important;border:1px solid var(--line-strong)!important;border-radius:7px!important;background:var(--panel)!important}
+.task-create-heading{display:flex;flex:none;align-items:center;justify-content:space-between;gap:var(--space-16);padding:var(--space-22) var(--space-22) var(--space-18)}
+.task-create-content{display:flex;flex-direction:column;gap:var(--space-18);min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 var(--space-22) var(--space-20)}
+.task-create-heading h2{margin:0;font-size:var(--font-size-19)!important;font-weight:var(--font-weight-600) !important}
+.task-create-location{color:var(--muted);font-size:var(--font-size-12);line-height:var(--leading-150);margin:0;overflow-wrap:anywhere}
+.task-create-field{min-width:0}.task-create-form label{display:block;color:var(--muted);font-size:var(--font-size-12);margin:0 0 var(--space-6)}
+.task-create-form input,.task-create-form textarea{font-size:var(--font-size-13)!important;border:1px solid var(--line-strong)!important;border-radius:var(--radius-7)!important;background:var(--panel)!important}
 .task-create-form input:focus,.task-create-form textarea:focus{border-color:var(--accent)!important;box-shadow:0 0 0 2px var(--accent-soft)}
-.task-create-form input[type=date]{min-width:0;padding:8px 10px!important}
-.task-create-dates{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:end}.task-create-content>button{align-self:flex-start}
-.task-create-details{display:grid;grid-template-columns:1fr 1fr;gap:18px 14px;padding-top:18px;border-top:1px solid var(--line)}
+.task-create-form input[type=date]{min-width:0;padding:var(--space-8) var(--space-10)!important}
+.task-create-dates{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-14);align-items:end}.task-create-content>button{align-self:flex-start}
+.task-create-details{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-18) var(--space-14);padding-top:var(--space-18);border-top:1px solid var(--line)}
 .task-create-details>div{min-width:0}
-.task-create-actions{display:flex;flex:none;justify-content:flex-end;gap:9px;padding:16px 22px;border-top:1px solid var(--line)}
+.task-create-actions{display:flex;flex:none;justify-content:flex-end;gap:var(--space-9);padding:var(--space-16) var(--space-22);border-top:1px solid var(--line)}
 .task-create-form .planning-error{margin:0;min-height:0}
-@media(max-width:520px){.task-create-details{grid-template-columns:1fr}.task-create-dates{gap:8px}.task-create-dates{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.task-create-details{grid-template-columns:1fr}.task-create-dates{gap:var(--space-8)}.task-create-dates{grid-template-columns:1fr 1fr}}
 /* Keep the action row outside the expanding/scrolling fields. In WebKit,
    shrinking the old dialog scroller could leave its footer absent from AX. */
 #planningCreateSurface{box-sizing:border-box;min-width:0}
-@media(max-width:520px){.task-create-heading{padding:18px 18px 14px}.task-create-content{padding:0 18px 16px}.task-create-actions{padding:14px 18px}}
+@media(max-width:520px){.task-create-heading{padding:var(--space-18) var(--space-18) var(--space-14)}.task-create-content{padding:0 var(--space-18) var(--space-16)}.task-create-actions{padding:var(--space-14) var(--space-18)}}

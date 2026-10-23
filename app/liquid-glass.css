@@ -56,25 +56,25 @@ body.liquid-glass[data-view] .sidebar {
   position:relative;isolation:isolate;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;
 }
 body.liquid-glass[data-view] .sidebar::before {
-  content:'';position:absolute;inset:8px 5px 8px 8px;z-index:-1;pointer-events:none;border:1px solid var(--lg-rim-muted);border-radius:23px;
+  content:'';position:absolute;inset:8px 5px 8px 8px;z-index:var(--z-behind);pointer-events:none;border:1px solid var(--lg-rim-muted);border-radius:23px;
   background:radial-gradient(300px circle at var(--lg-pointer-x,12%) var(--lg-pointer-y,3%),var(--lg-highlight),transparent 76%),linear-gradient(145deg,var(--lg-reflection),transparent 16% 74%,var(--lg-lens)),var(--lg-nav);
   backdrop-filter:blur(32px) saturate(1.02);-webkit-backdrop-filter:blur(32px) saturate(1.02);
-  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 3px #00000010,0 12px 26px -20px var(--lg-edge-shadow);
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 3px var(--black-a6),0 12px 26px -20px var(--lg-edge-shadow);
 }
 body.liquid-glass[data-view] .sidebar::after {
-  content:'';position:absolute;inset:9px 6px 9px 9px;z-index:-1;pointer-events:none;opacity:.28;border-radius:22px;border:1px solid transparent;
+  content:'';position:absolute;inset:9px 6px 9px 9px;z-index:var(--z-behind);pointer-events:none;opacity:.28;border-radius:var(--radius-22);border:1px solid transparent;
   background:linear-gradient(125deg,var(--lg-rim),transparent 25% 68%,var(--lg-rim-muted)) border-box;
   -webkit-mask:linear-gradient(#ffffff 0 0) padding-box,linear-gradient(#ffffff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
 }
 body.liquid-glass[data-view] .conversation-navigator {
   background:radial-gradient(330px circle at var(--lg-pointer-x,5%) var(--lg-pointer-y,2%),var(--lg-highlight),transparent 75%),linear-gradient(130deg,var(--lg-reflection),transparent 14% 85%,var(--lg-lens)),var(--lg-nav);
-  border-color:var(--lg-rim-muted);border-radius:20px 0 0 20px;
+  border-color:var(--lg-rim-muted);border-radius:var(--radius-20) 0 0 var(--radius-20);
   backdrop-filter:blur(34px) saturate(1.02);-webkit-backdrop-filter:blur(34px) saturate(1.02);
   box-shadow:inset 1px 1px 0 var(--lg-rim),inset -1px 0 0 var(--line),0 5px 16px var(--lg-edge-shadow);
 }
 /* Opaque reading planes: text never inherits the pointer highlight or blur. */
 body.liquid-glass[data-view] .main,body.liquid-glass[data-view] .reading-pane {background:var(--lg-content);border-color:var(--line-strong);box-shadow:var(--shadow-canvas)}
-body.liquid-glass[data-view] .reading-pane {border-radius:20px}
+body.liquid-glass[data-view] .reading-pane {border-radius:var(--radius-20)}
 body.liquid-glass[data-view] .conversation-pane {background:radial-gradient(ellipse at 52% 116%,var(--lg-lens),transparent 58%),var(--lg-content)}
 body.liquid-glass[data-view] .card,body.liquid-glass[data-view] .metrics>div,body.liquid-glass[data-view] .overview-stat,body.liquid-glass[data-view] .activity-ui {background:var(--lg-sheet);border-color:var(--line);box-shadow:var(--shadow-card)}
 body.liquid-glass[data-view] .note-document-preview,body.liquid-glass[data-view] .collection-table,body.liquid-glass[data-view] .message-body {backdrop-filter:none;-webkit-backdrop-filter:none}
@@ -86,18 +86,18 @@ body.liquid-glass[data-view] .topbar,body.liquid-glass[data-view] .reading-toolb
   border-bottom-color:var(--line);box-shadow:inset 0 1px 0 var(--lg-rim),inset 1px 0 0 var(--lg-rim-muted),0 3px 12px -6px var(--lg-edge-shadow);
 }
 body.liquid-glass[data-view] .topbar::after,body.liquid-glass[data-view] .reading-toolbar::after {
-  content:'';position:absolute;pointer-events:none;inset:0;z-index:-1;border-radius:inherit;
+  content:'';position:absolute;pointer-events:none;inset:0;z-index:var(--z-behind);border-radius:inherit;
   background:linear-gradient(100deg,transparent 8%,var(--lg-reflection) 27%,transparent 53%) top/100% 1px no-repeat,radial-gradient(ellipse at var(--lg-pointer-x,20%) 100%,var(--lg-rim-muted),transparent 65%) bottom/100% 1px no-repeat;
 }
 body.liquid-glass[data-view] .composer {
   border:1px solid var(--line-strong);border-radius:25px;
   background:radial-gradient(350px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),var(--lg-highlight),transparent 72%),linear-gradient(155deg,var(--lg-reflection),transparent 11% 80%,var(--lg-lens)),var(--lg-control);
   backdrop-filter:blur(32px) saturate(1.02);-webkit-backdrop-filter:blur(32px) saturate(1.02);
-  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 3px #00000012,0 14px 32px -14px var(--lg-edge-shadow);
-  transition:box-shadow 220ms ease,border-color 220ms ease;
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 3px var(--black-a7),0 14px 32px -14px var(--lg-edge-shadow);
+  transition:box-shadow var(--duration-220) ease,border-color var(--duration-220) ease;
 }
 body.liquid-glass[data-view] .composer::after {
-  content:'';position:absolute;inset:0;pointer-events:none;opacity:.65;border-radius:inherit;padding:1px;
+  content:'';position:absolute;inset:0;pointer-events:none;opacity:.65;border-radius:inherit;padding:var(--space-1);
   background:radial-gradient(240px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),var(--lg-rim),transparent 75%),linear-gradient(145deg,var(--lg-rim),transparent 30% 70%,var(--lg-rim-muted));
   -webkit-mask:linear-gradient(#ffffff 0 0) content-box,linear-gradient(#ffffff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
 }
@@ -118,12 +118,12 @@ body.liquid-glass[data-view] .conversation-pane[data-glass-chat=true] .message-l
      dissolves as it enters the lens instead of showing sharp side-edge glyphs. */
   mask-image:linear-gradient(to bottom,#000000 0,#000000 calc(100% - var(--lg-composer-height,0px) - 12px),#00000099 calc(100% - var(--lg-composer-height,0px) + 12px),transparent calc(100% - var(--lg-composer-height,0px) + 32px),transparent 100%);
 }
-body.liquid-glass[data-view] .conversation-pane[data-glass-chat=true] .composer {z-index:2}
+body.liquid-glass[data-view] .conversation-pane[data-glass-chat=true] .composer {z-index:var(--z-2)}
 body.liquid-glass[data-view] .composer[data-glass-refracting=true] {
   --lg-center-veil:#25252780;--lg-active-center-veil:#222224c0;
   background:linear-gradient(180deg,transparent,var(--lg-center-veil) 22px calc(100% - 22px),transparent),radial-gradient(310px circle at var(--lg-pointer-x,18%) var(--lg-pointer-y,0%),#ffffff05,transparent 70%),linear-gradient(170deg,#ffffff0c,#20202208 24% 78%,transparent),#30303248;
   backdrop-filter:var(--lg-refraction-filter) saturate(1.02);-webkit-backdrop-filter:var(--lg-refraction-filter) saturate(1.02);
-  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 2px #00000010,0 14px 32px -14px var(--lg-edge-shadow);
+  box-shadow:inset 0 1px 0 var(--lg-rim),0 1px 2px var(--black-a6),0 14px 32px -14px var(--lg-edge-shadow);
 }
 body.liquid-glass[data-view].light-mode .composer[data-glass-refracting=true] {
   --lg-center-veil:#ffffff80;--lg-active-center-veil:#ffffffc0;
@@ -138,20 +138,20 @@ body.liquid-glass[data-view] .nav-item.active .wi {color:var(--accent)}
 body.liquid-glass[data-view] .new-task {background:var(--lg-select);border-color:var(--line-strong);box-shadow:var(--shadow-button)}
 body.liquid-glass[data-view] .new-task:hover {background:var(--panel-raised);box-shadow:inset 0 1px 0 var(--lg-rim),0 2px 7px var(--lg-edge-shadow)}
 body.liquid-glass[data-view] .sidebar-theme-control,body.liquid-glass[data-view] .reader-theme-control,body.liquid-glass[data-view] #themeBtn.layout-theme-button,body.liquid-glass[data-view] .reading-toggle {background:var(--lg-select);border-color:var(--line);box-shadow:var(--shadow-button);backdrop-filter:none;-webkit-backdrop-filter:none}
-body.liquid-glass[data-view] .reading-control,body.liquid-glass[data-view] .reading-toggle,body.liquid-glass[data-view] .reader-theme-control,body.liquid-glass[data-view] #themeBtn.layout-theme-button {border-radius:10px}
+body.liquid-glass[data-view] .reading-control,body.liquid-glass[data-view] .reading-toggle,body.liquid-glass[data-view] .reader-theme-control,body.liquid-glass[data-view] #themeBtn.layout-theme-button {border-radius:var(--radius-10)}
 body.liquid-glass[data-view] .composer-footer button:not(.send-btn),body.liquid-glass[data-view] .chat-header-actions button {backdrop-filter:none;-webkit-backdrop-filter:none}
-body.liquid-glass[data-view] .send-btn {border-radius:50%;background:linear-gradient(150deg,#636366,var(--accent-solid));color:#ffffff;box-shadow:inset 0 1px 1px #ffffff5c,0 2px 4px #46464638,0 4px 10px #5959591f}
+body.liquid-glass[data-view] .send-btn {border-radius:var(--radius-round);background:linear-gradient(150deg,#636366,var(--accent-solid));color:var(--color-white);box-shadow:inset 0 1px 1px #ffffff5c,0 2px 4px #46464638,0 4px 10px #5959591f}
 body.liquid-glass[data-view] .send-btn:hover {filter:brightness(1.08)}
-body.liquid-glass[data-view] .primary {background:linear-gradient(160deg,color-mix(in srgb,var(--accent-solid) 92%,#bcbcbc),var(--accent-solid));color:#ffffff;border-color:color-mix(in srgb,var(--accent-solid) 75%,transparent);box-shadow:inset 0 1px 0 #ffffff46,0 1px 3px #35353521}
+body.liquid-glass[data-view] .primary {background:linear-gradient(160deg,color-mix(in srgb,var(--accent-solid) 92%,#bcbcbc),var(--accent-solid));color:var(--color-white);border-color:color-mix(in srgb,var(--accent-solid) 75%,transparent);box-shadow:inset 0 1px 0 #ffffff46,0 1px 3px #35353521}
 body.liquid-glass[data-view] .user-message .message-body {background:var(--panel-hover);color:var(--text);border-color:var(--line);box-shadow:inset 0 1px 0 var(--rim)}
 body.liquid-glass[data-view] .agent-message .message-identity::before {background:var(--muted);box-shadow:none}
-body.liquid-glass[data-view] .chat-orb {background:linear-gradient(150deg,var(--panel-raised),var(--panel));color:var(--text);border-color:var(--line);box-shadow:inset 0 1px 0 var(--rim),0 5px 16px #0000000a}
+body.liquid-glass[data-view] .chat-orb {background:linear-gradient(150deg,var(--panel-raised),var(--panel));color:var(--text);border-color:var(--line);box-shadow:inset 0 1px 0 var(--rim),0 5px 16px var(--black-a4)}
 body.liquid-glass[data-view] .chat-orb::before {background:none;filter:none}
 body.liquid-glass[data-view] .secondary {background:linear-gradient(170deg,var(--lg-rim-muted),transparent 70%),var(--panel-raised);border-color:var(--line-strong);box-shadow:var(--shadow-button)}
 body.liquid-glass[data-view] .reading-tabs {background:color-mix(in srgb,var(--lg-nav) 75%,var(--lg-content));box-shadow:inset 0 1px 0 var(--lg-rim-muted)}
 body.liquid-glass[data-view] .reading-tab.active {background:var(--lg-sheet);border-color:var(--line);box-shadow:inset 0 1px 0 var(--lg-rim)}
 body.liquid-glass[data-view] .note-document-toolbar {background:var(--lg-content);box-shadow:0 7px 16px -13px var(--lg-edge-shadow)}
-body.liquid-glass[data-view] .progress-track,body.liquid-glass[data-view] .activity-ui-track,body.liquid-glass[data-view] .mini-progress {background:var(--lg-inset);box-shadow:inset 0 1px 2px #23232318;border-radius:999px}
+body.liquid-glass[data-view] .progress-track,body.liquid-glass[data-view] .activity-ui-track,body.liquid-glass[data-view] .mini-progress {background:var(--lg-inset);box-shadow:inset 0 1px 2px #23232318;border-radius:var(--radius-pill)}
 body.liquid-glass[data-view] .progress-fill,body.liquid-glass[data-view] .mini-progress span {background:linear-gradient(90deg,var(--accent-solid),color-mix(in srgb,var(--accent-solid) 60%,#cfcfcf));box-shadow:inset 0 1px 0 #ffffff35;border-radius:inherit}
 /* Menus are a thicker lens, kept separate from modal scrim and reading text. */
 body.liquid-glass[data-view] dialog:not(#previewDialog),body.liquid-glass[data-view] #skillPicker,body.liquid-glass[data-view] .polish-popover,body.liquid-glass[data-view] .onboarding-card {
@@ -177,7 +177,7 @@ body.liquid-glass[data-view].light-mode {
   --lg-menu-shadow:rgba(56,56,56,.19);--lg-menu-well:rgba(255,255,255,.64);
 }
 body.liquid-glass[data-view] :is(#modelPicker,#polishDialog,#skillPicker,#skillsDialog,#searchDialog,.permission-picker) {
-  isolation:isolate;border:1px solid var(--lg-rim-muted);border-radius:20px;
+  isolation:isolate;border:1px solid var(--lg-rim-muted);border-radius:var(--radius-20);
   background:linear-gradient(178deg,var(--lg-menu-top),transparent 3px calc(100% - 3px),var(--lg-menu-bottom)),radial-gradient(ellipse at 5% -18%,var(--lg-menu-inner),transparent 65%),var(--lg-menu-core);
   backdrop-filter:blur(34px) saturate(1.02);-webkit-backdrop-filter:blur(34px) saturate(1.02);
   box-shadow:inset 0 1px 0 var(--lg-rim),0 0 0 1px var(--line),0 2px 5px var(--lg-menu-shadow),0 18px 48px -18px var(--lg-menu-shadow);
@@ -221,7 +221,7 @@ body.liquid-glass[data-view] .note-document-toolbar {
 body.liquid-glass[data-view] :is(.reading-control,.note-document-toolbar button):hover {
   background:var(--lg-select);border-color:var(--lg-rim-muted);box-shadow:var(--shadow-button);
 }
-@media(max-width:760px){body.liquid-glass[data-view] .sidebar::before{inset:6px 3px 6px 5px;border-radius:18px}body.liquid-glass[data-view] .sidebar::after{inset:7px 4px 7px 6px;border-radius:17px}body.liquid-glass[data-view] .composer{border-radius:20px}body.liquid-glass[data-view] .sidebar .nav-item,body.liquid-glass[data-view] .new-task{border-radius:12px}}
+@media(max-width:760px){body.liquid-glass[data-view] .sidebar::before{inset:6px 3px 6px 5px;border-radius:var(--radius-18)}body.liquid-glass[data-view] .sidebar::after{inset:7px 4px 7px 6px;border-radius:17px}body.liquid-glass[data-view] .composer{border-radius:var(--radius-20)}body.liquid-glass[data-view] .sidebar .nav-item,body.liquid-glass[data-view] .new-task{border-radius:var(--radius-12)}}
 /* No capability or layout depends on blur/masking. CSS-only fallback remains
    usable on older engines, and accessibility settings remove the material. */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {

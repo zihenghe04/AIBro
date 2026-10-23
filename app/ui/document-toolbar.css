@@ -1,8 +1,8 @@
-.document-toolbar-kit { display:flex; align-items:center; gap:8px; flex-wrap:wrap; width:100%; min-width:0; padding:3px 0; }
-.document-toolbar-kit-tools,.document-toolbar-kit-actions { display:flex; align-items:center; gap:4px; flex-shrink:0; }
-.document-toolbar-kit-state { font-size:11px; color:var(--muted); margin-left:auto; min-width:0; overflow-wrap:anywhere; }
+.document-toolbar-kit { display:flex; align-items:center; gap:var(--space-8); flex-wrap:wrap; width:100%; min-width:0; padding:var(--space-3) 0; }
+.document-toolbar-kit-tools,.document-toolbar-kit-actions { display:flex; align-items:center; gap:var(--space-4); flex-shrink:0; }
+.document-toolbar-kit-state { font-size:var(--font-size-11); color:var(--muted); margin-left:auto; min-width:0; overflow-wrap:anywhere; }
 .document-toolbar-kit > [role=group] { flex-shrink:0; }
 /* Two-character labels need no 70 px floor; content width lets Done/Save share
    the first row in a half-width reading pane. */
 .document-toolbar-kit .kit-segments button { min-width:0; }
-@container (max-width:480px) { .document-toolbar-kit { gap:5px; } .document-toolbar-kit-state { font-size:10px; } }
+@container (max-width:480px) { .document-toolbar-kit { gap:var(--space-5); } .document-toolbar-kit-state { font-size:var(--font-size-10); } }

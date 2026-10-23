@@ -87,7 +87,7 @@ async function run(){
   assert.ok(fs.existsSync(path.join(assets,'native-glass.node')),'Native addon missing: run npm run native:build (macOS SDK 26 + Node-API headers) or set AI_BRO_GLASS_DIAGNOSTIC to a built native-glass.node');
   assert.ok(app.getPath('userData').startsWith(appData+path.sep));
   assert.ok(['#00000000','#000000'].includes(win.getBackgroundColor()));
-  await evaluate('document.querySelector("#onboardingSkip")?.click();Object.assign(state,{projects:[],tasks:[],imports:[],papers:[],agentRuns:[],trash:[],notes:[{id:"native-qa-note",title:"Synthetic note",content:"# Synthetic document\\n\\nThis is isolated test content.",workspace:"科研"}]});normalizeStateShape(state);repairRelationships();showView("agent","持续对话");renderAll();NativeGlassUI.init();true');
+  await evaluate('document.querySelector("#onboardingSkip")?.click();Object.assign(state,{projects:[],tasks:[],imports:[],papers:[],agentRuns:[],trash:[],notes:[{id:"native-qa-note",title:"Synthetic note",content:"# Synthetic document\\n\\nThis is isolated test content.",workspace:"科研"}]});normalizeStateShape(state);repairRelationships();showView("agent","对话");renderAll();NativeGlassUI.init();true');
   const checks=[];
   await until(()=>evaluate('NativeGlassUI.init().status().active'),'native activation in full app');
   let status=await evaluate('NativeGlassUI.init().status()');

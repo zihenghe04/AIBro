@@ -78,3 +78,11 @@ test('original document updates keep the old excerpt and report the change',()=>
   const source=E.sourcesFor(copy,null,f.state)[0];
   assert.equal(source.excerpt,f.source.excerpt);assert.equal(E.status(source,f.state).kind,'changed');
 });
+
+test('a branch keeps the conversation model and reasoning level as an independent copy',()=>{
+  const f=fixture();f.conversation.modelConfig={provider:'api',model:'glm-5.3',effort:'high',source:'conversation'};
+  const copy=branch(f).conversation;
+  assert.equal(JSON.stringify(copy.modelConfig),JSON.stringify(f.conversation.modelConfig));
+  copy.modelConfig.model='other';assert.equal(f.conversation.modelConfig.model,'glm-5.3');
+  const plain=fixture();assert.equal(branch(plain).conversation.modelConfig,undefined);
+});

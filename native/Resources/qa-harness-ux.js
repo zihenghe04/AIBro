@@ -56,7 +56,7 @@ check(strip.hidden, 'queue strip hides once drained');
 // 5) 消息元信息：测量到的耗时与用量才显示，未测量不得编造 tokens
 // The message list only mounts rows while it is visible (ConversationWindow);
 // earlier QA steps leave another view open, so show the conversation first.
-showView('agent', '持续对话');
+showView('agent', '对话');
 state.agentRuns.push({id: 'qa-ux-run', conversationId: chat.id, status: 'completed', startedAt: t - 64000, finishedAt: t});
 chat.messages.push({id: 'qa-ux-meta', role: 'agent', text: '合成用量消息。', usage: {input: 900, output: 600, total: 1500}, runId: 'qa-ux-run'});
 state.currentConversationId = chat.id; renderConversation();

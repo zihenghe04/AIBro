@@ -1,19 +1,19 @@
-.selection-bar{position:fixed;z-index:230;display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface-wash),color-mix(in srgb,var(--canvas) 94%,transparent);box-shadow:inset 0 1px 0 var(--rim),var(--shadow-float);backdrop-filter:blur(20px) saturate(1.15);-webkit-backdrop-filter:blur(20px) saturate(1.15);animation:selection-reveal .12s ease-out}
+.selection-bar{position:fixed;z-index:230;display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--line-strong);border-radius:var(--radius-10);background:var(--surface-wash),color-mix(in srgb,var(--canvas) 94%,transparent);box-shadow:inset 0 1px 0 var(--rim),var(--shadow-float);backdrop-filter:blur(20px) saturate(1.15);-webkit-backdrop-filter:blur(20px) saturate(1.15);animation:selection-reveal var(--duration-120) ease-out}
 .selection-bar[hidden]{display:none!important}
-.selection-bar button{display:inline-flex;align-items:center;min-height:28px;padding:4px 10px;border:0;border-radius:7px;background:transparent;color:var(--text);font-size:12px;white-space:nowrap}
+.selection-bar button{display:inline-flex;align-items:center;min-height:28px;padding:var(--space-4) var(--space-10);border:0;border-radius:var(--radius-7);background:transparent;color:var(--text);font-size:var(--font-size-12);white-space:nowrap}
 .selection-bar button:hover{background:var(--panel-hover)}
 .selection-bar button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
-.selection-panel{position:fixed;z-index:225;top:52px;right:0;bottom:0;width:min(400px,36vw);display:flex;flex-direction:column;border-left:1px solid var(--line-strong);background:var(--surface-wash),color-mix(in srgb,var(--canvas) 96%,transparent);backdrop-filter:blur(24px) saturate(1.15);-webkit-backdrop-filter:blur(24px) saturate(1.15);box-shadow:inset 1px 0 0 var(--rim),var(--shadow-float);animation:selection-slide .16s ease-out}
+.selection-panel{position:fixed;z-index:225;top:52px;right:0;bottom:0;width:min(400px,36vw);display:flex;flex-direction:column;border-left:1px solid var(--line-strong);background:var(--surface-wash),color-mix(in srgb,var(--canvas) 96%,transparent);backdrop-filter:blur(24px) saturate(1.15);-webkit-backdrop-filter:blur(24px) saturate(1.15);box-shadow:inset 1px 0 0 var(--rim),var(--shadow-float);animation:selection-slide var(--duration-160) ease-out}
 .selection-panel[hidden]{display:none!important}
-.selection-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 16px 12px;border-bottom:1px solid var(--line)}
-.selection-heading h2{margin:0;font-size:13px;font-weight:600;letter-spacing:-.02em;overflow-wrap:anywhere;min-width:0}
-.selection-heading button{display:grid;place-items:center;width:26px;height:26px;flex:0 0 auto;min-height:0;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:18px;padding:0}
+.selection-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--space-10);padding:var(--space-15) var(--space-16) var(--space-12);border-bottom:1px solid var(--line)}
+.selection-heading h2{margin:0;font-size:var(--font-size-13);font-weight:var(--font-weight-600);letter-spacing:var(--tracking-tight);overflow-wrap:anywhere;min-width:0}
+.selection-heading button{display:grid;place-items:center;width:26px;height:26px;flex:0 0 auto;min-height:0;border:0;border-radius:var(--radius-7);background:transparent;color:var(--muted);font-size:var(--font-size-18);padding:0}
 .selection-heading button:hover{background:var(--panel-hover);color:var(--text)}
-.selection-output{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:14px 16px;font-size:13px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
-.selection-output:empty::before{content:'正在读取选中内容…';color:var(--faint);font-size:12px}
-.selection-actions{display:flex;align-items:center;gap:8px;padding:11px 16px;border-top:1px solid var(--line)}
-.selection-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:6px 12px;border:1px solid var(--line-strong);border-radius:9px;background:var(--panel-raised);color:var(--text);font-size:12px;font-weight:500;box-shadow:var(--shadow-button);white-space:nowrap}
+.selection-output{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:var(--space-14) var(--space-16);font-size:var(--font-size-13);line-height:var(--leading-175);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+.selection-output:empty::before{content:'正在读取选中内容…';color:var(--faint);font-size:var(--font-size-12)}
+.selection-actions{display:flex;align-items:center;gap:var(--space-8);padding:var(--space-11) var(--space-16);border-top:1px solid var(--line)}
+.selection-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:var(--space-6) var(--space-12);border:1px solid var(--line-strong);border-radius:var(--radius-9);background:var(--panel-raised);color:var(--text);font-size:var(--font-size-12);font-weight:var(--font-weight-500);box-shadow:var(--shadow-button);white-space:nowrap}
 .selection-actions button:hover:not(:disabled){background:var(--panel-hover)}
 .selection-actions button:disabled{opacity:.55;cursor:default}
 .selection-actions #selectionInsert{margin-left:auto}

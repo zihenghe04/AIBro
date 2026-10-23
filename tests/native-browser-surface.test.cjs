@@ -86,7 +86,9 @@ test('workspace navigation preference follows explicit destinations and retains 
  const successfulSearch=main.slice(main.indexOf('private func revealSearchDestination'),main.indexOf('func consumeSearchSelection'));
  assert.match(successfulSearch,/compactWorkspacePreferred=true/);
  assert.match(main,/NativeBrowserWorkspace[^\n]+compactWorkspacePreferred:model\.compactWorkspacePreferred/);
- assert.match(main,/if compactBrowserLayout && !model\.browser\.tabs\.isEmpty/);
+ assert.match(main,/if !model\.browser\.tabs\.isEmpty && \(!model\.browser\.visible \|\| \(compactBrowserLayout && model\.compactWorkspacePreferred\)\) \{ ToolbarItem/,'a hidden browser with open tabs stays reachable in wide windows too');
+ assert.doesNotMatch(main,/if compactBrowserLayout && !model\.browser\.tabs\.isEmpty/,'the way back is not limited to compact layouts');
+ assert.match(main,/browserPresence=browser\.\$visible\.combineLatest\(browser\.\$tabs\.map\(\\\.isEmpty\)\)[^\n]*self\?\.objectWillChange\.send\(\)/,'the main toolbar redraws when the browser is hidden or its last tab closes');
  assert.match(main,/Button \{model\.browser\.visible=true\} label:\{Label\(nativeUI\("返回浏览器"/);
  const browser=fs.readFileSync(path.join(__dirname,'../native/Sources/AIBro/NativeBrowser.swift'),'utf8');
  assert.match(browser,/action == "snapshot"[^\n]+tab\.web\.isHiddenOrHasHiddenAncestor[^\n]+NOT_VISIBLE/);

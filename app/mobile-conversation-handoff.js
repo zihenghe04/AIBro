@@ -14,7 +14,7 @@
 .mobile-conversation-handoff .mobile-handoff-event{border-top:1px solid var(--line);min-width:0}
 .mobile-conversation-handoff .mobile-handoff-event>summary{padding:8px 0}
 .mobile-conversation-handoff pre{box-sizing:border-box;max-width:100%;max-height:240px;overflow:auto;margin:6px 0 12px;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);font:inherit;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}
-.mobile-conversation-handoff .mobile-handoff-error{color:var(--danger,var(--text))}
+.mobile-conversation-handoff .mobile-handoff-error{color:var(--danger)}
 `;
   const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
   function printable(value) {

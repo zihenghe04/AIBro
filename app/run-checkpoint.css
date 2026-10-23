@@ -1,20 +1,20 @@
 /* The checkpoint is a controlled Kit island; native/app theme tokens remain authoritative. */
 .run-checkpoint-card{min-width:0;max-width:100%;container-type:inline-size;color:var(--text)}
-.run-checkpoint-card .run-checkpoint-heading{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;min-width:0}
+.run-checkpoint-card .run-checkpoint-heading{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:var(--space-8) var(--space-12);min-width:0}
 .run-checkpoint-card .run-checkpoint-status{flex:1 1 180px;min-width:0}
-.run-checkpoint-card .run-checkpoint-heading h4{margin:0;font-size:13px;font-weight:600;line-height:1.65;color:var(--text);overflow-wrap:anywhere}
-.run-checkpoint-card .run-checkpoint-progress{display:block;font-size:11px;line-height:1.65;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
-.run-checkpoint-card .run-checkpoint-description{margin:8px 0 0;font-size:12px;line-height:1.8;color:var(--muted);overflow-wrap:anywhere}
-.run-checkpoint-card .run-checkpoint-metadata{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:11px;line-height:1.65;color:var(--muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.run-checkpoint-card .run-checkpoint-error{margin:10px 0 0;padding:9px 11px;border:1px solid color-mix(in srgb,var(--red) 35%,var(--line));border-radius:8px;background:color-mix(in srgb,var(--red) 5%,var(--panel));color:var(--red);font-size:12px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
-.run-checkpoint-card .run-checkpoint-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px;min-width:0}
+.run-checkpoint-card .run-checkpoint-heading h4{margin:0;font-size:var(--font-size-13);font-weight:var(--font-weight-600);line-height:var(--leading-165);color:var(--text);overflow-wrap:anywhere}
+.run-checkpoint-card .run-checkpoint-progress{display:block;font-size:var(--font-size-11);line-height:var(--leading-165);color:var(--muted);margin-top:var(--space-3);overflow-wrap:anywhere}
+.run-checkpoint-card .run-checkpoint-description{margin:var(--space-8) 0 0;font-size:var(--font-size-12);line-height:var(--leading-180);color:var(--muted);overflow-wrap:anywhere}
+.run-checkpoint-card .run-checkpoint-metadata{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-4) var(--space-12);margin-top:var(--space-8);font-size:var(--font-size-11);line-height:var(--leading-165);color:var(--muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.run-checkpoint-card .run-checkpoint-error{margin:var(--space-10) 0 0;padding:var(--space-9) var(--space-11);border:1px solid color-mix(in srgb,var(--red) 35%,var(--line));border-radius:var(--radius-8);background:color-mix(in srgb,var(--red) 5%,var(--panel));color:var(--red);font-size:var(--font-size-12);line-height:var(--leading-175);white-space:pre-wrap;overflow-wrap:anywhere}
+.run-checkpoint-card .run-checkpoint-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-8);margin-top:var(--space-12);min-width:0}
 .run-checkpoint-card .run-checkpoint-actions>button{max-width:100%;min-width:0;overflow-wrap:anywhere}
 .run-checkpoint-card[data-checkpoint-phase=committed] .run-checkpoint-heading{align-items:center}
-.run-checkpoint-card[data-checkpoint-phase=committed] .run-checkpoint-actions{margin-top:6px}
+.run-checkpoint-card[data-checkpoint-phase=committed] .run-checkpoint-actions{margin-top:var(--space-6)}
 @container(max-width:340px){.run-checkpoint-card .run-checkpoint-actions>button{width:100%}.run-checkpoint-card .run-checkpoint-status{flex-basis:100%}}
 body.reduce-motion .run-checkpoint-card *,body.reduce-motion .run-checkpoint-card *::before,body.reduce-motion .run-checkpoint-card *::after{animation:none!important;transition:none!important}
 @media(prefers-reduced-motion:reduce){.run-checkpoint-card *,.run-checkpoint-card *::before,.run-checkpoint-card *::after{animation:none!important;transition:none!important}}
 
-.run-checkpoint-saved{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;padding:8px 0;margin-top:8px;border-top:1px solid var(--line)}
-.run-checkpoint-saved-count{font-size:11px;color:var(--muted);line-height:1.6}
+.run-checkpoint-saved{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-6) var(--space-12);padding:var(--space-8) 0;margin-top:var(--space-8);border-top:1px solid var(--line)}
+.run-checkpoint-saved-count{font-size:var(--font-size-11);color:var(--muted);line-height:var(--leading-160)}
 .run-checkpoint-saved>button{margin-left:auto;max-width:100%}

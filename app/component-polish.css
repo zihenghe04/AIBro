@@ -2,74 +2,74 @@
    Extends existing tokens; no document, permission or save behavior lives here. */
 
 /* Mode switches stay quiet; Save remains the single emphasized document action. */
-body[data-view] :is(.note-document-toolbar,.local-document-toolbar){column-gap:4px;row-gap:8px}
-body[data-view] :is(.note-document-toolbar>[data-note-action=rich],.note-document-toolbar>[data-note-action=edit],.note-document-toolbar>[data-note-action=preview],.local-document-toolbar>[data-local-document-mode]){border-color:transparent;background:transparent;box-shadow:none;min-height:30px;padding-inline:9px;color:var(--muted)}
-body[data-view] :is(.note-document-toolbar>[data-note-action],.local-document-toolbar>[data-local-document-mode])[aria-pressed=true]{background:var(--accent-soft);border-color:var(--line);color:var(--text);box-shadow:0 1px 2px #00000005}
+body[data-view] :is(.note-document-toolbar,.local-document-toolbar){column-gap:var(--space-4);row-gap:var(--space-8)}
+body[data-view] :is(.note-document-toolbar>[data-note-action=rich],.note-document-toolbar>[data-note-action=edit],.note-document-toolbar>[data-note-action=preview],.local-document-toolbar>[data-local-document-mode]){border-color:transparent;background:transparent;box-shadow:none;min-height:30px;padding-inline:var(--space-9);color:var(--muted)}
+body[data-view] :is(.note-document-toolbar>[data-note-action],.local-document-toolbar>[data-local-document-mode])[aria-pressed=true]{background:var(--accent-soft);border-color:var(--line);color:var(--text);box-shadow:0 1px 2px var(--black-a2)}
 body[data-view] :is(.note-document-toolbar>[data-note-action=cancel],.local-document-toolbar>[data-local-document-action=reload]){background:transparent;border-color:transparent;box-shadow:none;color:var(--muted)}
 body[data-view] :is(.note-document-toolbar,.local-document-toolbar)>button:hover:not(:disabled){background:var(--panel-hover);color:var(--text);border-color:var(--line);box-shadow:none}
-body[data-view] :is(.note-document-toolbar>[data-note-action=save],.local-document-toolbar>[data-local-document-action=save]){background:var(--accent-solid);border-color:var(--accent-solid);color:var(--workbench-on-accent,#fff);box-shadow:none;min-height:30px}
+body[data-view] :is(.note-document-toolbar>[data-note-action=save],.local-document-toolbar>[data-local-document-action=save]){background:var(--accent-solid);border-color:var(--accent-solid);color:var(--workbench-on-accent,var(--color-white));box-shadow:none;min-height:30px}
 .note-document-count,.local-document-count{white-space:nowrap;font-variant-numeric:tabular-nums}
 
 /* Paragraph / inline formatting / insertion are distinct without extra wrappers. */
-body[data-view] .markdown-editor-toolbar{gap:2px;padding:6px;background:var(--panel-hover);border-color:var(--line);box-shadow:none;margin-bottom:18px}
-body[data-view] .markdown-editor-toolbar .markdown-editor-button{min-width:28px;min-height:30px;padding:4px 7px;box-shadow:none;border:0;background:transparent;color:var(--muted);transition:background .14s,color .14s}
+body[data-view] .markdown-editor-toolbar{gap:var(--space-2);padding:var(--space-6);background:var(--panel-hover);border-color:var(--line);box-shadow:none;margin-bottom:var(--space-18)}
+body[data-view] .markdown-editor-toolbar .markdown-editor-button{min-width:28px;min-height:30px;padding:var(--space-4) var(--space-7);box-shadow:none;border:0;background:transparent;color:var(--muted);transition:background var(--duration-140),color var(--duration-140)}
 body[data-view] .markdown-editor-toolbar .markdown-editor-button:hover:not(:disabled){background:var(--panel);color:var(--text)}
-body[data-view] .markdown-editor-toolbar .markdown-editor-format{min-height:30px;max-width:108px;margin-right:6px;padding-left:8px;color:var(--text);font-size:11px}
-body[data-view] .markdown-editor-toolbar .markdown-editor-button:nth-last-of-type(1){position:relative;margin-left:8px}
+body[data-view] .markdown-editor-toolbar .markdown-editor-format{min-height:30px;max-width:108px;margin-right:var(--space-6);padding-left:var(--space-8);color:var(--text);font-size:var(--font-size-11)}
+body[data-view] .markdown-editor-toolbar .markdown-editor-button:nth-last-of-type(1){position:relative;margin-left:var(--space-8)}
 body[data-view] .markdown-editor-toolbar .markdown-editor-button:nth-last-of-type(1)::before{content:'';position:absolute;left:-5px;top:7px;bottom:7px;width:1px;background:var(--line-strong);pointer-events:none}
-body[data-view] .markdown-editor-toolbar .markdown-editor-hint{font-size:10px;line-height:1.5;color:var(--faint);padding-inline:6px}
-body[data-view] .markdown-editor-locked-label{font-size:10px;letter-spacing:.01em}
-body[data-view] .markdown-editor-source{min-height:28px;padding-inline:7px;white-space:nowrap}
+body[data-view] .markdown-editor-toolbar .markdown-editor-hint{font-size:var(--font-size-10);line-height:var(--leading-150);color:var(--faint);padding-inline:var(--space-6)}
+body[data-view] .markdown-editor-locked-label{font-size:var(--font-size-10);letter-spacing:.01em}
+body[data-view] .markdown-editor-source{min-height:28px;padding-inline:var(--space-7);white-space:nowrap}
 
 /* A folder is a folder at every depth; indentation provides the hierarchy. */
-.project-files-folder>summary{gap:7px;min-height:31px;padding-inline:5px;color:var(--muted);user-select:none}
+.project-files-folder>summary{gap:var(--space-7);min-height:31px;padding-inline:var(--space-5);color:var(--muted);user-select:none}
 .project-files-folder>summary>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.project-files-folder>summary::before{font-size:0;width:5px;height:5px;box-sizing:border-box;margin:0 2px 0 1px;border-right:1px solid currentColor;border-top:1px solid currentColor;transform:rotate(45deg)}
+.project-files-folder>summary::before{font-size:0;width:5px;height:5px;box-sizing:border-box;margin:0 var(--space-2) 0 var(--space-1);border-right:1px solid currentColor;border-top:1px solid currentColor;transform:rotate(45deg)}
 .project-files-folder[open]>summary::before{transform:rotate(135deg)}
-.project-folder-icon{position:relative;display:inline-block;flex:0 0 12px;width:12px;height:9px;margin:2px 1px 0;font-size:0;line-height:0;border:1px solid currentColor;border-radius:2px;opacity:.75}
-.project-folder-icon::before{content:'';position:absolute;left:-1px;top:-4px;width:6px;height:3px;border:1px solid currentColor;border-bottom:0;border-radius:2px 2px 0 0}
-.project-files-children{border-color:color-mix(in srgb,var(--line-strong) 55%,transparent);padding-left:5px}
-.project-file-row{min-height:32px;gap:7px;position:relative;transition:background .14s,color .14s}
+.project-folder-icon{position:relative;display:inline-block;flex:0 0 12px;width:12px;height:9px;margin:var(--space-2) var(--space-1) 0;font-size:0;line-height:0;border:1px solid currentColor;border-radius:var(--radius-2);opacity:.75}
+.project-folder-icon::before{content:'';position:absolute;left:-1px;top:-4px;width:6px;height:3px;border:1px solid currentColor;border-bottom:0;border-radius:var(--radius-2) var(--radius-2) 0 0}
+.project-files-children{border-color:color-mix(in srgb,var(--line-strong) 55%,transparent);padding-left:var(--space-5)}
+.project-file-row{min-height:32px;gap:var(--space-7);position:relative;transition:background var(--duration-140),color var(--duration-140)}
 .project-file-icon{font:10px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;width:17px;letter-spacing:-.04em}
-.project-file-kind{font-size:9px;line-height:1.5;padding:1px 4px;border-radius:3px;background:var(--panel-hover);color:var(--faint)}
+.project-file-kind{font-size:var(--font-size-9);line-height:var(--leading-150);padding:var(--space-1) var(--space-4);border-radius:var(--radius-3);background:var(--panel-hover);color:var(--faint)}
 .project-file-row[aria-current=true]{background:var(--accent-soft);color:var(--text);box-shadow:inset 2px 0 var(--accent)}
 .project-file-row[aria-current=true] .project-file-icon{color:var(--accent)}
-.project-file-row[aria-current=true] .project-file-name{font-weight:550}
-.project-file-row:focus-visible,.project-files-folder>summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px;z-index:1}
-.project-files-search{min-height:32px;box-shadow:none;transition:border-color .14s,box-shadow .14s}
+.project-file-row[aria-current=true] .project-file-name{font-weight:var(--font-weight-550)}
+.project-file-row:focus-visible,.project-files-folder>summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px;z-index:var(--z-1)}
+.project-files-search{min-height:32px;box-shadow:none;transition:border-color var(--duration-140),box-shadow var(--duration-140)}
 .project-files-search:focus-visible{outline:0;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
-.project-files-refresh{flex:0 0 30px;min-height:32px;border-radius:6px}
+.project-files-refresh{flex:0 0 30px;min-height:32px;border-radius:var(--radius-6)}
 .project-files-refresh:hover{background:var(--panel-hover);color:var(--text)}
 .project-files-refresh:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.project-files-more{min-height:30px;padding:5px 8px;border-radius:5px}
+.project-files-more{min-height:30px;padding:var(--space-5) var(--space-8);border-radius:var(--radius-5)}
 .project-files-more:hover{background:var(--accent-soft)}
 .project-files-more:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.project-files-hint{margin:12px 5px 8px;font-size:10px;line-height:1.7;color:var(--faint)}
-.project-files-tree>.project-files-status{margin:12px 0;padding:16px 10px;border:1px dashed var(--line-strong);border-radius:7px;background:var(--panel-hover);font-size:11px;text-align:center;color:var(--muted);line-height:1.7}
+.project-files-hint{margin:var(--space-12) var(--space-5) var(--space-8);font-size:var(--font-size-10);line-height:var(--leading-170);color:var(--faint)}
+.project-files-tree>.project-files-status{margin:var(--space-12) 0;padding:var(--space-16) var(--space-10);border:1px dashed var(--line-strong);border-radius:var(--radius-7);background:var(--panel-hover);font-size:var(--font-size-11);text-align:center;color:var(--muted);line-height:var(--leading-170)}
 .project-files-records:empty{display:none}
 
 /* Capabilities are metadata, not a row of primary controls. */
-.request-capabilities{gap:4px}
-.request-capabilities span{display:inline-flex;align-items:center;max-width:100%;overflow-wrap:anywhere;padding:3px 6px;background:var(--panel-hover);border:1px solid var(--line);color:var(--muted);font-size:10px;line-height:1.4;border-radius:4px}
-.request-evidence-row{gap:8px;line-height:1.6}
-.request-evidence-row>strong{font-size:11px;font-weight:600;letter-spacing:-.015em}
-.request-sources summary,.workspace-capability-notice summary{min-height:28px;padding-block:4px}
+.request-capabilities{gap:var(--space-4)}
+.request-capabilities span{display:inline-flex;align-items:center;max-width:100%;overflow-wrap:anywhere;padding:var(--space-3) var(--space-6);background:var(--panel-hover);border:1px solid var(--line);color:var(--muted);font-size:var(--font-size-10);line-height:var(--leading-140);border-radius:var(--radius-4)}
+.request-evidence-row{gap:var(--space-8);line-height:var(--leading-160)}
+.request-evidence-row>strong{font-size:var(--font-size-11);font-weight:var(--font-weight-600);letter-spacing:-.015em}
+.request-sources summary,.workspace-capability-notice summary{min-height:28px;padding-block:var(--space-4)}
 .request-sources summary:hover,.workspace-capability-notice summary:hover{color:var(--text)}
-.request-sources summary:focus-visible,.workspace-capability-notice summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
-.request-sources li{padding:8px 0;line-height:1.6}
+.request-sources summary:focus-visible,.workspace-capability-notice summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-3)}
+.request-sources li{padding:var(--space-8) 0;line-height:var(--leading-160)}
 .request-sources small{font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
-.workspace-empty{padding:20px 10px;line-height:1.7}
-.workspace-empty strong{font-size:12px;font-weight:600}
-.workspace-empty p{font-size:11px;margin:8px 0 14px}
-.workspace-empty button{min-height:32px;font-size:11px;box-shadow:none}
+.workspace-empty{padding:var(--space-20) var(--space-10);line-height:var(--leading-170)}
+.workspace-empty strong{font-size:var(--font-size-12);font-weight:var(--font-weight-600)}
+.workspace-empty p{font-size:var(--font-size-11);margin:var(--space-8) 0 var(--space-14)}
+.workspace-empty button{min-height:32px;font-size:var(--font-size-11);box-shadow:none}
 
 /* The footer keeps export and deletion; the editor already has its own entry. */
 #previewDialog:has(.note-document:is([data-mode=rich],[data-mode=edit])) #editPreviewNote{display:none}
-#previewDialog:has(.note-document)>.dialog-actions,#previewDialog:has(.note-document)>.reader-document-frame>.dialog-actions{gap:6px}
+#previewDialog:has(.note-document)>.dialog-actions,#previewDialog:has(.note-document)>.reader-document-frame>.dialog-actions{gap:var(--space-6)}
 body[data-view] #previewDialog:has(.note-document) #previewDelete{border-color:transparent;background:transparent;box-shadow:none;opacity:.8}
 body[data-view] #previewDialog:has(.note-document) #previewDelete:hover{background:color-mix(in srgb,var(--red,#b54a4d) 8%,transparent);opacity:1}
 
-@container (max-width:390px){.note-document-count{flex:0 1 auto;margin-left:2px;font-size:9px}body[data-view] .note-document-toolbar>[data-note-action]{padding-inline:7px}.markdown-editor-toolbar .markdown-editor-hint{display:none}}
+@container (max-width:390px){.note-document-count{flex:0 1 auto;margin-left:var(--space-2);font-size:var(--font-size-9)}body[data-view] .note-document-toolbar>[data-note-action]{padding-inline:var(--space-7)}.markdown-editor-toolbar .markdown-editor-hint{display:none}}
 @container (max-width:340px){body[data-view] .note-document-toolbar{display:grid;grid-template-columns:repeat(3,max-content) minmax(0,1fr)}.note-document-toolbar>.note-document-count{grid-column:4;margin:0;justify-self:end}.note-document-toolbar>[data-note-action=cancel]{grid-column:3;grid-row:2}.note-document-toolbar>[data-note-action=save]{grid-column:4;grid-row:2;justify-self:end}}
 @media(prefers-reduced-motion:reduce){.project-file-row,.project-files-search,body[data-view] .markdown-editor-toolbar .markdown-editor-button{transition:none}}
 body.reduce-motion :is(.project-file-row,.project-files-search),body.reduce-motion .markdown-editor-toolbar .markdown-editor-button{transition:none}

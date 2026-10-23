@@ -1,31 +1,31 @@
-.kit-library-toolbar{display:flex;flex-wrap:wrap;min-width:0;margin-bottom:14px;gap:8px;align-items:center}
+.kit-library-toolbar{display:flex;flex-wrap:wrap;min-width:0;margin-bottom:var(--space-14);gap:var(--space-8);align-items:center}
 .kit-library-search{flex:1 1 210px;min-width:140px}
 .kit-library-type{flex:0 1 132px;min-width:110px;max-width:100%}
 .kit-library-toolbar .kit-segments{flex:none}
-.kit-library-toolbar .kit-segments button{min-height:32px!important;padding:6px 9px!important;font-size:12px!important}
+.kit-library-toolbar .kit-segments button{min-height:32px!important;padding:var(--space-6) var(--space-9)!important;font-size:var(--font-size-12)!important}
 .kit-library-toolbar .collection-count{white-space:nowrap;margin-left:auto}
 .kit-library-action{display:inline-flex;flex:none;margin:0!important}
-.kit-library-batch{gap:8px;padding:12px;animation:none}
-.kit-selection-count{font-size:12px;font-weight:550;margin-right:auto}
+.kit-library-batch{gap:var(--space-8);padding:var(--space-12);animation:none}
+.kit-selection-count{font-size:var(--font-size-12);font-weight:var(--font-weight-550);margin-right:auto}
 .kit-library-batch [data-cui-delete-selected]{color:var(--red)!important}
-.kit-library-empty{border:1px dashed var(--line-strong);border-radius:12px;background:var(--panel)}
-.kit-library-empty>div{padding:32px 20px!important}
+.kit-library-empty{border:1px dashed var(--line-strong);border-radius:var(--radius-12);background:var(--panel)}
+.kit-library-empty>div{padding:32px var(--space-20)!important}
 #projectMetrics[data-halaska-root]{display:block;container-type:inline-size}
-#projectMetrics>.kit-project-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:0;background:transparent;border:0;box-shadow:none}
+#projectMetrics>.kit-project-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-10);padding:0;background:transparent;border:0;box-shadow:none}
 .kit-project-metrics>div{min-width:0;overflow:hidden}
-.kit-project-metrics>div>div:nth-child(2){margin-top:8px;overflow-wrap:anywhere}
-.kit-project-progress{margin-top:10px}
-.workspace-project-tabs.kit-workspace-tabs{align-items:center;gap:12px}
+.kit-project-metrics>div>div:nth-child(2){margin-top:var(--space-8);overflow-wrap:anywhere}
+.kit-project-progress{margin-top:var(--space-10)}
+.workspace-project-tabs.kit-workspace-tabs{align-items:center;gap:var(--space-12)}
 .kit-workspace-tabs>.kit-workspace-tabs-host{min-width:0;flex:1}
 .kit-workspace-tabs .kit-tabs>div{border-bottom:0!important}
-.kit-workspace-tabs .kit-tabs button{padding:8px 12px!important;font-size:12px!important}
+.kit-workspace-tabs .kit-tabs button{padding:var(--space-8) var(--space-12)!important;font-size:var(--font-size-12)!important}
 .kit-workspace-tabs .workspace-chat-list{flex:none}
 @container (max-width:700px){.kit-project-metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 @container collection (max-width:640px){.kit-library-search{flex:1 0 100%;min-width:0}}
-@container collection (max-width:360px){.kit-library-toolbar{gap:6px}.kit-library-toolbar .kit-segments{order:4}.kit-library-type{flex-basis:115px}.kit-library-toolbar .collection-count{order:5}.kit-library-batch .kit-library-action{max-width:100%}}
-@media(max-width:680px){.kit-workspace-tabs{flex-wrap:wrap}.kit-workspace-tabs .kit-tabs button{padding:8px!important}}
+@container collection (max-width:360px){.kit-library-toolbar{gap:var(--space-6)}.kit-library-toolbar .kit-segments{order:4}.kit-library-type{flex-basis:115px}.kit-library-toolbar .collection-count{order:5}.kit-library-batch .kit-library-action{max-width:100%}}
+@media(max-width:680px){.kit-workspace-tabs{flex-wrap:wrap}.kit-workspace-tabs .kit-tabs button{padding:var(--space-8)!important}}
 
-.kit-project-source-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;max-width:100%}
+.kit-project-source-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-6);min-width:0;max-width:100%}
 .kit-project-source-actions>button{min-width:0!important;max-width:100%;white-space:normal!important;overflow-wrap:anywhere}
 .kit-project-source-actions>button>span{min-width:0;white-space:normal;overflow-wrap:anywhere}
 .kit-library-toolbar .kit-library-action{max-width:100%;min-width:0}

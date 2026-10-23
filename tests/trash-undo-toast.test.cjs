@@ -16,8 +16,8 @@ function fixture() {
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {},
     restoreTrash: id => { restored.push(id); state.trash = state.trash.filter(entry => entry.id !== id); } };
   vm.createContext(context); vm.runInContext(block, context);
-  const box = () => doc.getElementById('toast');
-  return { context, state, restored, timers, box, action: () => box().querySelector('.toast-action') };
+  const box = () => doc.getElementById('actionToast'), plain = () => doc.getElementById('toast');
+  return { context, state, restored, timers, box, plain, action: () => box()?.querySelector('.toast-action') ?? null };
 }
 
 test('a deletion toast offers one Undo that restores exactly that trash entry and reopens it', () => {
@@ -27,7 +27,8 @@ test('a deletion toast offers one Undo that restores exactly that trash entry an
   assert.equal(h.timers.at(-1).ms, 6000, 'an actionable toast stays long enough to reach');
   h.action().click();
   assert.deepEqual(h.restored, ['trash-1']); assert.equal(reopened, 1);
-  assert.equal(h.state.trash.length, 1); assert.match(h.box().textContent, /已撤销/);
+  assert.equal(h.state.trash.length, 1); assert.match(h.plain().textContent, /已撤销/);
+  assert.equal(h.box().classList.contains('visible'), false, 'the undo toast closes once used');
   assert.equal(h.action(), null, 'the confirmation has no second action');
 });
 
@@ -36,13 +37,28 @@ test('Undo after the entry left the trash reports it instead of restoring anythi
   h.context.undoTrashToast('已将 1 项内容移入回收站', entry);
   h.state.trash = h.state.trash.filter(item => item !== entry);
   h.action().click();
-  assert.deepEqual(h.restored, []); assert.match(h.box().textContent, /无法撤销/);
+  assert.deepEqual(h.restored, []); assert.match(h.plain().textContent, /无法撤销/);
 });
 
-test('a plain toast stays plain and a later toast drops a stale Undo', () => {
+test('a later plain toast shows beside the Undo instead of replacing it', () => {
   const h = fixture();
   h.context.undoTrashToast('已移入回收站', h.state.trash[0]);
   h.context.toast('另一条提示');
-  assert.equal(h.action(), null); assert.equal(h.timers.at(-1).ms, 2300);
-  assert.equal(h.box().classList.contains('has-action'), false);
+  assert.equal(h.plain().textContent, '另一条提示'); assert.equal(h.plain().querySelector('.toast-action'), null, 'a plain toast stays plain');
+  assert.equal(h.timers.at(-1).ms, 2300);
+  assert.equal(h.action().textContent, '撤销', 'the Undo survives the later toast');
+  assert.ok(h.box().classList.contains('visible') && h.box().classList.contains('stacked'), 'the Undo moves up beside the plain toast');
+  h.timers.at(-1).fn();
+  assert.equal(h.plain().classList.contains('visible'), false);
+  assert.equal(h.box().classList.contains('stacked'), false, 'back in place once the plain toast is gone');
+  h.action().click(); assert.deepEqual(h.restored, ['trash-1']);
+});
+
+test('the Undo expires on its own timer; a newer Undo replaces an older one', () => {
+  const h = fixture();
+  h.context.undoTrashToast('第一条', h.state.trash[0]);
+  h.context.undoTrashToast('第二条', h.state.trash[1]);
+  assert.match(h.box().textContent, /第二条/); assert.equal(h.box().querySelectorAll('.toast-action').length, 1);
+  h.timers.filter(timer => timer.ms === 6000).at(-1).fn();
+  assert.equal(h.box().classList.contains('visible'), false); assert.equal(h.action(), null);
 });

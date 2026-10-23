@@ -34,7 +34,7 @@ async function run(){
    {id:'qa_find_b',title:'第二条对话（更旧）',workspace:'日常',permissionMode:'auto',attachments:[],draftAttachmentIds:[],draft:'',createdAt:now-99000,updatedAt:now-99000,messages:[]}
   ];
   state.currentConversationId='qa_find_a';state.settings.permissions={'日常':'auto','课程':'auto','科研':'auto'};
-  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','持续对话');renderAll();
+  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','对话');renderAll();
   // 在真实消息列表里补一个收起的折叠块——模拟深度思考/工具记录展开前的状态。
   const fold=document.createElement('div');fold.className='message-wrap agent-message';
   fold.innerHTML='<div class="message-body"><details class="qa-fold"><summary>展开看看</summary><div>量子纠缠观测记录</div></details></div>';

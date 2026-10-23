@@ -27,7 +27,7 @@ async function run(){
   const text=['示例：','',fence+'js','const total = 1 + 2;',fence].join('\\n');
   state.conversations=[{id:'qa_keep',title:'保留的对话',workspace:'日常',attachments:[],draftAttachmentIds:[],draft:'',createdAt:now,updatedAt:now,messages:[{id:'u0',role:'user',at:now,text:'写段代码'},{id:'m1',role:'assistant',at:now,text}]},
    {id:'qa_drop',title:'要删除的对话',workspace:'日常',attachments:[],draftAttachmentIds:[],draft:'',createdAt:now-5,updatedAt:now-5,messages:[{id:'u1',role:'user',at:now,text:'临时'}]}];
-  state.currentConversationId='qa_keep';normalizeStateShape(state);state.ui.workspaceTour={status:'skipped',at:now};state.ui.inspectorOpen=false;save();showView('agent','持续对话');renderAll();
+  state.currentConversationId='qa_keep';normalizeStateShape(state);state.ui.workspaceTour={status:'skipped',at:now};state.ui.inspectorOpen=false;save();showView('agent','对话');renderAll();
   document.querySelector('#onboardingLayer')?.remove();})()`);
  await evaluate(`(()=>{if(window.WorkspaceTour?.isOpen?.())window.WorkspaceTour.close('skipped');return !window.WorkspaceTour?.isOpen?.();})()`);
  await wait(800);
@@ -45,10 +45,13 @@ async function run(){
 
  await step('删除对话后 toast 提供撤销，撤销恢复同一条对话且回收站清空',async()=>{
   const before=await evaluate(`(()=>{const original=window.confirm;window.confirm=()=>true;manageTarget={kind:'conversation',id:'qa_drop'};deleteManagedItem();window.confirm=original;
-   const box=document.getElementById('toast');return {gone:!state.conversations.some(c=>c.id==='qa_drop'),trash:state.trash.length,text:box.textContent,action:box.querySelector('.toast-action')?.textContent,
+   const box=document.getElementById('actionToast');return {gone:!state.conversations.some(c=>c.id==='qa_drop'),trash:state.trash.length,text:box.textContent,action:box.querySelector('.toast-action')?.textContent,
     clickable:getComputedStyle(box).pointerEvents};})()`);
   assert.equal(before.gone,true);assert.equal(before.trash,1);assert.equal(before.action,'撤销');assert.equal(before.clickable,'auto');
-  const after=await evaluate(`(()=>{document.querySelector('#toast .toast-action').click();return {back:state.conversations.some(c=>c.id==='qa_drop'),trash:state.trash.length,text:document.getElementById('toast').textContent};})()`);
+  const beside=await evaluate(`(()=>{toast('另一条普通提示');const held=document.getElementById('actionToast'),plain=document.getElementById('toast'),a=held.getBoundingClientRect(),b=plain.getBoundingClientRect();
+   return {undo:held.querySelector('.toast-action')?.textContent,plain:plain.textContent,apart:a.bottom<=b.top+1};})()`);
+  assert.equal(beside.undo,'撤销','后来的普通提示不顶掉撤销');assert.equal(beside.plain,'另一条普通提示');assert.equal(beside.apart,true,'撤销框在普通提示上方，不重叠');
+  const after=await evaluate(`(()=>{document.querySelector('#actionToast .toast-action').click();return {back:state.conversations.some(c=>c.id==='qa_drop'),trash:state.trash.length,text:document.getElementById('toast').textContent};})()`);
   assert.equal(after.back,true);assert.equal(after.trash,0);assert.match(after.text,/已撤销/);
  });
 

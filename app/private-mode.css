@@ -1,13 +1,13 @@
 /* 无痕模式状态条（§1.10）：明确告知"用完即焚"，而不是让它看起来像故障。 */
 .private-mode-strip {
-  margin: 0 0 6px;
-  padding: 7px 10px 7px 12px;
+  margin: 0 0 var(--space-6);
+  padding: var(--space-7) var(--space-10) var(--space-7) var(--space-12);
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: var(--surface-wash);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--font-size-12);
+  line-height: var(--leading-155);
 }
 
 .private-mode-strip[hidden] { display: none; }

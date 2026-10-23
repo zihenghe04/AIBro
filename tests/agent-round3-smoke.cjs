@@ -27,7 +27,7 @@ async function run(){
   state.projects=[];state.notes=[];state.tasks=[];state.imports=[];state.agentRuns=[];
   state.conversations=[{id:'qa_r3',title:'隔离验收 · 第 3 轮',workspace:'日常',permissionMode:'auto',attachments:[],draftAttachmentIds:[],draft:'',createdAt:now,updatedAt:now,messages:[]}];
   state.currentConversationId='qa_r3';state.settings.permissions={'日常':'auto','课程':'auto','科研':'auto'};
-  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','持续对话');renderAll();})()`);
+  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','对话');renderAll();})()`);
  await wait(500);
 
  await step('快捷键面板：⌘/ 打开，分组与条目按清单渲染，再按一次关闭',async()=>{

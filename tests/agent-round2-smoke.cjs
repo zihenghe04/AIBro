@@ -31,7 +31,7 @@ async function run(){
     {id:'small_msg',role:'agent',at:now,text:'这条是普通长度的回复，应当照常渲染。'}
   ]}];
   state.currentConversationId='qa_r2';state.settings.permissions={'日常':'auto','课程':'auto','科研':'auto'};
-  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','持续对话');renderAll();})()`);
+  normalizeStateShape(state);state.ui.inspectorOpen=false;save();applyUiPreferences();showView('agent','对话');renderAll();})()`);
  await wait(500);
 
  await step('大回复安全预览：超大回复先给有界纯文本，并如实说明还有多少未渲染',async()=>{

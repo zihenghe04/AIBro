@@ -11,9 +11,9 @@ function harness(extra = {}, kind = 'project') {
     tasks: [], notes: [], papers: [], imports: [], attachments: [], agentRuns: [], links: [], trash: [],
     currentConversationId: 'research-chat', ...extra
   };
-  const undoOffers = [];
+  const undoOffers = [], confirmCalls = [];
   const context = vm.createContext({ ProjectLifecycle: require('../app/project-lifecycle'), state, manageTarget: { kind, id: kind === 'project' ? 'course' : 'course-chat' },
-    window: { confirm: () => true }, uid: () => 'generated-chat', save: noop, renderAll: noop, showView: noop,
+    window: { confirm: () => { confirmCalls.push(true); return true; } }, uid: () => 'generated-chat', save: noop, renderAll: noop, showView: noop,
     ensureConversation: noop, repairRelationships: noop, normalizeStateShape: noop, purgeTrash: { pendingId: null }, undoTrashToast: (message, entry) => { undoOffers.push(entry); }, $: () => ({ close: noop }), $$: () => []
   });
   const helper = source.indexOf('function projectDeletionMembership(');
@@ -23,7 +23,7 @@ function harness(extra = {}, kind = 'project') {
   vm.runInContext(source.slice(start, end), context);
   const restoreStart = source.indexOf('function restoreTrash(');
   vm.runInContext(source.slice(restoreStart, source.indexOf('async function purgeTrash(', restoreStart)), context);
-  return { state, undoOffers, remove: context.deleteManagedItem, restore: () => context.restoreTrash(0) };
+  return { state, undoOffers, confirmCalls, remove: context.deleteManagedItem, restore: () => context.restoreTrash(0) };
 }
 const ids = list => Array.from(list, item => item.id).sort();
 
@@ -247,4 +247,14 @@ test('shared-source recovery metadata is small and cannot overwrite the original
   restore();
   assert.equal(file.content,'PDF text retained for preview');
   assert.equal(file.projectId,'course');
+});
+
+test('moving a conversation or project to the trash never blocks on a confirmation; undo is offered instead', () => {
+  for (const kind of ['project', 'conversation']) {
+    const fixture = harness({}, kind);
+    fixture.remove();
+    assert.equal(fixture.confirmCalls.length, 0, `${kind}: no window.confirm before a reversible move`);
+    assert.equal(fixture.state.trash.length, 1);
+    assert.deepEqual(fixture.undoOffers, [fixture.state.trash[0]]);
+  }
 });

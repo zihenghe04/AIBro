@@ -145,5 +145,6 @@ async function run(){
  console.log(JSON.stringify({passed:passed.length,failures,qaStore:TEMP,modelCalls:0},null,2));
  assert.deepEqual(failures,[]);
 }
-function finish(code){clearTimeout(watchdog);win?.destroy();server?.kill('SIGTERM');code?app.exit(code):app.quit();}
+// A passing run leaves nothing behind; a failing run keeps its store for diagnosis.
+function finish(code){clearTimeout(watchdog);win?.destroy();const done=()=>{if(!code){fs.rmSync(TEMP,{recursive:true,force:true});/* Chromium flushes the profile while exiting; remove that last copy afterwards. */spawn('/bin/sh',['-c','sleep 2; rm -rf "$0"',TEMP],{detached:true,stdio:'ignore'}).unref();}app.exit(code||0);};if(server&&server.exitCode===null){server.once('exit',done);server.kill('SIGTERM');}else done();}
 run().then(()=>finish(0)).catch(error=>{console.error(error);console.error('QA store retained:',TEMP);finish(1);});

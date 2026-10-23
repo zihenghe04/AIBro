@@ -4,7 +4,7 @@ button[data-copy-message]{min-inline-size:64px}
 button[data-note-action=save],button[data-local-document-action=save]{min-inline-size:76px;flex-shrink:0}
 button.feedback-confirmed{position:relative;color:transparent!important;isolation:isolate}
 button.feedback-confirmed>*{visibility:hidden}
-button.feedback-confirmed:after{content:'✓ ' attr(data-feedback-label);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;white-space:nowrap;color:var(--feedback-ink,var(--text));font:inherit;font-weight:550;animation:confirmed-result-in 180ms cubic-bezier(.2,0,0,1) both;pointer-events:none}
+button.feedback-confirmed:after{content:'✓ ' attr(data-feedback-label);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;white-space:nowrap;color:var(--feedback-ink,var(--text));font:inherit;font-weight:var(--font-weight-550);animation:confirmed-result-in var(--duration-180) var(--motion-ease) both;pointer-events:none}
 .confirmed-feedback-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @keyframes confirmed-result-in{from{opacity:0;transform:translateY(3px) scale(.98)}to{opacity:1;transform:none}}
 body.reduce-motion button.feedback-confirmed:after{animation:none}

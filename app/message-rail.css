@@ -9,8 +9,8 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
-  z-index: 20;
+  gap: var(--space-2);
+  z-index: var(--z-20);
 }
 
 .message-rail[hidden] { display: none; }
@@ -22,11 +22,11 @@
   width: 100%;
   padding: 0;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-2);
   background: var(--line);
   opacity: .72;
   cursor: pointer;
-  transition: opacity .12s ease, background .12s ease;
+  transition: opacity var(--duration-120) ease, background var(--duration-120) ease;
 }
 
 .message-rail-tick:hover,
@@ -39,16 +39,16 @@
   position: absolute;
   left: 16px;
   width: min(320px, 52vw);
-  padding: 8px 10px;
+  padding: var(--space-8) var(--space-10);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   background: var(--canvas);
   box-shadow: var(--shadow-card);
-  z-index: 30;
+  z-index: var(--z-30);
   pointer-events: none;
 }
 
-.message-rail-line { display: flex; flex-direction: column; gap: 1px; padding: 3px 0; }
-.message-rail-head { font-size: 11px; opacity: .66; }
-.message-rail-text { font-size: 12px; line-height: 1.5; }
-.message-rail-more { margin-top: 4px; font-size: 11px; opacity: .6; }
+.message-rail-line { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) 0; }
+.message-rail-head { font-size: var(--font-size-11); opacity: .66; }
+.message-rail-text { font-size: var(--font-size-12); line-height: var(--leading-150); }
+.message-rail-more { margin-top: var(--space-4); font-size: var(--font-size-11); opacity: .6; }

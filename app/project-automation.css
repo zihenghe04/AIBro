@@ -1,28 +1,28 @@
 /* Existing durable scheduler form; only explicit Skill roots belong to Kit. */
-#projectAutomationDialog { max-height:calc(100dvh - 40px); padding:24px; box-sizing:border-box; overflow:auto; background:var(--panel-raised,var(--bg)); border-color:var(--line); }
-#projectAutomationDialog .dialog-header { gap:16px; margin:0 0 18px; padding:0 0 16px; background:none; }
+#projectAutomationDialog { max-height:calc(100dvh - 40px); padding:var(--space-24); box-sizing:border-box; overflow:auto; background:var(--panel-raised,var(--bg)); border-color:var(--line); }
+#projectAutomationDialog .dialog-header { gap:var(--space-16); margin:0 0 var(--space-18); padding:0 0 var(--space-16); background:none; }
 #projectAutomationDialog .dialog-header h2 { min-width:0; overflow-wrap:anywhere; }
-#projectAutomationDialog .automation-job-list { display:grid; gap:10px; margin:18px 0; }
+#projectAutomationDialog .automation-job-list { display:grid; gap:var(--space-10); margin:var(--space-18) 0; }
 #projectAutomationDialog .tool-ledger-row { display:block; overflow-wrap:anywhere; }
-#projectAutomationDialog .tool-ledger-row > button { margin:4px 6px 0 0; }
-#projectAutomationForm { padding:0; display:grid; gap:16px; }
-#projectAutomationForm .task-field { display:grid; gap:8px; min-width:0; }
+#projectAutomationDialog .tool-ledger-row > button { margin:var(--space-4) var(--space-6) 0 0; }
+#projectAutomationForm { padding:0; display:grid; gap:var(--space-16); }
+#projectAutomationForm .task-field { display:grid; gap:var(--space-8); min-width:0; }
 #projectAutomationForm .task-field > input, #projectAutomationForm .task-field > textarea { min-width:0; box-sizing:border-box; }
 #projectAutomationForm .automation-choice-row { display:flex; flex-wrap:wrap; align-items:center; }
 #projectAutomationForm .automation-choice-row > strong { flex-basis:100%; }
 #projectAutomationForm .automation-choice-row button[aria-pressed=true] { border-color:var(--accent); background:var(--accent-soft); }
-#projectAutomationDialog .automation-skills { border:1px solid var(--line); border-radius:12px; padding:14px; min-width:0; }
-#projectAutomationDialog .automation-skills-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-#projectAutomationDialog .automation-skills-summary { margin:8px 0; font-size:12px; line-height:1.65; }
-#projectAutomationDialog .automation-skill-chips { display:flex; flex-wrap:wrap; gap:6px; padding:2px 0 10px; }
+#projectAutomationDialog .automation-skills { border:1px solid var(--line); border-radius:var(--radius-12); padding:var(--space-14); min-width:0; }
+#projectAutomationDialog .automation-skills-heading { display:flex; align-items:center; justify-content:space-between; gap:var(--space-12); }
+#projectAutomationDialog .automation-skills-summary { margin:var(--space-8) 0; font-size:var(--font-size-12); line-height:var(--leading-165); }
+#projectAutomationDialog .automation-skill-chips { display:flex; flex-wrap:wrap; gap:var(--space-6); padding:var(--space-2) 0 var(--space-10); }
 #projectAutomationDialog .automation-skill-chips > span { max-width:100%; min-width:0; }
 #projectAutomationDialog .automation-skill-chips button { display:block!important; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#projectAutomationDialog .automation-skill-catalog { max-height:290px; overflow:auto; display:grid; gap:8px; padding:3px; }
-#projectAutomationDialog .automation-skill-row { min-width:0; padding:10px; border:1px solid var(--line); border-radius:9px; }
-#projectAutomationDialog .automation-skill-row > p { margin:6px 0 0 28px; font-size:11px; line-height:1.6; overflow-wrap:anywhere; }
+#projectAutomationDialog .automation-skill-catalog { max-height:290px; overflow:auto; display:grid; gap:var(--space-8); padding:var(--space-3); }
+#projectAutomationDialog .automation-skill-row { min-width:0; padding:var(--space-10); border:1px solid var(--line); border-radius:var(--radius-9); }
+#projectAutomationDialog .automation-skill-row > p { margin:var(--space-6) 0 0 var(--space-28); font-size:var(--font-size-11); line-height:var(--leading-160); overflow-wrap:anywhere; }
 #projectAutomationDialog .automation-skill-row .kit-input-presentation label { white-space:normal; overflow-wrap:anywhere; }
 #projectAutomationDialog .automation-skill-row .kit-input-presentation label > div { flex-shrink:0; box-shadow:inset 0 0 0 1px var(--line-strong,var(--line)); }
-#projectAutomationDialog .automation-form-actions { display:flex; flex-wrap:wrap; gap:10px; }
-#projectAutomationDialog .automation-form-status { margin:0; font-size:12px; line-height:1.65; overflow-wrap:anywhere; }
-#projectAutomationDialog .automation-form-status[data-error=true] { color:var(--danger,#ba4949); }
-@media(max-width:580px) { #projectAutomationDialog { width:calc(100vw - 24px); padding:18px; box-sizing:border-box; } #projectAutomationDialog .automation-skills { padding:10px; } }
+#projectAutomationDialog .automation-form-actions { display:flex; flex-wrap:wrap; gap:var(--space-10); }
+#projectAutomationDialog .automation-form-status { margin:0; font-size:var(--font-size-12); line-height:var(--leading-165); overflow-wrap:anywhere; }
+#projectAutomationDialog .automation-form-status[data-error=true] { color:var(--danger); }
+@media(max-width:580px) { #projectAutomationDialog { width:calc(100vw - 24px); padding:var(--space-18); box-sizing:border-box; } #projectAutomationDialog .automation-skills { padding:var(--space-10); } }

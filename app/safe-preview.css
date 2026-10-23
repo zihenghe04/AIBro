@@ -4,30 +4,30 @@
    而这里是明确的、带说明文案的预览态，用户可一键切换到完整内容）。 */
 .safe-preview {
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: var(--radius-10);
+  padding: var(--space-10) var(--space-12);
   background: var(--surface-wash);
 }
 
 .safe-preview-notice {
-  margin: 0 0 8px;
-  font-size: 12px;
-  line-height: 1.55;
+  margin: 0 0 var(--space-8);
+  font-size: var(--font-size-12);
+  line-height: var(--leading-155);
   opacity: .82;
 }
 
 .safe-preview-text {
-  margin: 0 0 9px;
+  margin: 0 0 var(--space-9);
   max-height: 40vh;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--font-size-12);
+  line-height: var(--leading-155);
 }
 
 .safe-preview-actions,
-.safe-preview-restore { display: flex; gap: 8px; }
+.safe-preview-restore { display: flex; gap: var(--space-8); }
 
-.safe-preview-restore { margin-top: 8px; }
+.safe-preview-restore { margin-top: var(--space-8); }

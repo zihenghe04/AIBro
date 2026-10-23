@@ -50,6 +50,10 @@
  // A follow-up can repeat an already saved event with a new message ID. Only
  // match within this conversation, and only if the native event is unchanged.
  const creationFields=['title','start','end','timeZone','frequency','interval','weekdays','reminderMinutes','count','until','location','details','documentID','projectID'];
+ // An estimated end is reviewed in the editor before saving, but full / smart
+ // conversations save it directly; the native side writes the matching note.
+ const ESTIMATED_REVIEW='\n结束时间未指定，默认时长1小时，请在保存前确认。',ESTIMATED_SAVED='\n结束时间未指定，已按默认时长1小时保存，可在日程中修改。';
+ const estimatedNote=(run,p)=>!p.endEstimated?'':created(run,p)?t('已按默认 1 小时保存，可修改','Saved with the default 1-hour duration; editable'):t('默认时长 1 小时，待确认','Default 1-hour duration; review required');
  function matchingCreation(run,p){
   if(savedRecords.has(p.id))return savedRecords.get(p.id);
   if(typeof state==='undefined'||!run?.conversationId)return null;
@@ -59,8 +63,9 @@
     const event=savedRecords.get(q.id);
     if(!event||event.deleted||event.kind!=='event'||event.allDay!==false||q.operation&&q.operation!=='create')continue;
     if(creationFields.some(key=>key!=='details'&&Access().canonical(p[key])!==Access().canonical(q[key])))continue;
-    const details=(q.details||'')+'\n\n'+(q.sourceMessageId?'来源消息：':'来源随记：')+q.quote+(q.endEstimated?'\n结束时间未指定，默认时长1小时，请在保存前确认。':'');
-    if(creationFields.every(key=>Access().canonical(event[key])===Access().canonical(key==='details'?details:q[key])))return event;
+    const base=(q.details||'')+'\n\n'+(q.sourceMessageId?'来源消息：':'来源随记：')+q.quote;
+    const details=q.endEstimated?[base+ESTIMATED_REVIEW,base+ESTIMATED_SAVED]:[base];
+    if(details.some(text=>creationFields.every(key=>Access().canonical(event[key])===Access().canonical(key==='details'?text:q[key]))))return event;
    }
   }
   return null;
@@ -126,10 +131,14 @@
     }
    }
    if(automatic){
-    if(run.executionReceipt?.phase!=='committed'||run.approvalIntent||run.routingReview?.required||proposals.some(p=>p.endEstimated))throw Error();
+    if(run.executionReceipt?.phase!=='committed'||run.approvalIntent||run.routingReview?.required)throw Error();
     const mode=chat.permissionMode||'legacy';
     if(mode==='request')throw Error();
+    // Full access and risk-only review save ordinary creations without a stop.
+    // An estimated end (default 1 h, noted in the event) is editable afterwards,
+    // not a risky action; per-space settings still review it.
     if(!['full','smart'].includes(mode)){
+     if(proposals.some(p=>p.endEstimated))throw Error();
      const spaces=proposals.map(p=>{const id=projectID(p,state,run);return id?(state.projects||[]).find(v=>v.id===id)?.workspace:'日常';});
      if(!spaces.every(space=>state.settings?.permissions?.[space]==='auto'))throw Error();
     }
@@ -150,7 +159,9 @@
  }
  const autoBusy=new Set();
  async function autoCreate(run){
-  const proposals=(run?.agendaProposals||[]).filter(p=>(!p.operation||p.operation==='create')&&!p.endEstimated);
+  const mode=(typeof state==='undefined'?[]:state.conversations||[]).find(c=>c.id===run?.conversationId)?.permissionMode;
+  const estimatedAllowed=['full','smart'].includes(mode);
+  const proposals=(run?.agendaProposals||[]).filter(p=>(!p.operation||p.operation==='create')&&(estimatedAllowed||!p.endEstimated));
   if(!root.workstationDesktop?.agendaCreateBatch||!proposals.length||autoBusy.has(run.id)||authorizeCreation(run.id,proposals,true).status!=='authorized')return;
   autoBusy.add(run.id);
   try{const reply=await reviewCreations(run,proposals,true);if(reply?.status!=='committed'||reply.persisted!==true)throw Error(t('未收到日程保存回执，请审阅后重试。','No save receipt was returned. Review and retry.'));run.agendaAutoSaved=true;delete run.agendaSaveError;}
@@ -163,8 +174,8 @@
   if(run.agendaSaveError){const error=document.createElement('p');error.textContent=run.agendaSaveError;error.setAttribute('role','status');card.append(error);}
   for(const proposal of run.agendaProposals){if(proposal.operation&&proposal.operation!=='create'){card.append(mutationRow(run,proposal));continue;}const row=document.createElement('article');row.className='agenda-proposal-row';const text=document.createElement('div');text.className='agenda-proposal-info';const name=document.createElement('strong');name.className='agenda-proposal-name';name.dataset.userContent='';name.textContent=matchingCreation(run,proposal)?.title||proposal.title;
    const when=document.createElement('p');when.className='agenda-proposal-time';when.textContent=new Date(matchingCreation(run,proposal)?.start??proposal.start).toLocaleString(t('zh-CN','en-US'),{timeZone:proposal.timeZone,year:'numeric',month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})+' · '+proposal.timeZone;
-   text.append(name,when);const owner=document.createElement('p');owner.className='agenda-proposal-project';owner.dataset.userContent='';try{const id=projectID(proposal,state,run);owner.textContent=t('提案归属：','Proposed project: ')+(id?(state.projects||[]).find(p=>p.id===id)?.name||id:t('独立日程','Standalone event'));}catch{owner.textContent=t('所属项目不可用，请重新生成提案','Project unavailable; generate a new proposal');}text.append(owner);const details=document.createElement('p');details.className='agenda-proposal-details';details.textContent=[proposal.frequency==='weekly'?t('每周重复','Repeats weekly'):'',proposal.endEstimated?t('默认时长 1 小时，待确认','Default 1-hour duration; review required'):''].filter(Boolean).join(' · ');if(details.textContent)text.append(details);const b=document.createElement('button');b.className='secondary agenda-proposal-review';b.type='button';b.dataset.agendaProposal=proposal.id;b.textContent=creationLabel(run,proposal);b.disabled=!root.workstationDesktop?.agendaProposal||run.status!=='completed'||matchingCreation(run,proposal)?.deleted===true;b.onclick=async()=>{try{if(root.workstationDesktop?.agendaCreateBatch&&!created(run,proposal)){await reviewCreations(run,[proposal]);return;}await refresh();const saved=matchingCreation(run,proposal);if(saved&&!saved.deleted){await root.workstationDesktop.agendaOpen(saved.id);return;}if(proposal.sourceMessageId){const source=state.conversations.find(c=>c.id===proposal.conversationId&&active(c))?.messages?.find(m=>m.id===proposal.sourceMessageId&&m.role==='user'&&!m.deletedAt);if(!source?.text.includes(proposal.quote))throw Error(t('来源消息已变化，请重新分析。','The source message changed. Analyze it again.'));}else{const note=state.notes.find(n=>n.id===proposal.documentID&&active(n));if(!note||note.updatedAt!==proposal.sourceVersion)throw Error(t('来源随记已变化，请重新分析。','The source capture changed. Analyze it again.'));}const id=projectID(proposal,state,run);if(await saveDocumentDurably()!==true)throw Error(t('提案尚未确认保存，请重试。','The proposal has not been confirmed saved. Retry.'));if(projectID(proposal,state,run)!==id)throw Error(t('日程所属项目已变化，请重新审阅。','The proposed project changed. Review it again.'));await root.workstationDesktop.agendaProposal({...proposal,projectID:id});}catch(e){toast(e.message);}};row.append(text,b);const quote=document.createElement('blockquote');quote.className='agenda-proposal-quote';quote.textContent=proposal.quote;quote.dataset.userContent='';row.append(quote);card.append(row);}
+   text.append(name,when);const owner=document.createElement('p');owner.className='agenda-proposal-project';owner.dataset.userContent='';try{const id=projectID(proposal,state,run);owner.textContent=t('提案归属：','Proposed project: ')+(id?(state.projects||[]).find(p=>p.id===id)?.name||id:t('独立日程','Standalone event'));}catch{owner.textContent=t('所属项目不可用，请重新生成提案','Project unavailable; generate a new proposal');}text.append(owner);const details=document.createElement('p');details.className='agenda-proposal-details';details.textContent=[proposal.frequency==='weekly'?t('每周重复','Repeats weekly'):'',estimatedNote(run,proposal)].filter(Boolean).join(' · ');if(details.textContent)text.append(details);const b=document.createElement('button');b.className='secondary agenda-proposal-review';b.type='button';b.dataset.agendaProposal=proposal.id;b.textContent=creationLabel(run,proposal);b.disabled=!root.workstationDesktop?.agendaProposal||run.status!=='completed'||matchingCreation(run,proposal)?.deleted===true;b.onclick=async()=>{try{if(root.workstationDesktop?.agendaCreateBatch&&!created(run,proposal)){await reviewCreations(run,[proposal]);return;}await refresh();const saved=matchingCreation(run,proposal);if(saved&&!saved.deleted){await root.workstationDesktop.agendaOpen(saved.id);return;}if(proposal.sourceMessageId){const source=state.conversations.find(c=>c.id===proposal.conversationId&&active(c))?.messages?.find(m=>m.id===proposal.sourceMessageId&&m.role==='user'&&!m.deletedAt);if(!source?.text.includes(proposal.quote))throw Error(t('来源消息已变化，请重新分析。','The source message changed. Analyze it again.'));}else{const note=state.notes.find(n=>n.id===proposal.documentID&&active(n));if(!note||note.updatedAt!==proposal.sourceVersion)throw Error(t('来源随记已变化，请重新分析。','The source capture changed. Analyze it again.'));}const id=projectID(proposal,state,run);if(await saveDocumentDurably()!==true)throw Error(t('提案尚未确认保存，请重试。','The proposal has not been confirmed saved. Retry.'));if(projectID(proposal,state,run)!==id)throw Error(t('日程所属项目已变化，请重新审阅。','The proposed project changed. Review it again.'));await root.workstationDesktop.agendaProposal({...proposal,projectID:id});}catch(e){toast(e.message);}};row.append(text,b);const quote=document.createElement('blockquote');quote.className='agenda-proposal-quote';quote.textContent=proposal.quote;quote.dataset.userContent='';row.append(quote);card.append(row);}
   return card;
  }
- return {validate,card,refresh,projectID,hasPending,settledSummary,authorizeCreation,reviewCreations,autoCreate};
+ return {validate,card,refresh,projectID,hasPending,settledSummary,authorizeCreation,reviewCreations,autoCreate,estimatedNote};
 });

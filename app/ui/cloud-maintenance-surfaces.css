@@ -1,41 +1,41 @@
 /* Kit owns presentation; retained native controls keep their event and secret lifecycle. */
-.cloud-maintenance-kit,.cloud-account-kit{display:grid;gap:16px;min-width:0;max-width:100%;container:cloud-maintenance / inline-size}
+.cloud-maintenance-kit,.cloud-account-kit{display:grid;gap:var(--space-16);min-width:0;max-width:100%;container:cloud-maintenance / inline-size}
 .cloud-maintenance-kit>div,.cloud-account-kit>div{min-width:0;max-width:100%}
-.cloud-maintenance-heading{display:flex;align-items:flex-start;gap:11px;padding:18px 18px 14px;border-bottom:1px solid var(--line);min-width:0}
-.cloud-maintenance-heading>div{min-width:0}.cloud-maintenance-heading h3{font-size:16px!important;margin:0!important;line-height:1.5!important}
-.cloud-maintenance-heading p{font-size:12px;line-height:1.65;color:var(--muted);margin:5px 0 0;overflow-wrap:anywhere}
-.cloud-maintenance-icon{display:flex;align-items:center;justify-content:center;width:30px;height:30px;flex:none;background:var(--panel-hover);color:var(--muted);border-radius:9px}
+.cloud-maintenance-heading{display:flex;align-items:flex-start;gap:var(--space-11);padding:var(--space-18) var(--space-18) var(--space-14);border-bottom:1px solid var(--line);min-width:0}
+.cloud-maintenance-heading>div{min-width:0}.cloud-maintenance-heading h3{font-size:var(--font-size-16)!important;margin:0!important;line-height:var(--leading-150) !important}
+.cloud-maintenance-heading p{font-size:var(--font-size-12);line-height:var(--leading-165);color:var(--muted);margin:var(--space-5) 0 0;overflow-wrap:anywhere}
+.cloud-maintenance-icon{display:flex;align-items:center;justify-content:center;width:30px;height:30px;flex:none;background:var(--panel-hover);color:var(--muted);border-radius:var(--radius-9)}
 .cloud-maintenance-heading-aside{margin-left:auto;max-width:45%;overflow-wrap:anywhere}.cloud-maintenance-heading-aside>span{max-width:100%;white-space:normal!important;overflow-wrap:anywhere}
-.cloud-maintenance-body{display:grid;gap:16px;padding:18px;min-width:0}.cloud-maintenance-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;min-width:0}
-.cloud-maintenance-fields>div,.cloud-maintenance-body>div{min-width:0}.cloud-maintenance-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
-.cloud-maintenance-kit button,.cloud-account-kit button{max-width:100%;height:auto!important;min-height:34px;white-space:normal;overflow-wrap:anywhere;line-height:1.5!important}
-.cloud-maintenance-paths{display:grid;gap:12px;margin:0;min-width:0}.cloud-maintenance-paths>div{display:grid;gap:5px;min-width:0}
-.cloud-maintenance-paths dt{font-size:12px;color:var(--muted);line-height:1.5}.cloud-maintenance-paths dd{margin:0;font:12px/1.7 var(--font-mono,monospace);color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
-.cloud-maintenance-help{margin:0;font-size:12px;line-height:1.7;color:var(--muted);overflow-wrap:anywhere}
-.cloud-maintenance-consent{padding:13px 14px;border:1px solid var(--line);border-radius:13px;background:var(--panel-hover);min-width:0;line-height:1.65;overflow-wrap:anywhere}
-.cloud-maintenance-consent .kit-control-description{padding-left:28px}.cloud-maintenance-consent .kit-input-presentation>div{align-items:flex-start!important}
-.cloud-maintenance-status{display:grid;gap:10px;min-width:0;overflow-wrap:anywhere}.cloud-maintenance-status>button{justify-self:start}.cloud-maintenance-status-copy{display:grid;gap:8px;padding:14px 16px;border:1px solid var(--line);border-radius:13px;background:var(--panel)}
-.cloud-maintenance-status-copy p{margin:0;line-height:1.7;font-size:13px;color:var(--muted);white-space:pre-wrap}
-.cloud-account-ssh-option{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.cloud-account-ssh-option>span{flex:1 1 220px;line-height:1.65!important}
-.cloud-account-field,.cloud-account-slot{min-width:0}.cloud-account-label{display:block;margin:0 0 6px}.cloud-account-label label{margin:0!important;cursor:default}
-.cloud-account-retained-control{position:relative;min-width:0;border-radius:16px;box-shadow:0 0 0 1px var(--line-strong)}
+.cloud-maintenance-body{display:grid;gap:var(--space-16);padding:var(--space-18);min-width:0}.cloud-maintenance-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-16);min-width:0}
+.cloud-maintenance-fields>div,.cloud-maintenance-body>div{min-width:0}.cloud-maintenance-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-8)}
+.cloud-maintenance-kit button,.cloud-account-kit button{max-width:100%;height:auto!important;min-height:34px;white-space:normal;overflow-wrap:anywhere;line-height:var(--leading-150) !important}
+.cloud-maintenance-paths{display:grid;gap:var(--space-12);margin:0;min-width:0}.cloud-maintenance-paths>div{display:grid;gap:var(--space-5);min-width:0}
+.cloud-maintenance-paths dt{font-size:var(--font-size-12);color:var(--muted);line-height:var(--leading-150)}.cloud-maintenance-paths dd{margin:0;font:12px/1.7 var(--font-mono);color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
+.cloud-maintenance-help{margin:0;font-size:var(--font-size-12);line-height:var(--leading-170);color:var(--muted);overflow-wrap:anywhere}
+.cloud-maintenance-consent{padding:var(--space-13) var(--space-14);border:1px solid var(--line);border-radius:13px;background:var(--panel-hover);min-width:0;line-height:var(--leading-165);overflow-wrap:anywhere}
+.cloud-maintenance-consent .kit-control-description{padding-left:var(--space-28)}.cloud-maintenance-consent .kit-input-presentation>div{align-items:flex-start!important}
+.cloud-maintenance-status{display:grid;gap:var(--space-10);min-width:0;overflow-wrap:anywhere}.cloud-maintenance-status>button{justify-self:start}.cloud-maintenance-status-copy{display:grid;gap:var(--space-8);padding:var(--space-14) var(--space-16);border:1px solid var(--line);border-radius:13px;background:var(--panel)}
+.cloud-maintenance-status-copy p{margin:0;line-height:var(--leading-170);font-size:var(--font-size-13);color:var(--muted);white-space:pre-wrap}
+.cloud-account-ssh-option{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-8)}.cloud-account-ssh-option>span{flex:1 1 220px;line-height:var(--leading-165) !important}
+.cloud-account-field,.cloud-account-slot{min-width:0}.cloud-account-label{display:block;margin:0 0 var(--space-6)}.cloud-account-label label{margin:0!important;cursor:default}
+.cloud-account-retained-control{position:relative;min-width:0;border-radius:var(--radius-16);box-shadow:0 0 0 1px var(--line-strong)}
 .cloud-account-presentation{pointer-events:none;user-select:none;min-width:0;max-width:100%}.cloud-account-native-control{position:absolute;inset:0;min-width:0}
-.cloud-account-kit .cloud-account-native-control>input{box-sizing:border-box;display:block;width:100%;height:100%;min-height:38px;margin:0;padding:9px 16px;border:1.5px solid transparent;border-radius:16px;background:transparent;color:var(--text);font-family:inherit;font-size:14px;line-height:1.45;box-shadow:none;outline:none}
-body.liquid-glass[data-view] .cloud-account-kit .cloud-account-native-control>input{background:transparent;border-color:transparent;box-shadow:none;border-radius:16px}
+.cloud-account-kit .cloud-account-native-control>input{box-sizing:border-box;display:block;width:100%;height:100%;min-height:38px;margin:0;padding:var(--space-9) var(--space-16);border:1.5px solid transparent;border-radius:var(--radius-16);background:transparent;color:var(--text);font-family:inherit;font-size:var(--font-size-14);line-height:var(--leading-145);box-shadow:none;outline:none}
+body.liquid-glass[data-view] .cloud-account-kit .cloud-account-native-control>input{background:transparent;border-color:transparent;box-shadow:none;border-radius:var(--radius-16)}
 .cloud-account-kit .cloud-account-native-control>input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cloud-account-kit .cloud-account-native-control>input::placeholder{color:var(--muted);opacity:1}.cloud-account-kit .cloud-account-native-control>input:disabled{color:var(--muted);cursor:not-allowed}
 .cloud-account-retained-control[data-disabled],.cloud-account-retained-consent[data-disabled]{opacity:.65}.cloud-account-retained-control[data-readonly]{background:var(--panel-hover)}
-.cloud-account-field>.cloud-maintenance-help{margin-top:7px}.cloud-account-intro>p,.cloud-account-hint>p{margin:0;font-size:12px;line-height:1.7;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
-.cloud-account-retained-action{position:relative;display:inline-flex;min-width:0;max-width:100%;border-radius:16px}.cloud-account-native-action{position:absolute;inset:0}
+.cloud-account-field>.cloud-maintenance-help{margin-top:var(--space-7)}.cloud-account-intro>p,.cloud-account-hint>p{margin:0;font-size:var(--font-size-12);line-height:var(--leading-170);color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+.cloud-account-retained-action{position:relative;display:inline-flex;min-width:0;max-width:100%;border-radius:var(--radius-16)}.cloud-account-native-action{position:absolute;inset:0}
 .cloud-account-kit .cloud-account-native-action>button{opacity:0;box-sizing:border-box;width:100%;height:100%!important;min-height:0;margin:0;padding:0;border:0}
 .cloud-account-retained-action:focus-within,.cloud-account-retained-consent:focus-within{outline:2px solid var(--accent);outline-offset:3px}
-.cloud-account-retained-action[data-disabled]{cursor:not-allowed}.cloud-account-retained-consent{position:relative;min-width:0;border-radius:6px}
+.cloud-account-retained-action[data-disabled]{cursor:not-allowed}.cloud-account-retained-consent{position:relative;min-width:0;border-radius:var(--radius-6)}
 .cloud-account-native-consent{position:absolute;inset:0}.cloud-account-kit .cloud-account-native-consent>input{position:absolute;inset:0;box-sizing:border-box;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
 .cloud-account-kit .cloud-account-native-consent>input:disabled{cursor:not-allowed}.cloud-account-retained-consent>.cloud-account-presentation>div{align-items:flex-start!important}
 .cloud-account-kit [hidden]{display:none!important}
-.cloud-maintenance-receipt{margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:12px}.cloud-maintenance-receipt dd{overflow-wrap:anywhere;user-select:text}
-.cloud-sync-recovery{display:grid;gap:12px;margin:16px 0}.cloud-sync-recovery>button{justify-self:start;max-width:100%;white-space:normal}
-@container cloud-maintenance (max-width:520px){.cloud-maintenance-fields{grid-template-columns:minmax(0,1fr)}.cloud-maintenance-heading{padding:15px 14px 12px;flex-wrap:wrap}.cloud-maintenance-heading>div:not(.cloud-maintenance-heading-aside){flex:1 1 180px}.cloud-maintenance-heading-aside{margin-left:41px;max-width:calc(100% - 41px)}.cloud-maintenance-body{padding:15px 14px}.cloud-maintenance-consent{padding:12px}}
+.cloud-maintenance-receipt{margin:var(--space-12) 0;padding:var(--space-12);border:1px solid var(--line);border-radius:var(--radius-12)}.cloud-maintenance-receipt dd{overflow-wrap:anywhere;user-select:text}
+.cloud-sync-recovery{display:grid;gap:var(--space-12);margin:var(--space-16) 0}.cloud-sync-recovery>button{justify-self:start;max-width:100%;white-space:normal}
+@container cloud-maintenance (max-width:520px){.cloud-maintenance-fields{grid-template-columns:minmax(0,1fr)}.cloud-maintenance-heading{padding:var(--space-15) var(--space-14) var(--space-12);flex-wrap:wrap}.cloud-maintenance-heading>div:not(.cloud-maintenance-heading-aside){flex:1 1 180px}.cloud-maintenance-heading-aside{margin-left:41px;max-width:calc(100% - 41px)}.cloud-maintenance-body{padding:var(--space-15) var(--space-14)}.cloud-maintenance-consent{padding:var(--space-12)}}
 @media(max-width:580px){.cloud-maintenance-fields{grid-template-columns:minmax(0,1fr)}}
 body.reduce-motion :is(.cloud-maintenance-kit,.cloud-account-kit) *{animation:none!important;transition:none!important}
 @media(prefers-reduced-motion:reduce){:is(.cloud-maintenance-kit,.cloud-account-kit) *{animation:none!important;transition:none!important}}

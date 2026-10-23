@@ -44,7 +44,9 @@ test('tour opens real view anchors, skips with Escape, persists only preference 
   assert.equal(h.nodes.get('#onboardingCard').getAttribute('aria-modal'), 'false'); assert.equal(h.nodes.get('#onboardingSpotlight'), undefined);
   assert.equal(h.key('Escape'), true); assert.equal(h.controller.isOpen(), false); assert.equal(h.state.ui.onboarding.status, 'skipped'); assert.equal(h.document.activeElement, opener);
   for (const key of ['notes', 'tasks', 'conversations', 'imports']) assert.deepEqual(h.state[key], before[key]);
-  assert.equal(await h.controller.maybeStart(), false); assert.equal(h.navigations.length, 1);
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(h.navigations, ['settings', 'agent'], 'skipping leaves settings and returns to the page the user was on');
+  assert.equal(await h.controller.maybeStart(), false); assert.equal(h.navigations.length, 2);
 });
 
 test('settings reopening always works after skip and every step visits only existing views', async () => {
@@ -53,7 +55,8 @@ test('settings reopening always works after skip and every step visits only exis
   assert.equal(h.controller.currentStep(), 'connection');
   for (let i = 0; i < 4; i++) await h.controller.next();
   assert.equal(h.controller.currentStep(), 'overview'); assert.equal(h.nodes.get('#onboardingNext').textContent, '完成引导'); await h.controller.next();
-  assert.equal(h.state.ui.onboarding.status, 'completed'); assert.deepEqual(h.navigations, ['settings', 'agent', 'courses', 'agent', 'dashboard']);
+  assert.equal(h.state.ui.onboarding.status, 'completed'); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(h.navigations, ['settings', 'agent', 'courses', 'agent', 'dashboard', 'agent'], 'finishing returns to the starting page');
 });
 
 test('use entry navigates and focuses a real control without submitting messages or creating mock data', async () => {
@@ -160,4 +163,44 @@ test('unsaved editor decisions retain focus and remain untouched when replay is 
 test('blocked setup feedback follows the selected interface language',async()=>{
  const h=fixture();h.env.WorkstationI18n={getLanguage:()=> 'en'};h.nodes.set('.note-document-leave:not([hidden])',{});
  assert.equal(await h.controller.open(),false);assert.match(h.toasts[0],/Finish or close the current dialog/);
+});
+
+test('“use this entry” stays on the chosen page while Escape returns to the starting page', async () => {
+  const h = fixture();
+  await h.controller.open(); await h.controller.next();
+  await h.nodes.get('#onboardingAction').onclick(); await Promise.resolve(); await Promise.resolve();
+  assert.equal(h.document.body.dataset.view, 'agent');
+  assert.deepEqual(h.navigations, ['settings', 'agent', 'agent'], 'the explicit entry is not undone by a return to the origin page');
+  const g = fixture(); g.document.body.dataset.view = 'courses';
+  await g.controller.open(); assert.equal(g.key('Escape'), true); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(g.navigations, ['settings', 'courses']);
+});
+
+test('switching pages or clicking outside tucks the guide away without leaving a spotlight, and settings resume it', async () => {
+  const f = fixture(); const card = f.nodes.get('#onboardingCard'), layer = f.nodes.get('#onboardingLayer');
+  await f.controller.open(); assert.equal(f.controller.currentStep(), 'connection'); assert.equal(f.document.body.dataset.view, 'settings');
+  const spotlight = layer.children[0]; assert.equal(spotlight.hidden, false);
+  assert.equal(f.controller.routeChanged('settings'), false); assert.equal(f.controller.isOpen(), true);
+  f.documentListeners.get('pointerdown')({ target: card.children[0] }); assert.equal(f.controller.isOpen(), true);
+  f.document.body.dataset.view = 'captures'; assert.equal(f.controller.routeChanged('captures'), true);
+  assert.equal(f.controller.isOpen(), false); assert.equal(layer.hidden, true); assert.equal(spotlight.hidden, true);
+  assert.equal(f.documentListeners.has('pointerdown'), false); await Promise.resolve();
+  assert.deepEqual(f.navigations, ['settings']); assert.equal(f.document.body.dataset.view, 'captures');
+  assert.equal(f.state.ui.onboarding.status, 'skipped'); assert.equal(f.state.ui.onboarding.resumeStep, 0); assert.match(f.toasts.at(-1), /设置/);
+  await f.controller.open(); await f.controller.next(); assert.equal(f.controller.currentStep(), 'conversation');
+  f.documentListeners.get('pointerdown')({ target: f.nodes.get('#composer') }); assert.equal(f.controller.isOpen(), false); assert.equal(f.state.ui.onboarding.resumeStep, 1);
+  await f.controller.open(); assert.equal(f.controller.currentStep(), 'conversation');
+  assert.equal(f.key('Escape'), true); assert.equal(f.controller.isOpen(), false); assert.equal(f.state.ui.onboarding.resumeStep, 1);
+  f.controller.open(); assert.equal(f.controller.currentStep(), 'conversation'); f.controller.close('skipped');
+  await f.controller.open(); assert.equal(f.controller.currentStep(), 'connection');
+});
+
+test('the native shell restoring its last location right after an automatic start does not dismiss the guide', async () => {
+  const f = fixture(); const realNow = Date.now; let now = 1_000_000; Date.now = () => now;
+  try {
+    assert.equal(await f.controller.maybeStart(), true); assert.equal(f.controller.isOpen(), true);
+    now += 800; assert.equal(f.controller.routeChanged('dashboard'), false); assert.equal(f.controller.isOpen(), true);
+    now += 3000; assert.equal(f.controller.routeChanged('captures'), true); assert.equal(f.controller.isOpen(), false);
+    await f.controller.open(); assert.equal(f.controller.routeChanged('captures'), true);
+  } finally { Date.now = realNow; }
 });

@@ -279,10 +279,11 @@ import Combine
                 Task { @MainActor in
                     do {
                         guard await verify() else{throw AgendaError.message("日程提案、来源或权限已变化，未保存。")}
-                        let events=try proposals.map{try workspace.proposedAgendaEvent($0)}
+                        let events=try proposals.map{try workspace.proposedAgendaEvent($0,automatic:automatic)}
                         guard Set(events.map(\.id)).count==events.count else{throw AgendaError.message("日程提案存在重复标识。")}
                         if automatic {
-                            guard !proposals.contains(where:{$0["endEstimated"] as? Bool == true}) else{throw AgendaError.message("结束时间待确认，请审阅日程。")}
+                            // verify() re-runs authorizeCreation(automatic): it allows an estimated
+                            // end only for full / risk-only conversations and reviews it otherwise.
                             let scope=AgendaEditingScope(projects:(workspace.snapshot?.projects ?? []).map{AgendaEditingProject(id:$0.id,title:$0.title)},documents:(workspace.snapshot?.documents ?? []).map{AgendaEditingDocument(id:$0.id,title:$0.title,projectID:$0.projectId,kind:$0.kind)})
                             for event in events {try scope.validate(event,expected:nil)}
                             let created=try workspace.agenda.createProposals(events)
@@ -318,7 +319,7 @@ import Combine
                 try JSONEncoder().encode(preferences).write(to:prefsFile,options:.atomic)
                 try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:prefsFile.path)
                 NativeL10n.shared.setLanguage(language)
-            } else if command=="appearance",let value=body["value"] as? String {workspace?.setAppearance(value)}
+            } else if command=="appearance",let value=body["value"] as? String {workspace?.webRequestedAppearance(value)}
             else if command=="auth",let string=body["url"] as? String,let url=URL(string:string),url.scheme=="https",["auth.openai.com","chatgpt.com","platform.openai.com"].contains(url.host ?? "") {NSWorkspace.shared.open(url)}
             else {throw AgendaError.message("不支持此桌面操作")}
             replyHandler(["ok":true],nil)

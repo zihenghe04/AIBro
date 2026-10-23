@@ -3,18 +3,18 @@
   display: block;
   width: 100%;
   box-sizing: border-box;
-  margin: 0 0 6px;
-  padding: 6px 10px;
+  margin: 0 0 var(--space-6);
+  padding: var(--space-6) var(--space-10);
   border: 1px dashed var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-9);
   background: transparent;
   color: var(--text);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-12);
+  line-height: var(--leading-150);
   text-align: left;
   cursor: pointer;
   opacity: .82;
-  transition: opacity .15s ease, background .15s ease;
+  transition: opacity var(--duration-150) ease, background var(--duration-150) ease;
 }
 
 .mode-hint[hidden] { display: none; }
