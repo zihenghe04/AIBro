@@ -75,18 +75,21 @@ For multiple devices, connect your own sync service over HTTPS or an SSH tunnel 
 
 ## Roadmap
 
-AI Bro is moving from "chat that can use tools" to "one reliable execution kernel plus plugins for each scenario". Every step is usable and verifiable on its own, data stays on your Mac by default, and approvals can only get stricter, never silently looser.
+Shipped in 0.9.6–0.9.9: window restore, memory and save performance, automatic backups and startup self-check; three switchable themes, undoable deletes; multi-model list; tool registry and local MCP; a unified execution kernel (event log, unified approvals, native tool calls, background runs that keep going after the window closes, automatic context compaction for long tasks).
 
-| Stage | What it covers | Status |
-| --- | --- | --- |
-| Polish and stability | Window restore, memory and save performance, automatic backups and startup self-check; three switchable themes, undoable deletes; multi-model list; tool registry and local MCP | Shipped in 0.9.6–0.9.8 |
-| Foundations | A unified execution kernel: event log, unified approvals, native tool calls, background runs that keep going after the window closes, automatic context compaction for long tasks; plugin interface; scheduled and event reminders (Mac notifications, the island panel); motion and accessibility polish | Execution kernel shipped in 0.9.9; plugin interface and scheduler in progress |
-| Today and reminders | Today page as home, a daily brief, one-sentence events and tasks, calendar and task views | Planned |
-| Course spaces | Bulk import of course materials with automatic organisation, materials and AI side by side, questions about a whole course, review help | Planned |
-| Paper library | Papers and metadata, translation, highlights and notes with citation jump-back, questions across papers, turning reading into lasting knowledge | Planned |
-| Get things done | Computer and browser actions you approve, end-to-end from research to a finished draft you can preview, question and revise | Planned |
-| Quick assistant | Global shortcut and voice input, clipboard history, recordings to minutes and to-dos, ask about a screenshot | Planned |
-| Sync and iPhone (1.0) | Incremental sync with conflict merging; on iPhone, see Today, get reminders, capture ideas and send instructions to the assistant | Planned |
+**Next**
+
+- **Finishing the foundations**
+  - Plugins: the browser becomes the first plugin, with per-site permissions, and pauses for you to take over at logins or captchas. You can also add external MCP servers as plugins by hand; their actions need your approval by default.
+  - Scheduled and automatic tasks: they recover after interruptions, catch up a missed run only once, and unattended tasks act only within the scope you declared.
+  - Models: use an API (OpenAI-compatible or Anthropic Messages), or the Codex CLI you are already signed in to on this Mac. Chat and translation each get their own model and reasoning level; the agent can also use the Codex CLI as its model, while tools and approvals stay with AI Bro.
+- **Today and reminders**: a daily brief, one-sentence events, reminders on time.
+- **Course spaces**: turn a pile of materials into a course in one step; highlights and annotations are saved; separate conversations per document.
+- **Paper library**: a continuous-scrolling PDF viewer; metadata, de-duplication, import from Zotero; side-by-side full-text translation; export notes, annotations and conversations together.
+- **Get things done**: finer-grained approval levels; computer control off by default and granted per app.
+- **Quick assistant** and **sync and iPhone**: after that.
+
+What we will not do: loosen permissions for unattended tasks by default; open unauthenticated local ports; download and install extensions of unknown origin at runtime.
 
 ## Get started
 
