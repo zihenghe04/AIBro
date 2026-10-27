@@ -143,6 +143,7 @@
   const sourceOf = base => { try { return new URL(String(base || '').trim()).hostname.toLowerCase(); } catch (_) { return ''; } };
   const protocolOf = (provider, base, preferred) => {
     if (provider === 'openai-auth') return 'responses';
+    if (preferred === 'anthropic') return 'anthropic';
     if (preferred === 'responses' || preferred === 'chat') return preferred;
     const learned = learnedProtocols.get(sourceOf(base));
     if (learned === 'responses' || learned === 'chat') return learned;
@@ -154,8 +155,10 @@
     } catch (_) { return 'responses'; }
   };
   // 宿主（设置页）注入的协议偏好。保持模块本身无环境依赖：读不到配置时按域名自动判定。
-  let protocolPreference = '';
+  let protocolPreference = '', codexModeSource = null;
+  const codexMode = () => { try { return typeof codexModeSource === 'function' ? codexModeSource() : ''; } catch (_) { return ''; } };
   const configure = options => {
+    if (options && typeof options.codexMode === 'function') codexModeSource = options.codexMode;
     if (options && (typeof options.protocol === 'string' || typeof options.protocol === 'function')) protocolPreference = options.protocol;
     if (options && typeof options.onProtocolLearned === 'function') protocolLearned = options.onProtocolLearned;
     if (options && options.learnedProtocols && typeof options.learnedProtocols === 'object') for (const [origin, value] of Object.entries(options.learnedProtocols)) {
@@ -186,8 +189,33 @@
   // Resolved per call: agent-retry.js may load after this file, and isolated
   // test contexts without it keep the original single-attempt behaviour.
   const retryModule = () => root.AgentRetry || (typeof require === 'function' ? require('./agent-retry.js') : null);
+  // Same-provider fallback models (Settings → Models): when the model fails before showing anything for a reason that is
+  // about the model or the service (rate limit, overload, unreachable, model missing), try the next model of the SAME
+  // provider. Never another provider: that could send the content to a service the user did not choose.
+  const FALLBACK_CODES = new Set(['RATE_LIMITED', 'UPSTREAM_SERVICE_ERROR', 'UPSTREAM_CONNECTION_ERROR', 'UPSTREAM_CONNECT_TIMEOUT', 'UPSTREAM_STREAM_INTERRUPTED', 'STREAM_INCOMPLETE', 'EMPTY_RESPONSE', 'MODEL_NOT_AVAILABLE']);
+  const fallbackEligible = error => {
+    if (!error || typeof error !== 'object' || error.receivedContent !== false || error.protocolMismatch) return false;
+    if (FALLBACK_CODES.has(error.diagnostic?.code || error.code)) return true;
+    // Without the diagnostics module only the HTTP status tells: rate limit, timeout and server errors.
+    const status = error.status ?? error.diagnostic?.httpStatus;
+    return status === 429 || status === 408 || (status >= 500 && status <= 599);
+  };
+  async function attemptOnce(options) {
+    const chain = options.provider === 'api' || options.provider === undefined ? (Array.isArray(options.fallbackModels) ? options.fallbackModels : []).filter((model, index, all) => typeof model === 'string' && model.trim() && model !== options.model && all.indexOf(model) === index) : [];
+    let current = { ...options, fallbackModels: undefined };
+    for (let index = 0; ; index += 1) {
+      try { return await attemptSingle(current); }
+      catch (error) {
+        if (index >= chain.length || options.signal?.aborted || !fallbackEligible(error)) throw error;
+        const next = chain[index], status = error.status ?? error.diagnostic?.httpStatus;
+        options.onActivity?.({ id: `commentary:${nextActivityNamespace()}:fallback-${index + 1}`, source: 'transport', ...(error.attemptId ? { attemptId: error.attemptId } : {}), kind: 'commentary', status: 'completed', name: '备用模型', text: `模型 ${current.model} 暂时不可用${status ? `（HTTP ${status}）` : ''}，已切换到同一供应商的备用模型 ${next}。尚未收到任何内容。` });
+        options.onFallback?.({ from: current.model, to: next, code: error.diagnostic?.code || error.code || null, httpStatus: status || null });
+        current = { ...options, model: next, fallbackModels: undefined, fallbackActive: true };
+      }
+    }
+  }
   // One logical request: resend only a transient failure that showed nothing.
-  function attemptOnce(options) {
+  function attemptSingle(options) {
     const Retry = retryModule();
     if (!Retry?.run) return requestOnce(options);
     return Retry.run(() => requestOnce(options), { signal: options.signal, onRetry: info => {
@@ -225,11 +253,22 @@
       }
     }
   }
-  async function requestOnce({ provider = 'api', base, model, effort = '', token, input, webSearch = false, protocol, requirePlanProtocol = false, nativeTools = null, toolCallSession = '', onToolCalls, onDelta, onPhase, onActivity, onAttempt, onSources, onUsage, onReception, signal }) {
+  async function requestOnce({ provider = 'api', base, model, effort = '', token, input, webSearch = false, protocol, requirePlanProtocol = false, nativeTools = null, toolCallSession = '', onToolCalls, onDelta, onPhase, onActivity, onAttempt: reportAttempt, onSources, onUsage, onReception, signal, fallbackActive = false }) {
+    // A fallback model names itself on its attempt, so the usage ledger credits the model that really answered.
+    const onAttempt = fallbackActive && typeof reportAttempt === 'function' ? event => reportAttempt({ ...event, model }) : reportAttempt;
     if (provider === 'claude-auth') {
       const transport = root.ClaudeTransport || (typeof require === 'function' ? require('./claude-transport.js') : null);
       if (!transport?.request) throw Object.assign(new Error('Claude 文本连接组件未加载，请重新打开应用。'), { code: 'INVALID_RESPONSE' });
       return transport.request({ provider, model, effort, input, webSearch, requirePlanProtocol, onDelta, onPhase, onActivity, onAttempt, onUsage, onReception, signal }, { protocolError, inspectProtocolOutput });
+    }
+    // Anthropic Messages: explicit protocol, or "auto" on the official address only (never guessed from the model name).
+    if (provider === 'api') {
+      const Connections = root.Connections || (typeof require === 'function' ? require('./connections.js') : null);
+      if (Connections?.detectProtocol(base, preferredProtocol(protocol)) === 'anthropic') {
+        const transport = root.AnthropicTransport || (typeof require === 'function' ? require('./anthropic-transport.js') : null);
+        if (!transport?.request) throw Object.assign(new Error('Anthropic 连接组件未加载，请重新打开应用。'), { code: 'INVALID_RESPONSE' });
+        return transport.request({ base, model, effort, token, input, webSearch, nativeTools, onDelta, onPhase, onActivity, onAttempt, onUsage, onReception, signal }, { protocolError, inspectProtocolOutput, errorFrom });
+      }
     }
     // P7: native tool calls only for API connections that opted in. The calls
     // are normalized and handed back as knowledgeRequests in the plan, so the
@@ -239,11 +278,11 @@
     const controller = new AbortController();
     const reception = typeof onReception === 'function' ? Reception?.createEmitter(onReception) : null;
     let receptionOutcome = 'failed';
-    let attemptId = null, attemptSettled = true;
+    let attemptId = null, attemptSettled = true, httpStatus = null;
     const finishAttempt = status => {
       if (!attemptId || attemptSettled) return;
       attemptSettled = true;
-      onAttempt?.({ id: attemptId, status });
+      onAttempt?.({ id: attemptId, status, ...(httpStatus ? { httpStatus } : {}) });
     };
     const publishDelta = (output, delta) => onDelta?.(output, delta, { attemptId });
     let reader, readerDone = false, rejectOnAbort, receivedContent = false, usedProtocol, pendingNativeToolCall = false;
@@ -308,7 +347,9 @@
       // is exact accounting, not a tokenizer estimate; missing remains null.
       if (usage.total_tokens == null && input !== null && output !== null && Number.isSafeInteger(input + output)) { total = input + output; totalSource = 'components'; }
       if (input === null && output === null && total === null) return;
-      onUsage?.({ input, output, total }, { attemptId, totalSource });
+      // 缓存命中的输入 token（三种接口字段名不同）；只用于使用统计，不进用量快照。
+      const cacheRead = pick(usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? usage.cache_read_input_tokens);
+      onUsage?.({ input, output, total }, { attemptId, totalSource, cacheRead });
       if (controller.signal.aborted) throw interruptionError();
     };
     const observeErrorUsage = body => { let data; try { data = JSON.parse(body); } catch (_) { return; } observeUsage((data?.response || data)?.usage); };
@@ -392,6 +433,7 @@
         const headers = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
         if (provider !== 'openai-auth' && token) headers.Authorization = `Bearer ${token}`;
         const body = chosen === 'chat' ? { model, messages: chatMessages(input), stream: true } : { model, input, stream: true };
+        if (provider === 'openai-auth' && ['shared', 'oauth'].includes(codexMode())) body.mode = codexMode();
         if (webSearch !== false && webSearch !== true) { const error = new Error('网页搜索选项必须为布尔值。'); error.code = 'INVALID_WEB_SEARCH'; throw error; }
         if (webSearch) {
           if (provider === 'openai-auth') body.webSearch = true;
@@ -428,7 +470,7 @@
           throw error;
         }
       };
-      response = await send(requestProtocol);
+      response = await send(requestProtocol); httpStatus = response.status;
       if (!response.ok) {
         let errorBody = '';
         try { errorBody = await readText(response); }

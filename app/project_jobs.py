@@ -1,13 +1,17 @@
 """Local project schedules and claims. The desktop executes the shared Agent loop.
-No credentials or executable commands live in schedule records.
+No credentials or executable commands live in schedule records. The file is
+shared with the scheduler (scheduler.py, schema 2): jobs keep their shape, and
+every attempt also gets a row in the execution table.
 """
 import copy
 import json
+import os
 import re
 import secrets
 import time
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from scheduler import load_document, record_window_start, record_window_end
 
 class ProjectJobs:
     def __init__(self, store, instance):
@@ -15,8 +19,7 @@ class ProjectJobs:
         self.path = store.directory / 'project-jobs.json'
 
     def read(self):
-        if self.path.is_symlink(): raise ValueError('自动任务文件不能是符号链接')
-        return json.loads(self.path.read_text()) if self.path.exists() else {'jobs': []}
+        return load_document(self.store, self.path)
 
     def write(self, data): self.store.atomic_write(self.path, json.dumps(data, ensure_ascii=False).encode())
 
@@ -44,7 +47,7 @@ class ProjectJobs:
             if not attempt or attempt.get('status')!='running': continue
             if attempt.get('instanceId')!=self.instance or time.time()>attempt['expiresAt']:
                 attempt.update(status='interrupted',finishedAt=time.time(),error='上次执行已中断，先核对结果再继续。')
-                job['status']='paused';changed=True
+                job['status']='paused';changed=True;record_window_end(data,job)
         if changed:self.write(data)
 
     def list(self):
@@ -85,7 +88,12 @@ class ProjectJobs:
             skills=payload.get('skillIds') if 'skillIds' in payload else ([payload['skillId']] if payload.get('skillId') else [])
             if not isinstance(skills,list) or len(skills)>100 or any(not isinstance(skill,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,160}',skill) for skill in skills): raise ValueError('无效 Skills 选择')
             skills=list(dict.fromkeys(skills))
-            job={**(prior or {}),'id':identifier or 'job_'+secrets.token_hex(10),'projectId':project['id'],'workspace':project['workspace'],'name':name,'prompt':prompt,'dueAt':due,'intervalMinutes':interval,'budgetMinutes':budget,'permissionMode':mode,'skillIds':skills,'skillId':skills[0] if skills else None,'status':'active','version':(prior or {}).get('version',0)+1,'updatedAt':time.time()}
+            # Optional declared scope (scheduler.py): the external tools an unattended run may use.
+            if 'scope' in payload:
+                from scheduler import Scheduler
+                scope=Scheduler.parse_scope(payload['scope'])
+            else: scope=(prior or {}).get('scope')
+            job={**(prior or {}),'scope':scope,'id':identifier or 'job_'+secrets.token_hex(10),'projectId':project['id'],'workspace':project['workspace'],'name':name,'prompt':prompt,'dueAt':due,'intervalMinutes':interval,'budgetMinutes':budget,'permissionMode':mode,'skillIds':skills,'skillId':skills[0] if skills else None,'status':'active','version':(prior or {}).get('version',0)+1,'updatedAt':time.time()}
             if zone_name is not None:
                 job['timeZone']=zone_name
                 job['wallAnchor']=datetime.fromtimestamp(due,zone).replace(tzinfo=None).isoformat()
@@ -136,7 +144,7 @@ class ProjectJobs:
             attempt={'id':'attempt_'+secrets.token_hex(10),'token':secrets.token_hex(24),'status':'running','instanceId':self.instance,'version':job['version'],'startedAt':time.time(),'expiresAt':time.time()+job['budgetMinutes']*60}
             if job.get('attempt'):
                 old=copy.deepcopy(job['attempt']);old.pop('token',None);job.setdefault('history',[]).append(old)
-            job['attempt']=attempt;self.write(data)
+            job['attempt']=attempt;record_window_start(data,job,attempt,os.getpid());self.write(data)
             return {'claimed':True,'job':self.public(job),'token':attempt['token']}
 
     def check(self, identifier, token):
@@ -167,4 +175,5 @@ class ProjectJobs:
                 job['dueAt']=self.next_due(job,time.time())
             elif a['status']=='completed' and job['status']=='active':job['status']='completed'
             elif job['status']!='deleted':job['status']='paused'
+            record_window_end(data,job)
             self.write(data);return self.public(job)

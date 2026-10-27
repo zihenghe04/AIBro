@@ -1,0 +1,53 @@
+/* In-chat model picker (model-picker.js, UIKit controls). Container look comes from styles.css / glass / native palettes. */
+#modelPicker.mp { display: flex; flex-direction: column; width: min(392px, calc(100vw - 24px)); max-height: min(78dvh, 600px); z-index: 1100; font-size: 13px; }
+#modelPicker.mp[hidden] { display: none !important; }
+.mp-head { display: flex; align-items: center; gap: 10px; padding: 14px 14px 10px 16px; }
+.mp-spark { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.mp-heading { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
+.mp-heading b { font-size: 15px; font-weight: 600; }
+.mp-heading small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11.5px; }
+.mp-reset { all: unset; flex: none; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 500; cursor: pointer; transition: background 140ms; }
+.mp-reset:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.mp-reset:focus-visible, .mp-close:focus-visible, .mp-manage:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.mp-reset[hidden] { display: none; }
+.mp-close { all: unset; flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.mp-close:hover { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.mp-searchrow { display: flex; align-items: center; gap: 8px; margin: 0 12px 6px; padding: 0 12px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--text) 5.5%, transparent); color: var(--muted); transition: box-shadow 140ms; }
+.mp-searchrow:focus-within { box-shadow: 0 0 0 2px var(--accent-soft), inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+.mp-searchrow .mp-search, .mp-searchrow .mp-search:focus, .mp-searchrow .mp-search:focus-visible { all: unset; flex: 1; min-width: 0; color: var(--text); font-size: 13px; outline: none; box-shadow: none; }
+.mp-search::placeholder { color: var(--faint); }
+.mp-search::-webkit-search-cancel-button { display: none; }
+.mp-list { flex: 1; min-height: 120px; padding: 2px 8px 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.mp-group { display: flex; align-items: center; gap: 8px; padding: 12px 8px 5px; }
+.mp-group:first-child { padding-top: 6px; }
+.mp-group-name { font-size: 12px; font-weight: 600; color: var(--muted); }
+.mp-group-host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font-size: 11px; }
+.mp-opt { display: flex; align-items: center; gap: 8px; margin: 1px 0; padding: 8px 10px 8px 38px; border-radius: 10px; cursor: pointer; transition: background 100ms; }
+.mp-opt.is-active { background: var(--accent-soft); }
+.mp-opt[aria-disabled="true"] { cursor: default; }
+.mp-opt.is-stale { padding-left: 10px; opacity: .85; }
+.mp-opt-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.3; }
+.mp-opt-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-opt.is-selected .mp-opt-label { font-weight: 600; }
+.mp-opt-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
+.mp-tags { display: inline-flex; gap: 3px; flex: none; }
+.mp-tag { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 3px; border-radius: 6px; background: color-mix(in srgb, var(--text) 6.5%, transparent); color: var(--muted); font-size: 10.5px; }
+.mp-check { flex: none; width: 16px; display: inline-flex; justify-content: center; color: var(--accent); }
+.mp-empty { padding: 28px 12px; text-align: center; color: var(--muted); }
+.mp-effort { margin: 0 12px; padding: 10px 0 12px; border-top: 1px solid var(--line); }
+.mp-effort[hidden] { display: none; }
+.mp-effort-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-weight: 550; }
+.mp-effort-head small { color: var(--faint); font-size: 11px; font-weight: 400; }
+.mp-status { margin: 0; padding: 0 16px; color: var(--muted); font-size: 12px; }
+.mp-status:empty { display: none; }
+.mp-status[data-tone="error"] { color: var(--red); padding-bottom: 8px; }
+.mp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 14px 10px 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.mp-hint kbd { padding: 1px 5px; border-radius: 5px; border: 1px solid var(--line); font: inherit; font-size: 11px; }
+.mp-manage { all: unset; display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 7px; color: var(--accent); font-weight: 500; cursor: pointer; }
+.mp-manage:hover { background: var(--accent-soft); }
+#modelPicker.mp[aria-busy="true"] .mp-opt, #modelPicker.mp[aria-busy="true"] .uk-seg { opacity: .6; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .mp-opt, .mp-reset, .mp-searchrow { transition: none; } }
+body.reduce-motion .mp-opt, body.reduce-motion .mp-reset { transition: none; }
+
+.mp-opt.needs-key { opacity: .55; }
+.mp-opt.needs-key .mp-opt-sub { color: var(--warning); }

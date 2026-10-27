@@ -1,0 +1,77 @@
+/* Settings pages on the UIKit look: softer rows, quiet badges, lighter model rows. Loaded after providers-ui.css and plugin styles. */
+.connections-card .pv-tabs-seg { justify-self: start; }
+.connections-card .pv-purposes { background: color-mix(in srgb, var(--text) 3.5%, transparent); border-color: var(--line); border-radius: 16px; padding: 14px 16px; gap: 10px; }
+.connections-card .pv-purposes > label { flex: 0 0 100%; font-weight: 550; color: var(--text); }
+.connections-card .pv-purposes > .uk-select-wrap { flex: 1 1 100%; }
+.connections-card .pv-purpose > summary { display: inline-flex; align-items: center; gap: 4px; padding: 5px 13px; border-radius: 999px; background: var(--panel-raised); transition: border-color 140ms, background 140ms; }
+.connections-card .pv-purpose > summary:hover { border-color: var(--line-strong); }
+.connections-card .pv-purpose[open] > summary { border-color: var(--accent); background: var(--accent-soft); }
+.connections-card .pv-pop { border-radius: 14px; box-shadow: var(--shadow-float); padding: 14px; }
+.connections-card .pv-list { padding: 6px; border-radius: 16px; gap: 2px; }
+.connections-card .pv-row { gap: 10px; padding: 9px 10px; border-radius: 12px; border: 1px solid transparent; transition: background 140ms, border-color 140ms; }
+.connections-card .pv-row:hover { background: color-mix(in srgb, var(--text) 4.5%, transparent); }
+.connections-card .pv-row[aria-current="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 26%, transparent); }
+.connections-card .pv-row:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+.connections-card .pv-logo { width: 32px; height: 32px; border-radius: 10px; font-weight: 600; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.connections-card .pv-chip { margin-left: 6px; padding: 0 7px; height: 18px; display: inline-flex; align-items: center; border: 0; font-size: 11px; font-weight: 500; line-height: 1; vertical-align: 1px; background: color-mix(in srgb, var(--text) 7%, transparent); }
+.connections-card .pv-chip[data-tone="accent"] { background: var(--accent-soft); color: var(--accent); }
+.connections-card .pv-chip[data-tone="ok"] { background: color-mix(in srgb, var(--success) 14%, transparent); }
+.connections-card .pv-chip[data-tone="warn"] { background: color-mix(in srgb, var(--warning) 15%, transparent); }
+.connections-card .pv-chip[data-tone="bad"] { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.connections-card .pv-detail { border-radius: 18px; padding: 20px; gap: 14px; }
+.connections-card .pv-model { background: transparent; border: 1px solid var(--line); border-radius: 12px; padding: 7px 10px; transition: border-color 140ms, background 140ms; }
+.connections-card .pv-model:hover { border-color: var(--line-strong); background: color-mix(in srgb, var(--text) 3%, transparent); }
+.connections-card .pv-model b { font-weight: 550; }
+.connections-card .pv-tag { border-radius: 999px; padding: 0 8px; background: color-mix(in srgb, var(--text) 7%, transparent); }
+.connections-card .pv-tag[data-primary="1"] { background: var(--accent-solid); color: var(--color-white, #fff); }
+.connections-card .pv-caps span, .connections-card .pv-cap { border-radius: 6px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.connections-card .pv-add { border-radius: 10px; border-top: 0; margin-top: 2px; }
+.connections-card .pv-add:hover { background: var(--accent-soft); }
+.connections-card .pa-tile { border-radius: 14px; transition: border-color 140ms, transform 160ms var(--ease-decelerate, ease), box-shadow 160ms; }
+.connections-card .pa-tile:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-card); }
+.connections-card .pa-cat { border-radius: 10px; }
+.connections-card .pa-search { border-width: 1px; border-radius: 12px; }
+@media (prefers-reduced-motion: reduce) { .connections-card .pa-tile, .connections-card .pv-row, .connections-card .pv-model { transition: none; } .connections-card .pa-tile:hover:not(:disabled) { transform: none; } }
+
+/* Settings section tabs (React Kit tabs with inline styles): a soft segmented pill row instead of an underline. */
+.settings-navigation-kit .kit-tabs > div { border-bottom: 0 !important; gap: 2px !important; padding: 4px; width: fit-content; border-radius: 14px; background: color-mix(in srgb, var(--text) 5.5%, transparent); }
+.settings-navigation-kit .kit-tabs > div > :not(button) { display: none !important; }
+.settings-navigation-kit .kit-tabs button[role="tab"] { border-radius: 10px !important; padding: 7px 16px !important; font-size: 13px !important; font-weight: 500 !important; color: var(--muted) !important; background: transparent !important; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease !important; }
+.settings-navigation-kit .kit-tabs button[role="tab"]:hover { color: var(--text) !important; }
+.settings-navigation-kit .kit-tabs button[role="tab"][aria-selected="true"] { color: var(--text) !important; background: var(--panel-raised) !important; box-shadow: 0 1px 2px #0002, 0 0 0 1px var(--line) !important; }
+.settings-navigation-kit .kit-tabs button[role="tab"]:focus-visible { box-shadow: 0 0 0 2px var(--accent) !important; }
+.settings-tabs-scroll { padding: 4px 2px 6px; }
+
+/* Plugins page */
+.plugin-settings-card .plugin-list, .plugin-settings-card .plugin-cands { border-radius: 16px; background: transparent; }
+.plugin-settings-card .plugin-row, .plugin-settings-card .plugin-cand { padding: 14px; transition: background 140ms; }
+.plugin-settings-card .plugin-logo { border-radius: 10px; }
+.plugin-settings-card .plugin-chip { border: 0; padding: 0 8px; height: 18px; display: inline-flex; align-items: center; line-height: 1; background: color-mix(in srgb, var(--text) 7%, transparent); }
+.plugin-settings-card .plugin-chip.ok { background: color-mix(in srgb, var(--success) 14%, transparent); }
+.plugin-settings-card .plugin-chip.warn { background: color-mix(in srgb, var(--warning) 15%, transparent); }
+.plugin-settings-card .plugin-chip.acc { background: var(--accent-soft); }
+
+/* Scheduler form: the model pair is one picker; the plain model input only carries the value. */
+.task-field[data-carrier] { display: none !important; }
+.scheduler-model-picker { margin-top: 6px; }
+
+/* The save bar only covers permissions and prices now: keep it at the end of the section. */
+#settings-panel-models > .settings-save-bar { order: 99; }
+
+/* CC Switch import window: same rows, badges and info banner as the rest of the provider pages. */
+.connections-card .pv-cc-list { gap: 6px; }
+.connections-card .pv-cc-row { padding: 10px 12px; border-radius: 12px; border: 1px solid transparent; background: transparent; transition: background 140ms ease, border-color 140ms ease; }
+.connections-card .pv-cc-row:hover:not([data-state="skipped"]):not([data-state="no_key"]) { background: color-mix(in srgb, var(--text) 4.5%, transparent); }
+.connections-card .pv-cc-row:has(input:checked) { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+.connections-card .pv-cc-row input[type="checkbox"], .connections-card .pv-check input[type="checkbox"] { accent-color: var(--accent-solid, var(--accent)); width: 16px; height: 16px; margin: 1px 0 0; }
+.connections-card .pv-cc-name { font-weight: 550; font-size: 13.5px; }
+.connections-card .pv-cc-base, .connections-card .pv-cc-meta { font-size: 12px; }
+.connections-card .pv-cc-info { padding: 10px 12px; border-radius: 12px; font-size: 12.5px; color: var(--muted); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.connections-card .pv-cc-footer { gap: 8px; }
+
+/* The tab transition above is !important, so it must opt out of reduced motion itself. */
+body.reduce-motion .settings-navigation-kit .kit-tabs button[role="tab"] { transition: none !important; }
+
+/* The section intro already titles the page: keep the card heading for assistive tech only, and let a hint-less intro use the full width. */
+#settings .connections-card > h2:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.settings-section-intro > div:only-child { max-width: none; text-align: left; flex: 1 1 auto; padding-top: 0; }

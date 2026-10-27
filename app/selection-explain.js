@@ -221,12 +221,16 @@
       let input;
       try { input = buildInput(picked.text, { role: picked.role, context: picked.context, source: picked.source }, picked.mode); }
       catch (error) { status = error.message; paint(); return; }
-      const config = await root.ConversationModels.resolve(hooks.getCurrentModel());
+      // 翻译可以单独选模型和思考强度（设置 → 模型）；没选就沿用当前对话的模型。
+      const route = picked.mode === 'translate' ? await hooks.roleRoute?.('translate') : null;
+      const config = route?.config || await root.ConversationModels.resolve(hooks.getCurrentModel());
       if (own !== generation || signal.aborted) return;
-      const credentials = config.provider === 'api' ? await hooks.getApiConnection(apiConnection) : {};
+      const credentials = route ? route.credentials : config.provider === 'api' ? await hooks.getApiConnection(apiConnection, config.connection) : {};
       if (own !== generation || signal.aborted) return;
       if (config.provider === 'api' && (!credentials.base || !credentials.token || !config.model)) throw Error('请先在设置中配置 API 地址、API Key，并选择模型。');
-      const result = await root.AgentTransport.requestPlan({ ...config, ...credentials, input, signal, onDelta: text => {
+      // 使用统计：只记次数、token、耗时和结果，不记选中的文字或回答。
+      const usage = hooks.usageTracker?.({ role: picked.mode === 'translate' ? 'translate' : 'qa', config, credentials }) || null;
+      const result = await root.AgentTransport.requestPlan({ ...config, ...credentials, input, signal, onAttempt: usage?.onAttempt, onUsage: usage?.onUsage, onDelta: text => {
         if (own !== generation) return;
         status = text;
         paint();

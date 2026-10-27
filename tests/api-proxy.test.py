@@ -37,7 +37,7 @@ class Upstream(BaseHTTPRequestHandler):
     def do_POST(self): self.serve()
     def serve(self):
         body = self.rfile.read(int(self.headers.get('Content-Length', '0')))
-        self.server.received.append({'path': self.path, 'authorization': self.headers.get('Authorization'), 'body': body})
+        self.server.received.append({'path': self.path, 'authorization': self.headers.get('Authorization'), 'x_api_key': self.headers.get('X-Api-Key'), 'anthropic_version': self.headers.get('Anthropic-Version'), 'cookie': self.headers.get('Cookie'), 'body': body})
         self.server.route(self)
 
 
@@ -75,6 +75,15 @@ class ApiProxyTests(unittest.TestCase):
         connection.request(method, url, body=b'{"fixture":true}' if method == 'POST' else None, headers=headers)
         response = connection.getresponse(); self.addCleanup(response.close)
         return response.status, response.read()
+
+    def test_anthropic_headers_are_forwarded_and_unlisted_headers_are_not(self):
+        connection = http.client.HTTPConnection('127.0.0.1', self.app.server_port, timeout=3); self.addCleanup(connection.close)
+        headers = {'X-Api-Key': 'synthetic-fixture-key', 'Anthropic-Version': '2023-06-01', 'Cookie': 'session=synthetic', 'Content-Type': 'application/json', 'Origin': self.origin}
+        connection.request('POST', '/__proxy?url=' + urllib.parse.quote(self.upstream_url + '/v1/messages', safe=''), body=b'{}', headers=headers)
+        response = connection.getresponse(); self.addCleanup(response.close); response.read()
+        self.assertEqual(response.status, 200)
+        seen = self.upstream.received[-1]
+        self.assertEqual((seen['x_api_key'], seen['anthropic_version'], seen['cookie']), ('synthetic-fixture-key', '2023-06-01', None))
 
     def test_connection_deadline_does_not_limit_response_headers_or_generation_body(self):
         opened = []

@@ -108,7 +108,7 @@ app.on('window-all-closed', () => {});
     const url = new URL(request.url);
     // The product reads this local status during startup; it neither connects
     // a server nor starts synchronization. All cloud mutations stay blocked.
-    const statusRead = url.origin === origin && request.method === 'GET' && ['/__cloud/status', '/__cloud/ssh'].includes(url.pathname);
+    const statusRead = url.origin === origin && request.method === 'GET' && (['/__cloud/status', '/__cloud/ssh', '/__auth/status'].includes(url.pathname) || (url.pathname === '/__auth/models' && url.searchParams.has('cacheonly')));
     if (statusRead && url.pathname === '/__cloud/status') report.localCloudStatusReads++;
     if (statusRead && url.pathname === '/__cloud/ssh') report.localSSHMetadataReads++;
     const blocked = url.origin !== origin || !statusRead && /^\/__(?:proxy|codex|auth|cloud|models|api|llm|terminal|browser)(?:\/|$)/.test(url.pathname);

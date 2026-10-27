@@ -89,7 +89,7 @@ struct AgendaCreationReviewView:View {
                     if !pending.isEmpty {Button(selected.isSuperset(of:Set(pending.map(\.id))) ? nativeUI("取消全选", "Deselect all"):nativeUI("全选", "Select all")){if selected.isSuperset(of:Set(pending.map(\.id))){selected=[]}else{selected=Set(pending.map(\.id))}}.disabled(saving)}
                     Spacer()
                     if saving{ProgressView().controlSize(.small)}
-                    Button(nativeUI("确认保存 \(picked.count) 条", "Save \(picked.count) events")){confirm()}.buttonStyle(.borderedProminent).disabled(saving || picked.isEmpty).keyboardShortcut(.defaultAction)
+                    Button(nativeUI("确认保存 \(picked.count) 条", "Save \(picked.count) events")){confirm()}.buttonStyle(ProminentActionStyle()).disabled(saving || picked.isEmpty).keyboardShortcut(.defaultAction)
                 }
             }.padding(24)
         }.frame(width:640,height:min(680,CGFloat(review.events.count)*130+210)).background(StudioPalette.canvas)

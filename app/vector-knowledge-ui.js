@@ -57,8 +57,11 @@
     $('embeddingStop').hidden=!controller;
     if(progress){$('embeddingProgress').hidden=false;$('embeddingProgress').max=Math.max(1,progress.total);$('embeddingProgress').value=progress.ready;$('embeddingCounts').textContent=`${t('本机已索引段落')} ${progress.ready} / ${progress.total} · ${t('待更新')} ${progress.pending}`;}
     if(profiles)$('embeddingClearKey').hidden=true;
-    profiles?.paint();paintReadiness();
+    profiles?.paint();paintReadiness();announce();
   }
+  // The Models page (model-roles-ui.js) mirrors the saved config and its readiness; public data only, never a key.
+  function status(){return {config:config?{base:config.base,model:config.model,dimensions:config.dimensions,enabled:config.enabled,autoUpdate:config.autoUpdate,noKey:config.noKey}:null,credentialState,failed:!!(config&&serviceResult?.identity===serviceIdentity(config)&&serviceResult.failed),dirty};}
+  function announce(){try{root.document.dispatchEvent(new root.CustomEvent('aibro-embedding-change'));}catch{}}
   async function refresh(){if(!config)return;try{progress=await engine.status(config);paint();}catch{report('无法读取本机向量索引');}}
   const missingKey=()=>Object.assign(Error('请保存 embedding API Key'),{code:'CREDENTIAL_KEY_MISSING'});
   async function token(cfg,checkCurrent){
@@ -216,5 +219,5 @@
     }
     paint();void refresh();void inspectCredentials();
   }
-  root.VectorKnowledge={init,retrieve,searchRequest,workspaceSaved,refresh,update};
+  root.VectorKnowledge={init,retrieve,searchRequest,workspaceSaved,refresh,update,status,save:saveConfiguration};
 })(globalThis);

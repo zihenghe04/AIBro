@@ -35,7 +35,9 @@
 .wiki-more-group:not(:first-child){border-top:1px solid var(--line);margin-top:var(--space-4)}
 .wiki-sync-status{font-size:var(--font-size-12);color:var(--muted);margin:-8px 0 0}
 .wiki-header-error{min-width:0;overflow-wrap:anywhere}
-@container(max-width:760px){.wiki-title-row{align-items:flex-start;flex-wrap:wrap;gap:var(--space-14)}.wiki-title-copy{flex:1 1 100%}.wiki-filter-bar{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.wiki-query-control{grid-column:1/-1}.wiki-more-panel{max-width:calc(100cqw - 4px)}}
+@container(max-width:760px){.wiki-title-row{align-items:flex-start;flex-wrap:wrap;gap:var(--space-14)}.wiki-title-copy{flex:1 1 100%}.wiki-filter-bar{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.wiki-query-control{grid-column:1/-1}.wiki-more-panel{max-width:calc(100cqw - 4px)}
+/* The actions wrap to the left edge here, so a right-anchored panel would open off-screen: anchor it to the action row instead. */
+.wiki-header-actions{position:relative}.wiki-header-actions .wiki-more{position:static}.wiki-header-actions .wiki-more-panel{left:0;right:auto}}
 @container(max-width:380px){.wiki-header-kit{gap:var(--space-18)}.wiki-header-actions{gap:var(--space-4);flex-wrap:wrap}.wiki-filter-bar{gap:var(--space-12) var(--space-8)}.wiki-header-actions button{padding-inline:var(--space-10)!important}.wiki-title-line h1{font-size:25px!important}.wiki-filter-bar .kit-input-presentation button{padding-inline:var(--space-10)!important}}
 body.reduce-motion .wiki-header-root *,body.reduce-motion .wiki-header-root *::before,body.reduce-motion .wiki-header-root *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 @media(prefers-reduced-motion:reduce){.wiki-header-root *,.wiki-header-root *::before,.wiki-header-root *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

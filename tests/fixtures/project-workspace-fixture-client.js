@@ -1,0 +1,17 @@
+;(async function projectWorkspaceFixture(){
+ const wait=ms=>new Promise(r=>setTimeout(r,ms));while(!storageHydrated)await wait(25);
+ if(!state.projects.some(p=>p.id==='nav-alpha')){
+  const now=Date.now();state.projects=[{id:'nav-alpha',name:'甲 · 资料研究',workspace:'科研',createdAt:now},{id:'nav-beta',name:'乙 · 课程整理',workspace:'课程',createdAt:now},{id:'nav-empty',name:'空项目',workspace:'日常',createdAt:now}];
+  state.notes=[{id:'nav-input',projectId:'nav-alpha',workspace:'科研',title:'原始阅读笔记',content:'# Source\n\nOriginal research source.',updatedAt:now},{id:'nav-result',projectId:'nav-alpha',workspace:'科研',title:'文献整理成果',content:'# Research output\n\nSaved synthesis.\n\n## Evidence\n\n- Linked source',updatedAt:now},{id:'nav-draft',projectId:'nav-alpha',workspace:'科研',title:'待审阅研究草稿',content:'# Draft\n\nSaved original.',aiDraft:{title:'待审阅研究草稿',content:'# Draft\n\nProposed revision.',createdAt:now},updatedAt:now}];
+  state.tasks=[{id:'nav-beta-task',projectId:'nav-beta',workspace:'课程',title:'检查课程材料',status:'todo',createdAt:now}];
+  state.imports=[];state.papers=[];state.trash=[];
+  state.conversations=[{id:'nav-chat-a',projectId:'nav-alpha',workspace:'科研',title:'整理文献并保留来源',draft:'尚未发送的项目问题',attachments:[],draftAttachmentIds:[],createdAt:now,updatedAt:now,messages:[{id:'nav-message-user',role:'user',text:'请整理资料并生成成果。',at:now},{id:'nav-message-result',role:'assistant',text:'已保存文献整理成果。',runId:'nav-run-result',results:[{type:'note',id:'nav-result',operation:'created'}],at:now}]},{id:'nav-chat-b',projectId:'nav-beta',workspace:'课程',title:'课程计划',attachments:[],messages:[],createdAt:now},{id:'nav-unassigned',projectId:null,workspace:'auto',title:'独立对话',attachments:[],messages:[],createdAt:now}];
+  state.agentRuns=[{id:'nav-run-result',conversationId:'nav-chat-a',projectId:'nav-alpha',status:'completed',startedAt:now-5000,finishedAt:now,results:[{type:'note',id:'nav-result',operation:'created'}]},{id:'nav-run-draft',conversationId:'nav-chat-a',projectId:'nav-alpha',status:'completed',startedAt:now-3000,finishedAt:now,results:[{type:'note',id:'nav-draft',operation:'drafted'}],fileChanges:[{type:'note',id:'nav-draft',title:'待审阅研究草稿',operation:'drafted',before:{id:'nav-draft',content:'# Draft\n\nSaved original.'},after:{id:'nav-draft',content:'# Draft\n\nSaved original.',aiDraft:{content:'# Draft\n\nProposed revision.'}}}]},{id:'nav-run-empty',conversationId:'nav-chat-a',projectId:'nav-alpha',status:'completed',startedAt:now-1000,finishedAt:now}];
+  state.currentConversationId='nav-chat-a';state.currentProjectId='nav-alpha';state.ui.workspaceNavigation={projects:{}};state.ui.projectTab='conversations';state.ui.onboarding={version:1,status:'skipped'};state.ui.workspaceTour={version:1,status:'skipped'};normalizeStateShape(state);await saveDocumentDurably();
+ }
+ WorkstationOnboarding.close();WorkspaceTour?.close?.();renderAll();
+ window.__projectFixtureReady=true;
+ if(window.__NATIVE_PROJECT_QA){
+  document.addEventListener('keydown',event=>{if(event.metaKey&&event.shiftKey&&event.code==='KeyB'){event.preventDefault();void fetch('/__document-editor-qa/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:'project-route',at:Date.now(),view:document.body.dataset.view,project:state.currentProjectId,conversation:state.currentConversationId,section:state.ui.projectTab,memory:state.ui.workspaceNavigation,reader:ReadingPane.snapshot(),outputs:ProjectOutputs.build({state,projectId:state.currentProjectId}).counts,body:document.querySelector('#projectOutputs')?.textContent})});}},true);
+ }
+})();

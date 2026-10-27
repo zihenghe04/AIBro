@@ -14,6 +14,10 @@ const source = fs.readFileSync(path.join(ROOT, 'app/app.js'), 'utf8');
 const parserStart = source.indexOf('function renderRichText('), messageStart = source.indexOf('\nfunction renderMessage(', parserStart), messageEnd = source.indexOf('\nfunction submitClarify(', messageStart);
 assert.ok(parserStart >= 0 && messageStart > parserStart && messageEnd > messageStart, 'Locate actual production render functions');
 const renderer = source.slice(parserStart, messageStart), renderMessageSource = source.slice(messageStart, messageEnd);
+// renderMessage also calls this helper; inject the production function instead of a stub.
+const dedupeStart = source.indexOf('\nfunction dedupeResultEntries('), dedupeEnd = source.indexOf('\n}\n', dedupeStart) + 3;
+assert.ok(dedupeStart >= 0 && dedupeEnd > dedupeStart, 'Locate production dedupeResultEntries');
+const dedupeSource = source.slice(dedupeStart, dedupeEnd);
 const checks = [], failures = [], errors = [], externalRequests = [];
 let win, server, origin, stopping = false;
 const evaluate = value => win.webContents.executeJavaScript(typeof value === 'function' ? '(' + value.toString() + ')()' : value, true);
@@ -113,7 +117,7 @@ function initialize() {
   win.webContents.session.webRequest.onBeforeRequest((details, callback) => { const external = !details.url.startsWith(origin + '/') && !details.url.startsWith('data:'); if (external) externalRequests.push(details.url); callback({ cancel: external }); });
   win.webContents.on('console-message', event => { if (event.level === 'error' && !/favicon/.test(event.message)) errors.push(event.message); });
   await win.loadURL(origin + '/'); win.webContents.debugger.attach('1.3'); await win.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', { enabled: true });
-  await evaluate(renderer + '\n' + renderMessageSource + '\n(' + initialize.toString() + ')();');
+  await evaluate(renderer + '\n' + renderMessageSource + '\n' + dedupeSource + '\n(' + initialize.toString() + ')();');
 
   await check('info-line growth, CRLF boundaries, closer invalidation and non-append corrections match the real parser', () => {
     const phases = ['```j', '```js', '```js\r', '```js\r\n', '```js\r\nconst x = "中😀";\r', '```js\r\nconst x = "中😀";\r\n', '```js\r\nconst x = "中😀";\r\n``` ', '```js\r\nconst x = "中😀";\r\n``` x', '```js\r\nconst x = "中😀";\r\n``` x\r\nnext', '```js\r\nconst x = "中😀";\r\n``` x\r\nnext\r\n```\r\n', '```text\ncorrected <script>literal</script>\n```\n\nAfter'];

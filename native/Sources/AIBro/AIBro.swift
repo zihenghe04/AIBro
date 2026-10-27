@@ -1340,6 +1340,19 @@ struct SidebarFooterLabel: View {
         Label(title,systemImage:symbol).lineLimit(1).padding(.horizontal,10).frame(minHeight:32)
     }
 }
+/// Filled primary button with an explicit palette fill and an adaptive label colour,
+/// so it stays legible in light/dark and in every palette (system accent can resolve to black).
+struct ProminentActionStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration:Configuration)->some View {
+        configuration.label.font(.body.weight(.medium))
+            .foregroundStyle(scheme == .dark ? Color(red:0.07,green:0.07,blue:0.08) : Color.white)
+            .padding(.horizontal,14).padding(.vertical,6)
+            .background(StudioPalette.jade.opacity(configuration.isPressed ? 0.8 : 1),in:RoundedRectangle(cornerRadius:8,style:.continuous))
+            .opacity(enabled ? 1 : 0.45)
+    }
+}
 struct LiftStyle: ButtonStyle {
     func makeBody(configuration:Configuration)->some View { configuration.label.modifier(ControlFeedback(pressed:configuration.isPressed)) }
 }
@@ -1568,16 +1581,18 @@ struct NativeDraftQuitGate {
     private let quickMedia=NativeQuickMediaStore()
     private let speechShortcut=NativeSpeechShortcutStore()
     private var speechDictation:NativeSpeechDictation?
+    /// Outcome of the last save/delete/test started from Settings (message carries no Key material).
+    private var speechResult:[String:Any]=[:]
+    private var speechSeq=0
+    private func recordSpeech(_ value:[String:Any]){speechSeq+=1;var next=value;next["seq"]=speechSeq;speechResult=next}
     private var voiceCommand:NativeVoiceCommandCoordinator?
     private let quickUtilities=NativeQuickUtilitiesStore()
     private let quickAgenda=NativeQuickAgendaStore()
     private let quickLoginItem=NativeQuickLoginItemStore()
     // These utilities never live in the synchronized knowledge workspace.
     private static var quickLocalDirectory:URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support",isDirectory:true)
-            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio",isDirectory:true)
-            .appendingPathComponent("QuickTools",isDirectory:true)
+        NativeQuickToolsLocation.directory(environment:ProcessInfo.processInfo.environment,home:FileManager.default.homeDirectoryForCurrentUser,
+            bundleID:Bundle.main.bundleIdentifier ?? "app.ai-workstation.studio")
     }
     private let quickClipboard=NativeQuickClipboardStore(directory:Delegate.quickLocalDirectory.appendingPathComponent("Clipboard",isDirectory:true))
     private let quickClipboardPasteBack=NativeQuickClipboardPasteBack()
@@ -1647,6 +1662,109 @@ struct NativeDraftQuitGate {
                 guard self.quickEntry.isShowing(.settings) else{return ["status":"error","reason":"unavailable"]}
             }
             return ["status":"ok","mode":self.quickEntry.mode.rawValue,"isEnabled":self.quickEntry.isEnabled,"preferredEnabledMode":self.quickEntry.preferredEnabledMode.rawValue]
+        }
+        model.desktop?.speechSettings = {[weak self,weak model] request in
+            guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return ["status":"error","reason":"unavailable"]}
+            let store=self.quickMedia.recordings
+            func fail(_ reason:String)->[String:Any]{["status":"error","reason":reason]}
+            switch request {
+            case .state: break
+            case .select(let id):
+                guard store.available,store.phase == .idle,!store.speechSettings.busy,store.speechSettings.schemes.contains(where:{$0.id==id}) else{return fail(store.phase == .idle ? "busy":"recording")}
+                Task{@MainActor in _ = await store.speechSettings.selectScheme(id)}
+            case .realtime(let enabled):
+                let settings=store.realtimeSettings
+                guard store.available,store.phase == .idle else{return fail("recording")}
+                guard settings.configured,settings.available,!settings.testing else{return fail(settings.configured ? "busy":"not_configured")}
+                var draft=settings.draft();draft.configuration.enabled=enabled;draft.key=""
+                guard settings.save(draft) else{return fail("busy")}
+            case .test(let target):
+                guard store.available else{return fail("unavailable")}
+                if target == "cloud" {
+                    let settings=store.speechSettings
+                    guard let scheme=settings.schemes.first(where:{$0.id==settings.selectedID}) else{return fail("not_configured")}
+                    guard !settings.busy else{return fail("busy")}
+                    let revision=settings.catalogRevision
+                    Task{@MainActor in _ = await settings.testConnection(schemeID:scheme.id,configuration:scheme.configuration,key:"",expectedRevision:revision)}
+                } else {
+                    let settings=store.realtimeSettings
+                    guard settings.configured else{return fail("not_configured")}
+                    guard !settings.testing else{return fail("busy")}
+                    settings.testConnection(settings.draft())
+                }
+            case .saveCloud(let input):
+                let settings=store.speechSettings
+                guard store.available,store.phase == .idle,!settings.busy else{return fail(store.phase == .idle ? "busy":"recording")}
+                guard input.configuration.valid else{return fail("invalid_config")}
+                let id=input.id ?? UUID().uuidString
+                Task{@MainActor [weak self] in
+                    let ok=await settings.saveScheme(id:id,name:input.name,configuration:input.configuration,key:input.key,expectedRevision:settings.catalogRevision)
+                    self?.recordSpeech(["op":"save-cloud","ok":ok,"id":id,"message":ok ? "":(settings.error ?? "")])
+                }
+            case .deleteCloud(let id):
+                let settings=store.speechSettings
+                guard store.available,store.phase == .idle,!settings.busy else{return fail(store.phase == .idle ? "busy":"recording")}
+                Task{@MainActor [weak self] in
+                    let ok=await settings.removeScheme(id,expectedRevision:settings.catalogRevision)
+                    self?.recordSpeech(["op":"delete-cloud","ok":ok,"id":id,"message":ok ? "":(settings.error ?? "")])
+                }
+            case .testCloud(let input):
+                let settings=store.speechSettings
+                guard store.available,!settings.busy else{return fail("busy")}
+                guard input.configuration.valid else{return fail("invalid_config")}
+                let key=input.key.trimmingCharacters(in:.whitespacesAndNewlines)
+                guard !key.isEmpty || (input.id.map{settings.canRetainKey(schemeID:$0,configuration:input.configuration)} ?? false) else{return fail("key_required")}
+                Task{@MainActor in _ = await settings.testConnection(schemeID:input.id ?? "",configuration:input.configuration,key:key)}
+            case .saveRealtime(let input):
+                let settings=store.realtimeSettings
+                guard store.available,store.phase == .idle,!settings.testing else{return fail(store.phase == .idle ? "busy":"recording")}
+                Task{@MainActor [weak self] in
+                    guard let self else{return}
+                    do {
+                        let (config,key)=try await self.resolveRealtimeInput(input,store:store)
+                        var draft=settings.draft(for:input.id);draft.profileID=input.id ?? UUID().uuidString;draft.name=input.name
+                        draft.configuration=config;draft.key=key;draft.catalogRevision=settings.revision
+                        let ok=settings.save(draft)
+                        self.recordSpeech(["op":"save-realtime","ok":ok,"id":draft.profileID,"message":ok ? "":(settings.error ?? "")])
+                    } catch {self.recordSpeech(["op":"save-realtime","ok":false,"message":error.localizedDescription])}
+                }
+            case .deleteRealtime(let id):
+                let settings=store.realtimeSettings
+                guard store.available,store.phase == .idle,!settings.testing else{return fail(store.phase == .idle ? "busy":"recording")}
+                let ok=settings.removeProfile(id)
+                recordSpeech(["op":"delete-realtime","ok":ok,"id":id,"message":ok ? "":(settings.error ?? "")])
+            case .selectRealtime(let id):
+                let settings=store.realtimeSettings
+                guard store.available,store.phase == .idle,!settings.testing else{return fail(store.phase == .idle ? "busy":"recording")}
+                let ok=settings.selectProfile(id)
+                recordSpeech(["op":"select-realtime","ok":ok,"id":id,"message":ok ? "":(settings.error ?? "")])
+            case .testRealtime(let input):
+                let settings=store.realtimeSettings
+                guard store.available,!settings.testing else{return fail("busy")}
+                Task{@MainActor [weak self] in
+                    guard let self else{return}
+                    do {
+                        let (config,key)=try await self.resolveRealtimeInput(input,store:store)
+                        var draft=settings.draft(for:input.id);draft.profileID=input.id ?? draft.profileID;draft.configuration=config;draft.key=key
+                        settings.testConnection(draft)
+                    } catch {self.recordSpeech(["op":"test-realtime","ok":false,"message":error.localizedDescription])}
+                }
+            case .silence(let seconds):
+                UserDefaults.standard.set(seconds,forKey:NativeDictationPreferences.silenceKey)
+            case .open(let target,let schemeID):
+                guard store.available,store.phase == .idle else{return fail(store.available ? "recording":"unavailable")}
+                self.quickEntry.showPanel(section:.recordings)
+                guard self.quickEntry.isShowing(.recordings) else{return fail("unavailable")}
+                // The panel reports itself visible a moment after it opens; the sheets hang off that.
+                Task{@MainActor in
+                    for _ in 0..<10 where !store.visible {try? await Task.sleep(for:.milliseconds(100))}
+                    if target == "realtime" {store.beginRealtimeSettings()}
+                    else if target == "cloud-new" {store.newSpeechSchemeDraft()}
+                    else if let schemeID {store.beginSpeechSettings(schemeID:schemeID)}
+                    else {store.beginSpeechSettings()}
+                }
+            }
+            var state=Self.speechSettingsState(store);state["result"]=self.speechResult;return state
         }
         model.desktop?.openQuickPanel = {[weak self,weak model] request,verify in
             guard let self,let model,self.model === model,model.ready,self.draftQuit.phase == .idle else{return .deferred(reason:"workspace_unavailable")}
@@ -1875,7 +1993,42 @@ struct NativeDraftQuitGate {
             }
         }.store(in:&quickEntrySubscriptions)
     }
+    /// Public, key-free view of the native transcription schemes for the Models page.
+    /// Resolves a realtime draft from Settings. With `reuseCloudID` the live scheme takes the address and the saved Key of that cloud
+    /// scheme (self-hosted only); the Key is read inside native code and never reaches the web.
+    private func resolveRealtimeInput(_ input:NativeDesktop.SpeechRealtimeInput,store:NativeQuickRecordingStore) async throws->(NativeQuickASRConfiguration,String) {
+        var config=input.configuration,key=input.key
+        if let cloudID=input.reuseCloudID {
+            guard let scheme=store.speechSettings.schemes.first(where:{$0.id==cloudID}),scheme.configuration.provider == .selfHosted,config.provider == .selfHosted else{throw NativeQuickASRError.configuration}
+            config.serverURL=scheme.configuration.baseURL
+            key=try await store.speechSettings.schemeKey(cloudID)
+        }
+        guard config.valid else{throw NativeSpeechError.detail(config.serverURLProblem ?? nativeUI("实时转写设置无效。","The live transcription settings are not valid."))}
+        return (config,key)
+    }
+    static func speechSettingsState(_ store:NativeQuickRecordingStore)->[String:Any] {
+        let cloud=store.speechSettings, realtime=store.realtimeSettings
+        let schemes:[[String:Any]]=cloud.schemes.map{["id":$0.id,"name":$0.name,"provider":$0.configuration.provider.rawValue,"model":$0.configuration.model,
+            "host":$0.configuration.endpoint?.host ?? "","baseURL":$0.configuration.baseURL,"language":$0.configuration.language,
+            "timeoutSeconds":$0.configuration.timeoutSeconds ?? 0,"keySaved":true]}
+        let profiles:[[String:Any]]=realtime.profiles.map{["id":$0.id,"name":$0.name,"model":$0.configuration.modelName,"provider":$0.configuration.provider.rawValue,"region":$0.configuration.provider == .bailian ? $0.configuration.region.rawValue:"","host":$0.configuration.provider == .selfHosted ? $0.configuration.host:"","serverURL":$0.configuration.provider == .selfHosted ? $0.configuration.serverURL:"","workspaceID":$0.configuration.workspaceID,"keySaved":true,
+            "language":$0.configuration.language,"enabled":$0.configuration.enabled]}
+        return ["status":"ok",
+            "cloud":["available":cloud.available,"busy":cloud.busy,"configured":cloud.configured,"selectedId":cloud.selectedID ?? "","schemes":schemes,
+                     "testing":cloud.testing,"testMessage":cloud.testResult ?? "","error":cloud.error ?? ""],
+            "realtime":["available":realtime.available,"busy":false,"configured":realtime.configured,"enabled":realtime.configuration.enabled,"activeId":realtime.activeProfileID,
+                        "profiles":profiles,"testing":realtime.testing,"testMessage":realtime.testMessage ?? "","error":realtime.error ?? ""],
+            "silenceSeconds":NativeDictationPreferences.silenceSeconds]
+    }
     func invokeVoiceCommand(){voiceCommand?.invoke()}
+    /// Opens the main window on Settings > Models > Speech recognition.
+    func openMainSpeechSettings(_ model:Workspace){
+        model.openWorkspaceSettings()
+        Task{@MainActor in
+            for _ in 0..<40 where model.selection != "settings" {try? await Task.sleep(nanoseconds:100_000_000)}
+            _ = try? await model.web.callAsyncJavaScript("document.dispatchEvent(new CustomEvent('aibro-open-models-tab',{detail:'speech'}));return true;",arguments:[:],in:nil,contentWorld:.page)
+        }
+    }
     private func configureSpeechEntry(_ model:Workspace){
         let dictation=NativeSpeechDictation(settings:quickMedia.recordings.speechSettings,
             directory:Self.quickLocalDirectory.appendingPathComponent("Dictation",isDirectory:true),
@@ -1883,7 +2036,8 @@ struct NativeDraftQuitGate {
                 guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return false}
                 return model.voiceWorkspaceAvailable && self.quickMedia.recordings.phase == .idle
                     && self.quickMedia.recordings.transcribingID == nil && !self.quickMedia.recordings.hasEditor
-            })
+            },
+            realtime:NativeDictationRealtime(connection:{[weak self] in try? self?.quickMedia.recordings.realtimeSettings.connection()}))
         speechDictation=dictation;model.desktop?.speechDictation=dictation
         let owner=model.dataDirectory,origin=model.origin
         let voice=NativeVoiceCommandCoordinator(dictation:dictation,verify:{[weak self,weak model] in
@@ -1945,10 +2099,18 @@ struct NativeDraftQuitGate {
             }
             return false
         }
-        model.desktop?.openSpeechSettings=openSettings
+        // Speech recognition is configured in Settings > Models > Speech recognition (main window), not in an island sheet.
+        let openMainSettings:() async -> Bool = { [weak self,weak model] in
+            guard let self,let model,self.model === model,model.ready else{return false}
+            self.voiceCommand?.invalidate()
+            self.openMainSpeechSettings(model)
+            return true
+        }
+        model.desktop?.openSpeechSettings=openMainSettings
+        quickMedia.recordings.openSettingsPage={[weak self,weak model] in if let self,let model,self.model === model{self.voiceCommand?.invalidate();self.openMainSpeechSettings(model)}}
         quickEntry.configureVoice(content:{[voice,dictation,speechShortcut,weak self] in
             AnyView(NativeVoiceCommandView(coordinator:voice,dictation:dictation,speechSettings:dictation.settings,shortcut:speechShortcut,
-                settings:{Task{_ = await openSettings()}},stop:{[weak self,weak voice] id in
+                settings:{Task{_ = await openMainSettings()}},stop:{[weak self,weak voice] id in
                     guard let self,voice?.execution?.runID==id else{return false}
                     return await self.quickEntry.workbench.cancelRun(id:id)
                 }))
@@ -2199,7 +2361,16 @@ struct NativeDraftQuitGate {
         if !workspaceVisible,restoreWorkspaceWindow() != nil {return false}
         return true
     }
-    func applicationDidFinishLaunching(_ notification:Notification){NSApp.setActivationPolicy(.regular);NSApp.activate(ignoringOtherApps:true)}
+    func applicationDidFinishLaunching(_ notification:Notification){
+        NSApp.setActivationPolicy(.regular)
+        // M1 scheduler: opened by the login item with "start in background" on → stay hidden;
+        // the service, scheduler and background runs work as usual, and the Dock icon reopens the window.
+        if NativeLoginLaunch.startHidden(launchedAsLoginItem:NativeLoginLaunch.launchedAsLoginItem(NSAppleEventManager.shared().currentAppleEvent)) {
+            DispatchQueue.main.asyncAfter(deadline:.now()+0.3){NSApp.hide(nil)}
+            return
+        }
+        NSApp.activate(ignoringOtherApps:true)
+    }
     func observeWorkspaceWindow(_ window:NSWindow){
         workspaceWindows=workspaceWindows.filter{$0.value.window != nil}
         let key=ObjectIdentifier(window)

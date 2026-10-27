@@ -58,13 +58,17 @@
   const key=JSON.stringify([project.id,project.name,project.localFolder,state.notes.filter(n=>n.projectId===project.id).map(n=>[n.id,n.updatedAt,n.title,n.folderPath,n.deletedAt,n.archived]),state.imports.filter(n=>n.projectId===project.id).map(n=>[n.id,n.updatedAt,n.name,n.folderPath,n.deletedAt,n.archived])]);
   if(key!==treeKey||!host.firstElementChild){treeKey=key;root.ProjectFiles?.renderForProject?.(host,project.id);}
  }
+ // Connected native browser and the built-in browser plugin enabled (plugin-host.js).
+ const browserOn=()=>!!root.BrowserTools?.available?.()&&(root.AIBroPlugins?.default?root.AIBroPlugins.default.enabled('browser'):true);
  function sync(){
   const state=hooks.state?.(),conversation=hooks.conversation?.();if(!state)return;
   const button=root.document.getElementById('workspaceFilesToggle');if(button)button.hidden=root.DocumentFileTree? !fileScope() : !conversation?.projectId;
   const host=ensureEvidence();
   if(hasContextWorkbench()){root.ContextWorkbench.refresh();updateTabs();return;}
   if(!host||!conversation){if(host){host.replaceChildren();contextKey='';}updateTabs();return;}
-  const browserAvailable=!!root.BrowserTools?.available?.();
+  const browserAvailable=browserOn();
+  // The browser plugin can be disabled in settings; its entry points follow at once.
+  for(const id of ['workspaceBrowserToggle','composerBrowserToggle']){const node=root.document.getElementById(id);if(node)node.hidden=!browserAvailable;}
   const value=snapshot(state,conversation),run=(state.agentRuns||[]).find(item=>item.id===value.runId);
   const message=(conversation.messages||[]).find(item=>!item.deletedAt&&item.runId===run?.id);
   // Request excerpts are immutable. Stable IDs/versions avoid serializing the

@@ -255,7 +255,7 @@ private struct AgendaDayDetail:View {
                 }.padding(20)
             }
             Divider()
-            HStack{Text(nativeUI("点击安排查看详情", "Select an event for details")).font(.caption).foregroundStyle(.secondary);Spacer();Button{newEvent()}label:{Label(nativeUI("新建日程", "New event"),systemImage:"plus")}.buttonStyle(.borderedProminent)}.padding(20)
+            HStack{Text(nativeUI("点击安排查看详情", "Select an event for details")).font(.caption).foregroundStyle(.secondary);Spacer();Button{newEvent()}label:{Label(nativeUI("新建日程", "New event"),systemImage:"plus")}.buttonStyle(ProminentActionStyle())}.padding(20)
         }.frame(width:580,height:560).background(StudioPalette.canvas)
         .sheet(item:$detail){entry in AgendaDetail(model:model,store:store,occurrence:entry)}
         .sheet(item:$editor){event in AgendaEditor(model:model,store:store,event:event)}
@@ -310,7 +310,7 @@ struct AgendaEditor:View {
         }
     }
     var body:some View {
-        VStack(spacing:0){HStack{Text(nativeUI("日程详情", "Event details")).font(.title2.bold());Spacer();Button(nativeUI("取消", "Cancel")){requestDismiss()};Button(nativeUI("保存", "Save")){saveEditor()}.buttonStyle(.borderedProminent).keyboardShortcut("s",modifiers:.command).disabled(saving)}.padding(22)
+        VStack(spacing:0){HStack{Text(nativeUI("日程详情", "Event details")).font(.title2.bold());Spacer();Button(nativeUI("取消", "Cancel")){requestDismiss()};Button(nativeUI("保存", "Save")){saveEditor()}.buttonStyle(ProminentActionStyle()).keyboardShortcut("s",modifiers:.command).disabled(saving)}.padding(22)
             ScrollView{VStack(alignment:.leading,spacing:17){TextField(nativeUI("日程名称", "Event title"),text:$event.title).font(.title3).textFieldStyle(.roundedBorder)
                 if event.source=="随记" {Text(nativeUI("由随记创建的日程草稿。请确认日期、时间和提醒；保存前不会安排通知。", "Drafted from a quick note. Check the date, time and reminder. Notifications are scheduled only after saving.")).font(.caption).foregroundStyle(.secondary)}
                 AgendaChoice(title:nativeUI("类型", "Type"),value:$event.kind,options:[("event",nativeUI("日程", "Agenda")),("course",nativeUI("课程", "Courses")),("meeting",nativeUI("会议", "Meeting"))])

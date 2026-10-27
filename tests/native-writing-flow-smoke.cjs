@@ -8,7 +8,9 @@ const http = require('node:http'), net = require('node:net'), assert = require('
 const { spawn } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '..');
 const LABEL = process.argv.includes('--before') ? 'before' : 'after';
-const PYTHON = process.env.AIBRO_TEST_PYTHON || path.join(ROOT, 'mobile/build/desktop-agenda/AI Bro.app/Contents/Resources/python/bin/python3');
+// Prefer the bundled interpreter of a local desktop build when present; otherwise use the system python3 like the other smokes.
+const BUNDLED_PYTHON = path.join(ROOT, 'mobile/build/desktop-agenda/AI Bro.app/Contents/Resources/python/bin/python3');
+const PYTHON = process.env.AIBRO_TEST_PYTHON || (fs.existsSync(BUNDLED_PYTHON) ? BUNDLED_PYTHON : (process.env.PYTHON || 'python3'));
 const OUT = path.join(ROOT, 'test-results/native-writing-20261001/renderer-' + LABEL);
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), 'aibro-native-writing-'));
 const STORE = path.join(TEMP, 'store');
@@ -71,8 +73,11 @@ async function finish(code) {
   const port = await new Promise(resolve => { const socket = net.createServer(); socket.listen(0, '127.0.0.1', () => { const port = socket.address().port; socket.close(() => resolve(port)); }); });
   origin = 'http://127.0.0.1:' + port;
   const log = fs.openSync(path.join(OUT, 'server.log'), 'w');
-  const serverEnv = { ...process.env, AI_WORKSTATION_PORT: String(port), AI_WORKSTATION_DATA_DIR: STORE, HOME: path.join(TEMP, 'home'), CODEX_HOME: path.join(TEMP, 'codex-home'), PYTHONDONTWRITEBYTECODE: '1', PYTHONNOUSERSITE: '1' };
+  const serverEnv = { ...process.env, AI_WORKSTATION_PORT: String(port), AI_WORKSTATION_DATA_DIR: STORE, HOME: path.join(TEMP, 'home'), CODEX_HOME: path.join(TEMP, 'codex-home'), PYTHONDONTWRITEBYTECODE: '1' };
   for (const key of ['PYTHONHOME', 'PYTHONPATH', 'PYTHONSTARTUP', 'PYTHONUSERBASE', 'PYTHONEXECUTABLE', '__PYVENV_LAUNCHER__']) delete serverEnv[key];
+  // The bundled interpreter is self-contained and runs with the user site off. A system interpreter keeps its image decoder in the user site and HOME is isolated above, so pin the user base to the real one (read-only).
+  if (PYTHON === BUNDLED_PYTHON) serverEnv.PYTHONNOUSERSITE = '1';
+  else serverEnv.PYTHONUSERBASE = require('node:child_process').execFileSync(PYTHON, ['-c', 'import site;print(site.getuserbase())'], { encoding: 'utf8' }).trim();
   server = spawn(PYTHON, [path.join(ROOT, 'app/server.py')], { cwd: ROOT, env: serverEnv, stdio: ['ignore', log, log] });
   await until(() => new Promise(resolve => http.get(origin + '/__health', response => { response.resume(); resolve(response.statusCode === 200); }).on('error', () => resolve(false))), 'server');
   fs.mkdirSync(path.join(TEMP,'project')); fs.writeFileSync(path.join(TEMP,'project','local.md'),'# Local writing\n\nLocal original.');
@@ -87,7 +92,7 @@ async function finish(code) {
   win.webContents.on('console-message', event => { if (event.level === 'error') { rendererErrors.push(event.message); console.error('RENDERER', event.message); } });
   await win.loadURL(origin);
   await until(() => evaluate('typeof storageHydrated!=="undefined"&&storageHydrated'), 'hydrate');
-  await evaluate(fs.readFileSync(path.join(ROOT, 'test-results/document-images-20260930/fixture-client.js'), 'utf8'));
+  await evaluate(fs.readFileSync(path.join(ROOT, 'tests/fixtures/document-images-fixture-client.js'), 'utf8'));
   await until(() => evaluate('window.__documentImageFixtureReady'), 'fixture ready'); await settle();
 
 

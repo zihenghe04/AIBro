@@ -84,7 +84,7 @@
       const select=$('polishAccountModel');select.replaceChildren(new Option(pref.model||'账号默认模型',pref.model));select.dataset.loading='true';
       paintEfforts(pref.effort);busy();position();modelController=new AbortController();
       try {
-        const response=await fetch('/__auth/models',{signal:modelController.signal});const data=await response.json();
+        const authMode=window.OpenAIAuth?.mode?.();const response=await fetch(authMode==='shared'?'/__auth/models?mode=shared&cache=1':authMode==='oauth'?'/__auth/models?mode=oauth':'/__auth/models',{signal:modelController.signal});const data=await response.json();
         if(!response.ok)throw Error(data.error?.message||data.message||'请先连接 OpenAI 账号。');
         if(own!==modelVersion || $('polishDialog').hidden)return;
         const latest=getPreferences();
@@ -122,12 +122,12 @@
     try {
       const config=await root.ConversationModels.resolve(configuration(pref,snapshot.modelConfig));
       if(own!==generation||signal.aborted)return;
-      const credentials=config.provider==='api'?await hooks.getApiConnection(apiConnection):{};
+      const credentials=config.provider==='api'?await hooks.getApiConnection(apiConnection,config.connection):{};
       if(own!==generation||signal.aborted)return;
       if(!canApply(snapshot,hooks.getConversation(),hooks.getDraft())) {status('草稿或对话已变化，未发送旧内容进行润色。');return;}
       if(config.provider==='api'&&(!credentials.base||!credentials.token||!config.model))throw Error('请先在设置中配置 API 地址、API Key，并选择润色模型。');
       status('正在润色 · '+root.ConversationModels.describe(config));
-      const result=await root.AgentTransport.requestPlan({...config,...credentials,input,signal,onDelta:text=>{
+      const result=await root.AgentTransport.requestPlan({...config,...credentials,...(root.trackModelUsage?.(config,credentials)||{}),input,signal,onDelta:text=>{
         if(own===generation){$('polishCandidate').value=text;}
       }});
       if(own!==generation||signal.aborted)return;

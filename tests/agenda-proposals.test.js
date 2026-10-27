@@ -47,3 +47,25 @@ test('review card displays real proposal ownership and sends normalized legacy p
   sent.length=0;global.saveDocumentDurably=async()=>{s.projects[0].archived=true;return true;};await find(card,'agenda-proposal-review').onclick();assert.equal(sent.length,0);assert.match(issues.at(-1),/项目.*不可用/);
  }finally{for(const k of names){const descriptor=before.get(k);if(descriptor)Object.defineProperty(global,k,descriptor);else delete global[k];}}
 });
+test('proposal stays reviewable after the same run creates and attaches a project',()=>{
+ const quote='分析一下看看吧 然后建个项目和日程 我是人工智能方向的',v={title:'现场查阅',sourceMessageId:'u',quote:quote.slice(0,12),start:'2026-10-28T12:00:00+08:00',end:'2026-10-28T13:00:00+08:00',timeZone:'Asia/Singapore',projectId:null};
+ const s={notes:[],projects:[],conversations:[{id:'c',projectId:null,workspace:'auto',messages:[{id:'u',role:'user',text:quote}]}],agentRuns:[]};
+ const r={id:'r',userMessageId:'u',conversationId:'c',projectId:null,contextWorkspace:'auto',status:'completed',recordAssignmentScope:{projectId:null,workspace:'auto',readProjects:[]}};
+ r.agendaProposals=A.validate([v],s,r);s.agentRuns.push(r);
+ const before=Object.getOwnPropertyDescriptor(global,'state');global.state=s;
+ try{
+  assert.equal(A.authorizeCreation('r',r.agendaProposals).status,'authorized');
+  // Same-turn side effect, as applied by app.js after applyPlan: project created and conversation attached.
+  s.projects.push({id:'p',name:'博士选题',workspace:'科研'});r.projectId='p';
+  s.conversations[0].projectId='p';s.conversations[0].workspace='科研';
+  assert.equal(A.authorizeCreation('r',r.agendaProposals).status,'authorized');
+  // A genuine move by someone else afterwards still invalidates the proposal.
+  s.conversations[0].projectId='other';
+  assert.equal(A.authorizeCreation('r',r.agendaProposals).status,'denied');
+ }finally{if(before)Object.defineProperty(global,'state',before);else delete global.state;}
+});
+test('a genuinely stale proposal fails with a regenerate hint',async()=>{
+ const before=Object.getOwnPropertyDescriptor(global,'state');global.state={agentRuns:[],conversations:[],projects:[],notes:[]};
+ try{await assert.rejects(()=>A.reviewCreations({id:'missing'},[{id:'x'}]),e=>e.stale===true&&/重新生成|Regenerate/.test(e.message));}
+ finally{if(before)Object.defineProperty(global,'state',before);else delete global.state;}
+});

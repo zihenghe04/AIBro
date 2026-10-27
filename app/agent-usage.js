@@ -5,6 +5,10 @@
  const id=value=>typeof value==='string'&&value.length>0&&value.length<=256&&!/[\u0000-\u001f\u007f]/.test(value)?value:null;
  const terminal=new Set(['completed','failed','cancelled','interrupted']);
  const recorders=new WeakMap();
+ // Read-only observers (usage statistics). A throwing observer must never affect a run.
+ const observers=new Set();
+ const notify=event=>{for(const observer of observers){try{observer(event);}catch(_){/* statistics are best effort */}}};
+ function observe(listener){if(typeof listener!=='function')return()=>{};observers.add(listener);return()=>observers.delete(listener);}
  function snapshot(value){
   if(!value||typeof value!=='object'||Array.isArray(value))return null;
   const usage={input:count(value.input),output:count(value.output),total:count(value.total)};
@@ -50,11 +54,11 @@
     if(closed||!id(event?.id)||!['running',...terminal].includes(event.status))return false;
     if(event.status==='running'){
      const current=context(scope);if(!current||!id(scope.provider)||!id(scope.model)||ledger.attempts.some(item=>item.id===event.id))return false;
-     const item={id:event.id,status:'running',provider:scope.provider,model:scope.model,...current,usage:null};
-     ledger.attempts.push(item);active.set(item.id,item);sync();return true;
+     const item={id:event.id,status:'running',provider:scope.provider,model:id(event.model)||scope.model,...current,usage:null};
+     ledger.attempts.push(item);active.set(item.id,item);sync();notify({type:'start',run,item:{...item}});return true;
     }
     const item=active.get(event.id);if(!item||!matching(item,scope))return false;
-    item.status=event.status;active.delete(item.id);sync();return true;
+    item.status=event.status;active.delete(item.id);sync();notify({type:'end',run,item:{...item},httpStatus:count(event.httpStatus)});return true;
    },
    report(value,meta,scope={}){
     const item=active.get(meta?.attemptId),usage=snapshot(value);
@@ -62,12 +66,13 @@
     // These are snapshots for one provider request, not token deltas. A later
     // partial snapshot stays partial rather than borrowing stale components.
     item.usage=usage;item.totalSource=meta.totalSource==='components'?'components':usage.total!==null?'reported':null;
-    sync();return true;
+    sync();notify({type:'report',run,item:{...item},usage:{...usage},meta:{cacheRead:count(meta.cacheRead)}});return true;
    },
    finish(status){
     if(closed)return false;
-    for(const item of active.values())item.status=status==='cancelled'?'cancelled':status==='failed'?'failed':'interrupted';
-    active.clear();closed=true;sync();return true;
+    const ended=[...active.values()];
+    for(const item of ended)item.status=status==='cancelled'?'cancelled':status==='failed'?'failed':'interrupted';
+    active.clear();closed=true;sync();for(const item of ended)notify({type:'end',run,item:{...item}});return true;
    }
   };
   recorders.set(run,{ledger,api});return api;
@@ -86,5 +91,5 @@
   // zero. Only its fully split, positive-component path can price this total.
   return {usage,label,hint,canEstimate:usage.complete&&!usage.mixedModels&&usage.routeKnown&&usage.input>0&&usage.output>0};
  }
- return {create,project,view};
+ return {create,project,view,observe};
 });

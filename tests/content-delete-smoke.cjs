@@ -31,7 +31,7 @@ async function run(){
   win.webContents.session.webRequest.onBeforeRequest({urls:['<all_urls>']},(details,callback)=>{
     const url=new URL(details.url);
     if(url.origin===ORIGIN&&url.pathname==='/__trash/purge'&&details.method==='POST')purgeRequests.push(details.id);
-    const blocked=(url.protocol==='http:'||url.protocol==='https:')&&(url.origin!==ORIGIN||url.pathname.startsWith('/__proxy')||url.pathname==='/__codex/respond'||url.pathname.startsWith('/__auth/'));
+    const blocked=(url.protocol==='http:'||url.protocol==='https:')&&(url.origin!==ORIGIN||url.pathname.startsWith('/__proxy')||url.pathname==='/__codex/respond'||(url.pathname.startsWith('/__auth/')&&url.pathname!=='/__auth/status'&&!(url.pathname==='/__auth/models'&&url.searchParams.has('cacheonly'))));
     if(blocked)forbidden.push(details.url);
     callback({cancel:blocked});
   });

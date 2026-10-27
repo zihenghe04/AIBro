@@ -2,6 +2,19 @@ import AppKit
 import Combine
 import ServiceManagement
 
+/// "登录时在后台启动": when macOS opens AI Bro as a login item and this is on,
+/// the app starts hidden so scheduled tasks catch up without a window.
+enum NativeLoginLaunch {
+    static let backgroundKey = "AIBroLoginInBackground"
+    static func launchedAsLoginItem(_ event: NSAppleEventDescriptor?) -> Bool {
+        guard let event, event.eventID == AEEventID(kAEOpenApplication) else { return false }
+        return event.paramDescriptor(forKeyword: AEKeyword(keyAELaunchedAsLogInItem))?.enumCodeValue == OSType(keyAELaunchedAsLogInItem)
+    }
+    static func startHidden(launchedAsLoginItem: Bool, defaults: UserDefaults = .standard) -> Bool {
+        launchedAsLoginItem && defaults.bool(forKey: backgroundKey)
+    }
+}
+
 enum NativeQuickLoginItemStatus: Equatable {
     case notRegistered, enabled, requiresApproval, notFound, unknown
     var isRegistered: Bool { self == .enabled || self == .requiresApproval }

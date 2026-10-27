@@ -83,7 +83,7 @@ async function finish(code) {
   win.webContents.on('console-message', event => { if (event.level === 'error') { rendererErrors.push(event.message); console.error('RENDERER', event.message); } });
   await win.loadURL(origin);
   await until(() => evaluate('typeof storageHydrated!=="undefined"&&storageHydrated'), 'hydrate');
-  await evaluate(fs.readFileSync(path.join(ROOT, 'test-results/document-review-20260930/fixture-client.js'), 'utf8'));
+  await evaluate(fs.readFileSync(path.join(ROOT, 'tests/fixtures/document-review-fixture-client.js'), 'utf8'));
   await until(() => evaluate('window.__documentReviewFixtureReady'), 'fixture ready'); await settle();
 
   await check('the real file tree lists two pending notes while the durable originals remain unchanged', async () => {

@@ -15,6 +15,12 @@
   const scope=value.scope||{};if(Object.keys(scope).some(k=>!['projectId','workspace','readProjects'].includes(k))||scope.projectId!=null&&typeof scope.projectId!=='string'||scope.workspace!=null&&typeof scope.workspace!=='string'||scope.readProjects!==undefined&&(!Array.isArray(scope.readProjects)||scope.readProjects.some(p=>!id(p))))throw failure();
   return {runId:value.runId,conversationId:value.conversationId,userMessageId:value.userMessageId,scope:{projectId:scope.projectId||'',workspace:scope.workspace||'auto',readProjects:[...new Set(scope.readProjects||[])].sort()}};
  }
+ // The run may create a project and attach its conversation to it mid-turn, so the
+ // conversation may match the scope the run started in or the one it ended in.
+ function conversationInScope(conversation,run,state){
+  const start=run.recordAssignmentScope||{},cp=conversation.projectId||'',cw=conversation.workspace||'auto';
+  return [run.projectId,start.projectId].some(v=>cp===(v||''))&&[run.contextWorkspace,start.workspace,run.projectId&&list(state?.projects).find(p=>p.id===run.projectId)?.workspace].some(v=>cw===(v||'auto'));
+ }
  function contextFor(run){const scope=scopeFor(run);return normalizeContext({runId:run.id,conversationId:run.conversationId,userMessageId:run.userMessageId,scope:{projectId:scope.projectId||'',workspace:scope.workspace||'auto',readProjects:list(scope.readProjects).map(p=>p.id)}});}
  function owner(state,context){
   if(!state||root.PrivateMode?.isOn?.()||hooks.available?.()===false||!context||!id(context.runId)||!id(context.conversationId)||!id(context.userMessageId))throw failure();
@@ -22,7 +28,7 @@
   if(!active(run)||!active(conversation)||run.conversationId!==conversation.id||run.userMessageId!==context.userMessageId||['cancelled','failed','interrupted','rejected','error'].includes(run.status))throw failure();
   const message=unique(conversation.messages,run.userMessageId);
   if(!active(message)||message.role!=='user'||message.intentSource==='automatic'||typeof message.text!=='string')throw failure();
-  if((conversation.projectId||'')!==(run.projectId||'')||(conversation.workspace||'auto')!==(run.contextWorkspace||'auto'))throw failure();
+  if(!conversationInScope(conversation,run,state))throw failure();
   const scope=scopeFor(run);if(!R.readScopeCurrent(state,scope)||canonical(normalizeContext(context))!==canonical(contextFor(run)))throw failure();
   if(run.projectId&&!R.accessibleProjects(state).some(p=>p.id===run.projectId))throw failure();
   return {run,conversation,message,scope};
@@ -113,5 +119,5 @@
   try{if(typeof candidate.timeZone!=='string'||!candidate.timeZone)throw Error();new Intl.DateTimeFormat('en',{timeZone:candidate.timeZone}).format();}catch{throw failure('日程时区无效。','INVALID_AGENDA_PROPOSAL');}
   return {event,context,patch:clone(patch)};
  }
- return {init,execute,authorize,contextFor,validateMutation,validateResult,canonical};
+ return {init,execute,authorize,contextFor,conversationInScope,validateMutation,validateResult,canonical};
 });

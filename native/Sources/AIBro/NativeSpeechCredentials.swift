@@ -43,6 +43,8 @@ extension NativeCredentials {
                   let config=try? JSONDecoder().decode(NativeSpeechConfiguration.self,from:data),config.valid,
                   let endpoint=config.endpoint,record["base"] as? String == endpoint.absoluteString,
                   let key=record["token"] as? String,NativeSpeechService.validKey(key) else {throw NativeSpeechError.credential}
+            // The connection vault has no ElevenLabs profile format yet, so this scheme stays on this Mac instead of being mislabeled.
+            guard config.provider != .elevenLabs, config.provider != .selfHosted else {throw NativeSpeechError.credential}
             let aliyun=config.provider == .aliyun
             var profile:[String:Any]=["format":"aibro.connection-profile.v1","purpose":"speech","provider":aliyun ? "aliyun":"openai-compatible", "authKind":"api-key","apiFormat":aliyun ? "aliyun-multimodal":"audio-transcriptions","baseUrl":endpoint.absoluteString,"model":config.model,"apiKey":key]
             if !config.language.isEmpty {profile["language"]=config.language}
@@ -261,7 +263,7 @@ private actor NativeSpeechCredentialWorker {
         do {
             try await withTaskCancellationHandler(operation:{try await work.value},onCancel:{work.cancel()})
             guard available,revision==version,operation==id,!Task.isCancelled else{return false}
-            testResult=nativeUI("接口已接受合成静音并返回有效响应。未测试真人语音识别；本次测试不会保存设置。","The API accepted generated silence and returned a valid response. Real speech accuracy was not tested; this does not save settings.");return true
+            testResult=configuration.provider == .selfHosted ? nativeUI("服务可达，Key 有效，模型已就绪。未发送音频；本次测试不会保存设置。","The service is reachable, the Key is accepted and the model is ready. No audio was sent; this does not save settings.") : nativeUI("接口已接受合成静音并返回有效响应。未测试真人语音识别；本次测试不会保存设置。","The API accepted generated silence and returned a valid response. Real speech accuracy was not tested; this does not save settings.");return true
         } catch {
             guard available,revision==version,operation==id,!Task.isCancelled else{return false}
             self.error=(error as? NativeSpeechError)?.localizedDescription ?? NativeSpeechError.network.localizedDescription;return false
@@ -306,6 +308,14 @@ private actor NativeSpeechCredentialWorker {
             guard available,revision==version,operation==id,!Task.isCancelled else{return false}
             self.error=NativeSpeechError.credential.localizedDescription;return false
         }
+    }
+    /// The saved Key of one scheme, for native-side reuse (for example by the live scheme of the same service). It never leaves native code.
+    func schemeKey(_ id:String) async throws->String {
+        guard available,let access=access?.schemes,let scheme=schemes.first(where:{$0.id==id}) else{throw NativeSpeechError.unavailable}
+        let expected=catalogRevision
+        let key=try await Task.detached{try await access.read(id,scheme.configuration,expected)}.value
+        guard NativeSpeechService.validKey(key) else{throw NativeSpeechError.credential}
+        return key
     }
     func connection() async throws->(NativeSpeechConfiguration,String) {
         guard available,!busy,configured,configuration.valid,let access else{throw NativeSpeechError.unavailable}

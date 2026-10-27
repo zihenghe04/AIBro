@@ -115,7 +115,7 @@ test('native media: durable state, recovery and passive device lifecycle', { tim
     const compiled = spawnSync('xcrun', ['swiftc', '-target', 'arm64-apple-macosx14.0', source,
       path.join(root, 'native/Sources/AIBro/NativeQuickRecordingBatch.swift'),
       path.join(root, 'native/Sources/AIBro/NativeQuickRecordingStore.swift'),
-      ...['NativeSpeechService','NativeSpeechCredentials','NativeSpeechSettingsView','NativeCredentials','AgendaCore'].map(s=>path.join(root,'native/Sources/AIBro/'+s+'.swift')),
+      ...['NativeSpeechService','NativePlainHTTPPolicy','NativeSpeechCredentials','NativeSpeechSettingsView','NativeCredentials','AgendaCore'].map(s=>path.join(root,'native/Sources/AIBro/'+s+'.swift')),
       path.join(root, 'native/Sources/AIBro/NativeQuickRecordingPlayback.swift'),
       path.join(root, 'native/Sources/AIBro/NativeQuickRealtimeASRHandoff.swift'),
       path.join(root, 'native/Sources/AIBro/NativeQuickRealtimeASRProtocol.swift'),

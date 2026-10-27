@@ -29,7 +29,7 @@ async function run(){
   await evaluate(`showView('settings','系统设置')`);await wait(300);
   const select=await evaluate(`(()=>{const node=document.querySelector('#apiProtocol');return node?{value:node.value,options:[...node.options].map(o=>o.value)}:null})()`);
   assert.ok(select,'设置页应存在接口协议选择');
-  assert.deepEqual(select.options,['auto','responses','chat']);
+  assert.deepEqual(select.options,['auto','responses','chat','anthropic']);
   assert.equal(select.value,'auto','默认应为自动');
   assert.ok(await evaluate(`!!document.querySelector('#apiModelOptions')`),'默认模型应挂接可选择的模型列表');
  });

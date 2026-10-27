@@ -124,6 +124,8 @@ def public_notification(message):
     if isinstance(turn, dict):
         clean['turn'] = {key: turn[key] for key in ('id', 'status')
                          if isinstance(turn.get(key), str) and len(turn[key]) <= 160}
+        info = error_info(turn.get('error'))
+        if info: clean['turn']['error'] = info
     if method in ('item/started', 'item/completed'):
         item = params.get('item')
         if not isinstance(item, dict): return None
@@ -151,13 +153,77 @@ def public_notification(message):
     elif method in ('item/reasoning/textDelta', 'item/plan/delta'):
         if not isinstance(params.get('delta'), str) or not params['delta']: return None
         clean['delta'] = ' '  # Observed progress only, no raw reasoning storage.
+    elif method == 'thread/tokenUsage/updated':
+        # Counts only (the kernel's context budget and usage records).
+        usage = params.get('tokenUsage') if isinstance(params.get('tokenUsage'), dict) else {}
+        count = lambda value: value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < 10 ** 10 else None
+        clean['tokenUsage'] = {part: {key: count(usage[part].get(key)) for key in ('inputTokens', 'cachedInputTokens', 'outputTokens', 'reasoningOutputTokens', 'totalTokens')}
+                               for part in ('last', 'total') if isinstance(usage.get(part), dict)}
+        clean['tokenUsage']['modelContextWindow'] = count(usage.get('modelContextWindow'))
+    elif method == 'error':
+        info = error_info(params.get('error'))
+        if not info: return None
+        clean['error'] = info
+        clean['willRetry'] = params.get('willRetry') is True
     elif method != 'turn/completed':
         return None
     return {'method': method, 'params': clean}
 
 
+def error_info(error):
+    """A turn error's category, never its message (it may quote account or request details)."""
+    if not isinstance(error, dict): return None
+    info = error.get('codexErrorInfo')
+    # The service's own category for an unknown model; the text itself is not kept.
+    if isinstance(error.get('message'), str) and '"model_not_found"' in error['message'][:2000]: return {'kind': 'modelNotSupported'}
+    if isinstance(info, str) and re.fullmatch(r'[A-Za-z]{1,40}', info): return {'kind': info}
+    if isinstance(info, dict) and len(info) == 1:
+        kind = next(iter(info))
+        detail = info[kind] if isinstance(info[kind], dict) else {}
+        status = detail.get('httpStatusCode')
+        if isinstance(kind, str) and re.fullmatch(r'[A-Za-z]{1,40}', kind):
+            return {'kind': kind, **({'httpStatus': status} if isinstance(status, int) and not isinstance(status, bool) else {})}
+    return {'kind': 'other'}
+
+
+def shared_config(base=None):
+    """Overrides for the user's own Codex home: same lockdown, but the credential store stays as the user set it.
+
+    The private home forces file storage; forcing it on a shared home would hide credentials kept in the keychain.
+    """
+    config = {key: value for key, value in (base or runtime_config()).items() if key != 'cli_auth_credentials_store'}
+    return {**config, 'sandbox_mode': 'read-only', 'approval_policy': 'never', 'sandbox_workspace_write.network_access': False}
+
+
+def kernel_config(private=True):
+    """Startup config of a kernel runtime (P9b): the model only. Unlike runtime_config the
+    restricted JS host stays off too, so no hosted tool can exist in any thread registry."""
+    config = {**SAFE_CONFIG, 'features.code_mode_host': False, 'web_search': 'disabled'}
+    return {**config, 'sandbox_mode': 'read-only', 'approval_policy': 'never'} if private else shared_config(config)
+
+
+def provider_choice(mode):
+    """The private home is AI Bro's own ChatGPT login, so it is pinned to OpenAI. The shared home keeps the
+    provider the user's Codex is set up with (a local router that serves the models listed in their own
+    catalog): forcing OpenAI there sends router-only models to the ChatGPT backend, which rejects them."""
+    return {'modelProvider': 'openai'} if mode == 'private' else {}
+
+
+def child_environment(home=None):
+    """Environment for an official CLI child. API keys and session variables never pass through.
+
+    With a private home CODEX_HOME points at it. Shared mode keeps a CODEX_HOME the user already exported
+    (that is their usual account) and otherwise lets the CLI use its default location.
+    """
+    environment = {key: value for key, value in os.environ.items() if not key.startswith(('CODEX_', 'OPENAI_', 'CHATGPT_'))}
+    if home is not None: environment['CODEX_HOME'] = str(home)
+    elif os.environ.get('CODEX_HOME'): environment['CODEX_HOME'] = os.environ['CODEX_HOME']
+    environment['PATH'] = '/opt/homebrew/bin:/usr/local/bin:' + environment.get('PATH', '/usr/bin:/bin')
+    return environment
+
+
 def runtime_command():
-    candidates = [os.environ.get('AI_WORKSTATION_CODEX_BIN'), '/opt/homebrew/bin/codex', '/usr/local/bin/codex', shutil.which('codex')]
+    candidates = [os.environ.get('AI_WORKSTATION_CODEX_BIN'), '/opt/homebrew/bin/codex', '/usr/local/bin/codex', shutil.which('codex'), str(Path.home() / '.local' / 'bin' / 'codex')]
     for candidate in candidates:
         if not candidate or not Path(candidate).is_file() or not os.access(candidate, os.X_OK):
             continue
@@ -211,9 +277,15 @@ def convert_input(value):
 
 
 class CodexBridge:
-    def __init__(self, data_directory, command=None):
-        self.home = Path(data_directory).resolve() / 'codex-auth'
-        self.cwd = self.home / 'empty-workspace'
+    def __init__(self, data_directory, command=None, mode='private', lockdown=False):
+        # private: AI Bro's own CODEX_HOME (own login). shared: the user's usual Codex account; the
+        # official runtime finds it itself, this bridge never opens its credential files.
+        if mode not in ('private', 'shared'): raise ValueError('mode')
+        self.mode = mode
+        # lockdown: a kernel runtime (codex_kernel.py) with kernel_config(); a separate process from chat.
+        self.lockdown = lockdown
+        self.home = Path(data_directory).resolve() / 'codex-auth' if mode == 'private' else None
+        self.cwd = (self.home / 'empty-workspace') if self.home else Path(data_directory).resolve() / 'codex-shared' / 'empty-workspace'
         self.command = command
         self.process = None
         self.start_lock = threading.RLock()
@@ -238,15 +310,18 @@ class CodexBridge:
             command = self.available_command()
             if not command:
                 raise BridgeError('未找到官方 Codex 运行时。请安装 Codex CLI，然后重新打开 AI Workstation。')
-            if any(path.is_symlink() for path in (self.home, self.cwd, self.home / 'auth.json', self.home / 'config.toml')):
-                raise BridgeError('账号连接目录存在外部链接，无法保证凭据隔离。请为工作站使用独立数据目录。')
-            self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
-            self.home.chmod(0o700)
-            self.cwd.mkdir(exist_ok=True, mode=0o700)
-            environment = {key: value for key, value in os.environ.items() if not key.startswith(('CODEX_', 'OPENAI_', 'CHATGPT_'))}
-            environment.update({'CODEX_HOME': str(self.home), 'PATH': '/opt/homebrew/bin:/usr/local/bin:' + environment.get('PATH', '/usr/bin:/bin')})
+            if self.home is not None:
+                if any(path.is_symlink() for path in (self.home, self.cwd, self.home / 'auth.json', self.home / 'config.toml')):
+                    raise BridgeError('账号连接目录存在外部链接，无法保证凭据隔离。请为工作站使用独立数据目录。')
+                self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
+                self.home.chmod(0o700)
+            elif self.cwd.parent.is_symlink() or self.cwd.is_symlink():
+                raise BridgeError('账号连接目录存在外部链接，无法保证隔离。请为工作站使用独立数据目录。')
+            self.cwd.mkdir(parents=True, exist_ok=True, mode=0o700)
+            environment = child_environment(self.home)
             arguments = [*command, 'app-server', '--listen', 'stdio://']
-            for key, value in runtime_config().items(): arguments.extend(['-c', key + '=' + json.dumps(value)])
+            config = kernel_config(self.home is not None) if self.lockdown else runtime_config() if self.home is not None else shared_config()
+            for key, value in config.items(): arguments.extend(['-c', key + '=' + json.dumps(value)])
             try:
                 self.process = subprocess.Popen(arguments, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=self.cwd, env=environment, text=True, bufsize=1)
             except (OSError, ValueError):
@@ -311,6 +386,12 @@ class CodexBridge:
                     # filesystem access, external credentials or approvals.
                     try: self._send({'id': message['id'], 'error': {'code': -32601, 'message': 'Runtime tools are disabled in AI Workstation.'}})
                     except BridgeError: pass
+                    # The thread's subscriber learns that a tool was attempted (method only, no payload).
+                    params = message.get('params') if isinstance(message.get('params'), dict) else {}
+                    thread_id, method = params.get('threadId'), message.get('method')
+                    with self.state_lock: events = self.subscribers.get(thread_id) if isinstance(thread_id, str) else None
+                    if events is not None and isinstance(method, str):
+                        events.put({'method': '_server_request', 'params': {'threadId': thread_id, 'request': method[:80]}})
                 else:
                     self._notification(message)
                 # Do not retain the last raw tool payload while stdout waits
@@ -357,6 +438,8 @@ class CodexBridge:
             return {'available': True, 'authenticated': False, 'account': None, 'login': dict(self.login), 'runtime': 'codex-app-server', 'error': str(error)}
 
     def login_start(self):
+        if self.mode == 'shared':
+            raise BridgeError('正在复用你平时已登录的 Codex 账号。需要登录请在终端运行 codex login，或切换为“在 AI Bro 里单独登录”。', 409, 'shared_login_refused')
         with self.auth_lock:
             if self.login['pending'] and self.login_url:
                 return {'loginId': self.login['loginId'], 'authUrl': self.login_url}
@@ -383,6 +466,8 @@ class CodexBridge:
             return {'ok': True}
 
     def logout(self):
+        if self.mode == 'shared':
+            raise BridgeError('这是你平时在终端使用的 Codex 账号，AI Bro 不会替你退出它。如需退出请在终端运行 codex logout。', 409, 'shared_logout_refused')
         self.cancel_login()
         self.rpc('account/logout')
         # Stop any active request so a signed-out UI cannot continue generating.
@@ -463,7 +548,7 @@ class CodexBridge:
                 'Use only the materials supplied by the host application. No direct filesystem, shell, network, skills, or runtime tools are available. '
             )
             thread_parameters = {
-                'model': model, 'modelProvider': 'openai', 'cwd': str(self.cwd),
+                'model': model, **provider_choice(self.mode), 'cwd': str(self.cwd),
                 'allowProviderModelFallback': False,
                 'approvalPolicy': 'never', 'sandbox': 'read-only', 'ephemeral': True,
                 'environments': [], 'dynamicTools': [], 'runtimeWorkspaceRoots': [], 'selectedCapabilityRoots': [],
@@ -588,6 +673,7 @@ class CodexBridge:
                         yield {'type': 'response.completed', 'response': {'output_text': output}}
                     else:
                         message = '本次生成已停止。' if turn.get('status') == 'interrupted' else 'OpenAI 未能完成本次生成，请检查账号额度或稍后重试。'
+                        if (turn.get('error') or {}).get('kind') == 'modelNotSupported': message = '当前 Codex 账号不支持所选模型，请换一个模型后重试。'
                         yield {'type': 'response.failed', 'error': {'message': message, 'code': 'codex_turn_failed'}}
                     return
         except (BridgeError, StreamBufferError) as error:

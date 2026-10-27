@@ -16,6 +16,7 @@
   const PROTOCOL_EFFORTS = {
     responses: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
     chat: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+    anthropic: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
     auto: EFFORTS
   };
   // 现有内核的固定预算按 128K 窗口标定；填写窗口后等比例缩放并设上下限。

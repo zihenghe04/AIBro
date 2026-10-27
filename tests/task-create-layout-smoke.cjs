@@ -71,7 +71,7 @@ async function run() {
   await until(()=>new Promise(resolve=>http.get(origin+'/__health',response=>{response.resume();resolve(response.statusCode===200);}).on('error',()=>resolve(false))),'temporary server');
   await app.whenReady(); win=new BrowserWindow({show:false,width:1280,height:700,webPreferences:{sandbox:true,contextIsolation:true,backgroundThrottling:false}});
   win.webContents.session.webRequest.onBeforeRequest({urls:['http://*/*','https://*/*','ws://*/*','wss://*/*']},(request,done)=>{
-    const url=new URL(request.url),statusRead=url.origin===origin&&request.method==='GET'&&['/__cloud/status','/__cloud/ssh'].includes(url.pathname);
+    const url=new URL(request.url),statusRead=url.origin===origin&&request.method==='GET'&&(['/__cloud/status','/__cloud/ssh','/__auth/status'].includes(url.pathname)||(url.pathname==='/__auth/models'&&url.searchParams.has('cacheonly')));
     if(statusRead&&url.pathname==='/__cloud/status')report.localCloudStatusReads++; if(statusRead&&url.pathname==='/__cloud/ssh')report.localSSHMetadataReads++;
     const blocked=url.origin!==origin||!statusRead&&/^\/__(?:proxy|codex|auth|cloud|models|api|llm|local|terminal|browser)(?:\/|$)/.test(url.pathname);
     if(blocked)blockedRequests.push({url:request.url,method:request.method});done({cancel:blocked});

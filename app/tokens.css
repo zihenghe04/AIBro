@@ -3,7 +3,7 @@
    Layer 2 = semantic aliases: what a value is for. New CSS should use layer 2 where one exists.
    Colour palettes (dark :root / body.light-mode / liquid-glass) are listed in the Colour section at the bottom.
    Every value below is an exact copy of a value that already shipped; adopting a token must not change a pixel.
-   Loaded before styles.css (see index.html and asset-manifest.json). Inventory + counts: docs/m1/reports/design-tokens.md */
+   Loaded before styles.css (see index.html and asset-manifest.json). */
 :root {
   /* ---- Spacing (px). Grid steps 4/8/12/16/20/24 are the core; the rest are legacy off-grid values kept for zero visual change. ---- */
   --space-4:4px; --space-8:8px; --space-12:12px; --space-16:16px; --space-20:20px; --space-24:24px;
@@ -62,7 +62,7 @@
      1. Default (this file): dark in :root, light under body.light-mode. Identity: blue-grey.
      2. Liquid glass (liquid-glass.css, body.liquid-glass[data-view]): neutral grey, overrides 1 in both themes.
      3. Native app (native/Resources/workspace.css, body.aibro-native): teal-green, injected by the Swift shell.
-   Palettes 2 and 3 are listed in docs/m1/reports/design-tokens.md; they were not moved (specificity-sensitive).
+   Palettes 2 and 3 live in themes.css; they were not moved (specificity-sensitive).
    Role names below are the shipped short names (--bg, --panel, ...). --color-* are the same roles under
    self-describing names; they are declared on body, not :root, so they follow body.light-mode and
    body.liquid-glass overrides. Do not read them on html.

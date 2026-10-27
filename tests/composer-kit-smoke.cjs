@@ -73,7 +73,7 @@ const watchdog = setTimeout(() => { failures.push({ error: 'watchdog timeout' })
     await ev(`document.querySelector('dialog.permission-picker').dispatchEvent(new Event('cancel',{cancelable:true}))`);
   });
   await check('model button opens once and retains one mounted Kit model picker', async () => {
-    await click('#composerModel'); assert.equal(await ev(`(()=>{const e=document.querySelector('#modelPicker');return !e.hidden&&e.tagName==='SECTION'&&!(e instanceof HTMLDialogElement)&&!('open' in e)})()`), true); assert.equal(await ev(`document.querySelectorAll('#modelPickerKit[data-halaska-root="ModelPickerSurface"]').length`), 1);
+    await click('#composerModel'); assert.equal(await ev(`(()=>{const e=document.querySelector('#modelPicker');return !e.hidden&&e.tagName==='SECTION'&&!(e instanceof HTMLDialogElement)&&!('open' in e)})()`), true); assert.equal(await ev(`document.querySelectorAll('#modelPickerList').length`), 1);
     await ev(`ConversationModels.close();void 0;`);
     assert.equal(await ev(`document.querySelector('#composerModel').closest('[data-halaska-root]').dataset.halaskaRoot`), 'ComposerAction');
   });
@@ -98,32 +98,26 @@ const watchdog = setTimeout(() => { failures.push({ error: 'watchdog timeout' })
     await ev(`showView('agent','对话')`); await click('#chatAttach'); await ev(`openConversation('kit-other')`); assert.equal(await ev('ComposerAddMenu.isOpen()'), false); assert.equal(await ev(`document.querySelector('#agentInput').value`), '第二个独立草稿');
     await ev(`openConversation('kit-chat')`); assert.equal(await ev(`document.querySelector('#agentInput').value`), '添加菜单取消后保留的草稿');
   });
-  await check('AICSS effort edits remain modal drafts and live language changes preserve the React controls', async () => {
-    await settle(); const before = await ev('JSON.stringify(currentConversation().modelConfig)');
-    await ev(`document.querySelector('#composerModel').focus()`); await click('#composerModel'); await until(() => ev(`!!document.querySelector('#modelPicker [role="slider"]')`), 'actual AICSS slider');
-    await ev(`(()=>{const slider=document.querySelector('#modelPicker [role="slider"]');slider.focus();slider.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true,cancelable:true}));})()`);
-    assert.equal(await ev(`document.querySelector('#conversationEffort').value`), 'ultra'); assert.equal(await ev('JSON.stringify(currentConversation().modelConfig)'), before);
-    await ev(`WorkstationI18n.setLanguage('en')`); await wait(80); assert.equal(await ev(`!document.querySelector('#modelPicker').hidden`), true); assert.match(await ev(`document.querySelector('#modelPickerTitle').textContent`), /Model/); await shot('model-aicss-en');
-    await ev(`WorkstationI18n.setLanguage('zh')`); await wait(80); assert.equal(await ev(`document.querySelectorAll('#modelPicker [role="slider"]').length`), 1); assert.equal(await ev(`document.querySelector('#conversationEffort').value`), 'ultra'); await shot('model-aicss-zh');
+  await check('picker keeps its place across live language changes and returns focus on close', async () => {
+    await settle(); await ev(`window.Providers.upsert(state.settings,{kind:'api',name:'Kit',base:'https://kit.example.invalid/v1',protocol:'chat',models:[{model:'kit-a',efforts:['low','high']},{model:'kit-b'}]});void 0;`); const before = await ev('JSON.stringify(currentConversation().modelConfig)');
+    await ev(`document.querySelector('#composerModel').focus()`); await click('#composerModel'); await until(() => ev(`document.querySelectorAll('#modelPickerList [role="option"]').length>=2`), 'provider rows');
+    await ev(`WorkstationI18n.setLanguage('en')`); await wait(80); assert.equal(await ev(`!document.querySelector('#modelPicker').hidden`), true); assert.match(await ev(`document.querySelector('#modelPickerTitle').textContent`), /Model/); await shot('model-picker-en');
+    await ev(`WorkstationI18n.setLanguage('zh')`); await wait(80); assert.equal(await ev(`document.querySelectorAll('#modelPickerList').length`), 1); await shot('model-picker-zh');
     assert.equal(await ev('JSON.stringify(currentConversation().modelConfig)'), before);
-    const saved = JSON.parse(fs.readFileSync(path.join(STORE, 'workspace.json'), 'utf8')); assert.deepEqual(saved.conversations.find(c => c.id === 'kit-chat').modelConfig, JSON.parse(before));
     await click('#closeModelPicker'); await until(() => ev(`!!document.querySelector('#modelPicker').hidden&&document.activeElement.id==='composerModel'`), 'cancel focus return');
     assert.equal(await ev('JSON.stringify(currentConversation().modelConfig)'), before); assert.equal(await ev(`document.querySelector('#agentInput').value`), '添加菜单取消后保留的草稿');
   });
-  await check('applying AICSS effort waits for real storage ACK then closes and restores model-button focus', async () => {
+  await check('choosing a model waits for the real storage ACK, keeps the connection and restores focus', async () => {
     await settle(); await ev(`document.querySelector('#composerModel').focus()`); await click('#composerModel');
-    await ev(`(()=>{const slider=document.querySelector('#modelPicker [role="slider"]');slider.focus();slider.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true,cancelable:true}));window.__kitActualFetch=window.fetch.bind(window);window.__kitSaveHeld=false;window.__kitHoldNext=true;window.__kitSaveAcks=0;window.fetch=async(url,options)=>{const post=String(url).includes('/__state')&&options?.method==='POST';if(post&&__kitHoldNext){__kitHoldNext=false;__kitSaveHeld=true;await new Promise(resolve=>window.__kitReleaseSave=resolve);}const response=await __kitActualFetch(url,options);if(post&&response.ok)__kitSaveAcks++;return response;};})()`);
+    await ev(`(()=>{window.__kitActualFetch=window.fetch.bind(window);window.__kitSaveHeld=false;window.__kitHoldNext=true;window.__kitSaveAcks=0;window.fetch=async(url,options)=>{const post=String(url).includes('/__state')&&options?.method==='POST';if(post&&__kitHoldNext){__kitHoldNext=false;__kitSaveHeld=true;await new Promise(resolve=>window.__kitReleaseSave=resolve);}const response=await __kitActualFetch(url,options);if(post&&response.ok)__kitSaveAcks++;return response;};})()`);
     try {
-      await click('#applyModelSelection'); await until(() => ev('__kitSaveHeld'), 'held actual model save');
-      assert.equal(await ev(`!document.querySelector('#modelPicker').hidden`), true); assert.equal(await ev(`document.querySelector('#applyModelSelection').disabled`), true);
-      assert.notEqual(JSON.parse(fs.readFileSync(path.join(STORE, 'workspace.json'), 'utf8')).conversations.find(c => c.id === 'kit-chat').modelConfig.effort, 'ultra');
-      const beforeSend=await ev(`JSON.stringify({messages:currentConversation().messages,runs:state.agentRuns.length,requests:__kitCalls.length,draft:document.querySelector('#agentInput').value})`);
-      assert.notEqual(await ev(`ConversationModels.current().effort`),'ultra');
-      assert.notEqual(await ev(`ConversationModels.forNewConversation(state,defaultModelConfiguration()).effort`),'ultra');
+      await ev(`document.querySelector('#modelPickerList [data-model="kit-b"]').click()`); await until(() => ev('__kitSaveHeld'), 'held actual model save');
+      assert.equal(await ev(`!document.querySelector('#modelPicker').hidden`), true);
+      assert.notEqual(await ev(`ConversationModels.current().model`),'kit-b');
       await ev(`sendMessage()`);
-      assert.equal(await ev(`JSON.stringify({messages:currentConversation().messages,runs:state.agentRuns.length,requests:__kitCalls.length,draft:document.querySelector('#agentInput').value})`),beforeSend);
-      await ev('__kitReleaseSave()'); await until(() => ev(`__kitSaveAcks>0&&!!document.querySelector('#modelPicker').hidden&&document.activeElement.id==='composerModel'`), 'save ACK and focus');
-      assert.equal(JSON.parse(fs.readFileSync(path.join(STORE, 'workspace.json'), 'utf8')).conversations.find(c => c.id === 'kit-chat').modelConfig.effort, 'ultra');
+      await ev('__kitReleaseSave()'); await until(() => ev(`__kitSaveAcks>0&&!ConversationModels.isSaving()`), 'save ACK'); await click('#closeModelPicker'); await until(() => ev(`!!document.querySelector('#modelPicker').hidden&&document.activeElement.id==='composerModel'`), 'focus back');
+      const saved = JSON.parse(fs.readFileSync(path.join(STORE, 'workspace.json'), 'utf8')).conversations.find(c => c.id === 'kit-chat').modelConfig;
+      assert.equal(saved.model, 'kit-b'); assert.match(saved.connection, /kit\.example\.invalid/);
       assert.equal(await ev(`document.querySelector('#agentInput').value`), '添加菜单取消后保留的草稿');
     } finally { await ev(`window.__kitReleaseSave?.();window.fetch=__kitActualFetch;void 0;`); }
   });

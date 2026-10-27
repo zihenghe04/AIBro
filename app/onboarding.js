@@ -8,8 +8,8 @@
   const VERSION = 1;
   const steps = [
     { id: 'connection', view: 'settings', title: '先连接你的模型', kicker: '让工作站准备就绪',
-      body: '在设置中选择自定义 API 或 OpenAI 账号。使用 API 时填写服务地址、模型和 Key，点击“保存模型与权限”。测试连接只读取模型列表，不会替你保存或验证生成能力。',
-      hint: '每个对话也可以单独选择模型、推理强度与操作权限。', selectors: ['#provider', '.settings-connection-card'], focus: '#provider', action: '前往连接设置', path: ['选择连接', '填写配置', '保存模型与权限'] },
+      body: '在设置的“模型”里先添加供应商：选一张预设卡片并填入密钥，或用自定义填写地址和密钥；再从“默认模型”里选一个模型。测试连接只读取模型列表，不会发对话请求。',
+      hint: '每个对话也可以单独选择模型、推理强度与操作权限。', selectors: ['#connectionsCard'], focus: '#providerAdd', action: '前往连接设置', path: ['添加供应商', '填入密钥', '选默认模型'] },
     { id: 'conversation', view: 'agent', title: '把材料和指令一起交给 AI', kicker: '持续对话，而不是一次性问答',
       body: '把文件拖进对话，或点击附件按钮。文件会先进入待发送区；写清希望整理、分析或更新什么，再点击发送。网页链接也可以直接写在消息里。',
       hint: '后续直接追问即可。旧附件保留在消息和项目中，不会在每轮重复发送。', selectors: ['#composer', '#agentInput'], focus: '#agentInput', action: '前往对话', path: ['添加材料', '写下指令', '查看执行结果'] },

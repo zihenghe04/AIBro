@@ -201,6 +201,8 @@ struct NativeSpeechSettingsDraft: Equatable {
     private let cloudTranscribe: CloudTranscribe
     @Published var transcriptionLanguage = "zh-CN"
     let realtimeSettings = NativeQuickASRSettings()
+    /// Set by the host: opens Settings > Models > Speech recognition in the main window.
+    var openSettingsPage: (() -> Void)?
     @Published private(set) var realtime = NativeQuickASRSnapshot()
     @Published private(set) var realtimeSettingsDraft: NativeQuickASRSettingsDraft?
     private var realtimeAudio: NativeQuickRealtimeASRAudio?
@@ -220,7 +222,7 @@ struct NativeSpeechSettingsDraft: Equatable {
     private var transcriptionGeneration = 0
     // Host appearance is deferred until after the view mounts. Computed
     // action eligibility must invalidate observers when that state arrives.
-    @Published private var visible = false
+    @Published private(set) var visible = false
     private var hostVisible = false
     private var undoMatchesCurrent = false
     var isActive: Bool { phase != .idle }
@@ -568,6 +570,12 @@ struct NativeSpeechSettingsDraft: Equatable {
             let selected=speechSettings.schemes.first{$0.id==speechSettings.selectedID}
             speechSettingsDraft = .init(configuration:speechSettings.configuration,key:"",catalogRevision:speechSettings.catalogRevision,schemeID:selected?.id ?? UUID().uuidString,name:selected?.name ?? nativeUI("默认方案","Default"))
         }
+    }
+    /// Opens the editor on a specific scheme without making it the one in use.
+    func beginSpeechSettings(schemeID:String) {
+        guard available,visible,phase == .idle,transcribingID == nil,realtimeSettingsDraft == nil,!speechSettings.busy,speechSettingsDraft == nil,
+              let scheme=speechSettings.schemes.first(where:{$0.id==schemeID}) else{return}
+        speechSettingsDraft = .init(configuration:scheme.configuration,key:"",catalogRevision:speechSettings.catalogRevision,schemeID:scheme.id,name:scheme.name)
     }
     func updateSpeechSettings(_ draft:NativeSpeechSettingsDraft) {
         guard available,speechSettingsDraft?.id == draft.id,phase == .idle else{return};speechSettingsDraft=draft

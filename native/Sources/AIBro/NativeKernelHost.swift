@@ -81,6 +81,44 @@ import UserNotifications
             if let since = idleSince, Date().timeIntervalSince(since) > Self.idleRelease { release(); idleSince = nil }
         }
         for item in pending["approvals"] as? [[String: Any]] ?? [] { announce(item) }
+        if let reminders = pending["reminders"] as? [[String: Any]] { await planReminders(reminders) }
+    }
+
+    /// M1 scheduler reminders: handed to the system ahead of time (next 30 days,
+    /// up to 60), so they arrive while AI Bro is closed, the same way agenda
+    /// reminders do. One that came due before this process saw it (and is not
+    /// past its two-hour window, which the service already applies) is shown once now.
+    static let reminderPrefix = "scheduler-reminder-"
+    private var reminderPlan = ""
+    private var remindedNow = Set<String>()
+    private func planReminders(_ items: [[String: Any]]) async {
+        guard notificationsEnabled else { return }
+        let wanted: [(id: String, fire: Date, title: String, body: String)] = items.compactMap { item in
+            guard let id = item["id"] as? String, let at = item["fireAt"] as? Double else { return nil }
+            return (Self.reminderPrefix + id, Date(timeIntervalSince1970: at), item["title"] as? String ?? "", item["body"] as? String ?? "")
+        }
+        let signature = wanted.map { $0.id + "|" + $0.title + "|" + $0.body }.joined(separator: "\n")
+        guard signature != reminderPlan else { return }
+        let center = UNUserNotificationCenter.current()
+        let queued = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(Self.reminderPrefix) }
+        let shown = Set(await center.deliveredNotifications().map(\.request.identifier))
+        let keep = Set(wanted.map(\.id))
+        center.removePendingNotificationRequests(withIdentifiers: queued.filter { !keep.contains($0) })
+        let now = Date()
+        for item in wanted {
+            let content = UNMutableNotificationContent()
+            content.title = nativeUI("提醒：", "Reminder: ") + item.title
+            content.body = item.body.isEmpty ? nativeUI("打开 AI Bro 标记完成；2 小时未处理会标为过期。", "Open AI Bro to mark it done; it expires after two hours.") : item.body
+            content.sound = .default
+            content.userInfo = ["schedulerReminder": item.id]
+            if item.fire > now {
+                var parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: item.fire); parts.timeZone = Calendar.current.timeZone
+                try? await center.add(UNNotificationRequest(identifier: item.id, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)))
+            } else if !shown.contains(item.id), remindedNow.insert(item.id).inserted {
+                try? await center.add(UNNotificationRequest(identifier: item.id, content: content, trigger: nil))
+            }
+        }
+        reminderPlan = signature
     }
 
     private func ensureWeb() {
@@ -113,7 +151,11 @@ import UserNotifications
                 DispatchQueue.main.async { replyHandler(["token": token], nil) }
             }
         case "attention":
-            announce(["runId": body["runId"] ?? "", "approvalId": body["approvalId"] ?? "", "title": body["title"] ?? "", "tool": body["tool"] ?? "", "destructive": body["destructive"] as? Bool ?? false])
+            announce(["runId": body["runId"] ?? "", "approvalId": body["approvalId"] ?? "", "title": body["title"] ?? "", "tool": body["tool"] ?? "", "destructive": body["destructive"] as? Bool ?? false,
+                      "scheduled": body["scheduled"] as? Bool ?? false, "outOfScope": body["outOfScope"] as? Bool ?? false])
+            replyHandler(true, nil)
+        case "paused":
+            announcePause(runId: body["runId"] as? String ?? "", title: body["title"] as? String ?? "", message: body["message"] as? String ?? "")
             replyHandler(true, nil)
         default:
             replyHandler(true, nil)
@@ -125,7 +167,10 @@ import UserNotifications
               !runId.isEmpty, !approvalId.isEmpty, notified.insert(approvalId).inserted else { return }
         let tools = ["create_task": nativeUI("新建任务", "Create task"), "create_note": nativeUI("新建笔记", "Create note")]
         let content = UNMutableNotificationContent()
-        content.title = nativeUI("后台运行需要你审批", "A background run needs your approval")
+        // A scheduled task that stepped outside its declared scope is paused until you answer.
+        content.title = item["outOfScope"] as? Bool == true ? nativeUI("计划任务超出声明范围，已暂停等你批准", "A scheduled task went beyond its declared scope and is waiting for you")
+            : item["scheduled"] as? Bool == true ? nativeUI("计划任务需要你审批", "A scheduled task needs your approval")
+            : nativeUI("后台运行需要你审批", "A background run needs your approval")
         let tool = item["tool"] as? String ?? ""
         let title = item["title"] as? String ?? nativeUI("后台运行", "Background run")
         let destructive = item["destructive"] as? Bool ?? false
@@ -136,6 +181,20 @@ import UserNotifications
         content.categoryIdentifier = destructive ? Self.reviewCategory : Self.category
         content.userInfo = ["kernelRun": runId, "kernelApproval": approvalId]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "kernel-approval-" + approvalId, content: content, trigger: nil))
+    }
+
+    /// A run paused by the model's usage limit (P9b): tell the user once per pause; a click opens the run.
+    private func announcePause(runId: String, title: String, message: String) {
+        guard notificationsEnabled, !runId.isEmpty else { return }
+        let content = UNMutableNotificationContent()
+        content.title = nativeUI("后台运行已暂停", "A background run is paused")
+        let name = title.isEmpty ? nativeUI("后台运行", "Background run") : String(title.prefix(80))
+        let reason = message.isEmpty ? nativeUI("模型额度已用尽。", "The model's usage limit was reached.") : String(message.prefix(200))
+        content.body = "\(name)：\(reason)"
+        content.sound = .default
+        // No approval id: a click only opens the run (respond() shows it).
+        content.userInfo = ["kernelRun": runId, "kernelApproval": ""]
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "kernel-paused-" + runId + "-" + String(Int(Date().timeIntervalSince1970)), content: content, trigger: nil))
     }
 
     /// A notification action: 批准 / 拒绝 answer as the native shell; 查看 or a plain click opens the run.

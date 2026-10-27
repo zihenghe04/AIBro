@@ -14,6 +14,41 @@ import Combine
     var openSpeechSettings:(() async -> Bool)?
     enum QuickEntrySettingsRequest { case state, enabled(Bool), mode(String), open }
     var quickEntrySettings:((QuickEntrySettingsRequest)->[String:Any])?
+    /// Settings → Models → Speech: public state of the native transcription schemes plus a few actions. Keys never cross this bridge.
+    /// A cloud scheme typed in Settings. `key` is write-only: it goes straight into the encrypted native store and is never read back to the web.
+    struct SpeechCloudInput { var id:String?; var name:String; var configuration:NativeSpeechConfiguration; var key:String }
+    struct SpeechRealtimeInput { var id:String?; var name:String; var configuration:NativeQuickASRConfiguration; var key:String; var reuseCloudID:String? }
+    enum SpeechSettingsRequest {
+        case state, select(String), realtime(Bool), test(String), open(String,String?)
+        case saveCloud(SpeechCloudInput), deleteCloud(String), testCloud(SpeechCloudInput)
+        case saveRealtime(SpeechRealtimeInput), deleteRealtime(String), selectRealtime(String), testRealtime(SpeechRealtimeInput)
+        case silence(Double)
+    }
+    static func speechCloudInput(_ raw:Any?)->SpeechCloudInput? {
+        guard let d=raw as? [String:Any],Set(d.keys).isSubset(of:["id","name","provider","baseURL","model","language","timeoutSeconds","key"]),
+              let name=d["name"] as? String,name.utf8.count<=160,let provider=(d["provider"] as? String).flatMap(NativeSpeechConfiguration.Provider.init(rawValue:)),
+              let base=d["baseURL"] as? String,base.utf8.count<=2048,let model=d["model"] as? String,model.utf8.count<=160,
+              let language=d["language"] as? String,language.utf8.count<=16 else{return nil}
+        var config=NativeSpeechConfiguration();config.provider=provider;config.baseURL=base;config.model=model;config.language=language
+        if let timeout=d["timeoutSeconds"] {guard let n=timeout as? NSNumber,CFGetTypeID(n) != CFBooleanGetTypeID(),n.doubleValue.isFinite else{return nil};config.timeoutSeconds=Int(min(max(n.doubleValue,0),1800));if config.timeoutSeconds==0{config.timeoutSeconds=nil}}
+        let key=d["key"] as? String ?? "";guard key.utf8.count<=16384,(d["key"] == nil || d["key"] is String) else{return nil}
+        var id:String?;if let value=d["id"] {guard let s=value as? String,!s.isEmpty,s.utf8.count<=200 else{return nil};id=s}
+        return .init(id:id,name:name,configuration:config,key:key)
+    }
+    static func speechRealtimeInput(_ raw:Any?)->SpeechRealtimeInput? {
+        guard let d=raw as? [String:Any],Set(d.keys).isSubset(of:["id","name","provider","region","workspaceID","serverURL","language","enabled","key","reuseCloudID"]),
+              let name=d["name"] as? String,name.utf8.count<=160,let provider=(d["provider"] as? String).flatMap(NativeQuickASRConfiguration.Provider.init(rawValue:)),
+              let language=d["language"] as? String,language.utf8.count<=16,let enabled=d["enabled"] as? NSNumber,CFGetTypeID(enabled)==CFBooleanGetTypeID() else{return nil}
+        var config=NativeQuickASRConfiguration();config.provider=provider;config.language=language;config.enabled=enabled.boolValue
+        if let region=d["region"] {guard let s=region as? String,let r=NativeQuickASRConfiguration.Region(rawValue:s) else{return nil};config.region=r}
+        if let ws=d["workspaceID"] {guard let s=ws as? String,s.utf8.count<=128 else{return nil};config.workspaceID=s}
+        if let url=d["serverURL"] {guard let s=url as? String,s.utf8.count<=2048 else{return nil};config.serverURL=s}
+        guard d["key"] == nil || d["key"] is String,(d["key"] as? String ?? "").utf8.count<=16384 else{return nil}
+        var id:String?;if let value=d["id"] {guard let s=value as? String,!s.isEmpty,s.utf8.count<=200 else{return nil};id=s}
+        var reuse:String?;if let value=d["reuseCloudID"] {guard let s=value as? String,!s.isEmpty,s.utf8.count<=200 else{return nil};reuse=s}
+        return .init(id:id,name:name,configuration:config,key:d["key"] as? String ?? "",reuseCloudID:reuse)
+    }
+    var speechSettings:((SpeechSettingsRequest)->[String:Any])?
     private let credentialQueue=DispatchQueue(label:"app.aibro.credentials")
     private let vectorQueue=DispatchQueue(label:"app.aibro.vector-index",qos:.utility)
     let vectors:NativeVectorStore
@@ -103,6 +138,54 @@ import Combine
                         }catch{replyHandler(nil,error.localizedDescription)}
                     }
                 };return
+            }
+            if command == "speech-settings" {
+                guard let workspace, message.webView === workspace.web,
+                      let action = body["action"] as? String else { replyHandler(["status":"error","reason":"invalid_request"],nil);return }
+                let request:SpeechSettingsRequest
+                switch action {
+                case "state" where Set(body.keys) == Set(["command","action"]): request = .state
+                case "select" where Set(body.keys) == Set(["command","action","id"]):
+                    guard let id = body["id"] as? String, !id.isEmpty, id.utf8.count <= 200 else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    request = .select(id)
+                case "realtime" where Set(body.keys) == Set(["command","action","enabled"]):
+                    guard let value = body["enabled"] as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    request = .realtime(value.boolValue)
+                case "test" where Set(body.keys) == Set(["command","action","target"]):
+                    guard let target = body["target"] as? String, ["cloud","realtime"].contains(target) else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    request = .test(target)
+                case "open" where Set(body.keys).isSubset(of: ["command","action","target","id"]) && body["target"] != nil:
+                    guard let target = body["target"] as? String, ["cloud","cloud-new","realtime"].contains(target) else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    var id:String?
+                    if let raw = body["id"] {
+                        guard target == "cloud", let value = raw as? String, !value.isEmpty, value.utf8.count <= 200 else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                        id = value
+                    }
+                    request = .open(target,id)
+                case "save-cloud" where Set(body.keys) == Set(["command","action","draft"]):
+                    guard let input=Self.speechCloudInput(body["draft"]) else{replyHandler(["status":"error","reason":"invalid_request"],nil);return};request = .saveCloud(input)
+                case "test-cloud" where Set(body.keys) == Set(["command","action","draft"]):
+                    guard let input=Self.speechCloudInput(body["draft"]) else{replyHandler(["status":"error","reason":"invalid_request"],nil);return};request = .testCloud(input)
+                case "delete-cloud" where Set(body.keys) == Set(["command","action","id"]):
+                    guard let id = body["id"] as? String, !id.isEmpty, id.utf8.count <= 200 else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    request = .deleteCloud(id)
+                case "save-realtime" where Set(body.keys) == Set(["command","action","draft"]):
+                    guard let input=Self.speechRealtimeInput(body["draft"]) else{replyHandler(["status":"error","reason":"invalid_request"],nil);return};request = .saveRealtime(input)
+                case "test-realtime" where Set(body.keys) == Set(["command","action","draft"]):
+                    guard let input=Self.speechRealtimeInput(body["draft"]) else{replyHandler(["status":"error","reason":"invalid_request"],nil);return};request = .testRealtime(input)
+                case "delete-realtime" where Set(body.keys) == Set(["command","action","id"]):
+                    guard let id = body["id"] as? String, !id.isEmpty, id.utf8.count <= 200 else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    request = .deleteRealtime(id)
+                case "select-realtime" where Set(body.keys) == Set(["command","action","id"]):
+                    guard let id = body["id"] as? String, !id.isEmpty, id.utf8.count <= 200 else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    request = .selectRealtime(id)
+                case "silence" where Set(body.keys) == Set(["command","action","seconds"]):
+                    guard let n = body["seconds"] as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), n.doubleValue.isFinite, (0...10).contains(n.doubleValue) else {replyHandler(["status":"error","reason":"invalid_request"],nil);return}
+                    request = .silence(n.doubleValue)
+                default: replyHandler(["status":"error","reason":"invalid_request"],nil);return
+                }
+                guard action == "state" || (workspace.ready && workspace.selection == "settings") else {replyHandler(["status":"error","reason":"settings_not_visible"],nil);return}
+                replyHandler(speechSettings?(request) ?? ["status":"error","reason":"unavailable"],nil);return
             }
             if command == "quick-entry-settings" {
                 guard let workspace, message.webView === workspace.web,

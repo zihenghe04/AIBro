@@ -84,7 +84,7 @@ async function finish() {
   const assertPanels = async label => {
     const state = await evaluate(`({selected:SettingsWorkspace.selected(),firstPanel:document.querySelector('#settings .settings-panels')?.firstElementChild?.dataset.settingsSection,panels:[...document.querySelectorAll('#settings .settings-section')].map(n=>({section:n.dataset.settingsSection,hidden:n.hidden,inert:n.inert})),retainedNodes:window.settingsRefs?Object.entries(settingsRefs).every(([id,node])=>node===document.getElementById(id)):null,retainedHandlers:window.settingsHandlers?Object.entries(settingsHandlers).every(([id,handler])=>document.getElementById(id).onclick===handler):null,duplicateControls:window.settingsRefs?Object.keys(settingsRefs).filter(id=>document.querySelectorAll('#'+CSS.escape(id)).length!==1):[]})`);
     sectionStates.push({ label, ...state });
-    assert.equal(state.panels.length, 4, label);
+    assert.equal(state.panels.length, 5, label);
     assert.equal(state.firstPanel, state.selected, `${label}: active persistent panel comes first`);
     assert.equal(state.panels.filter(panel => !panel.hidden).length, 1, label);
     for (const panel of state.panels) {
@@ -100,10 +100,13 @@ async function finish() {
   await win.loadURL(origin);
   await until(() => evaluate(`typeof storageHydrated!=='undefined'&&storageHydrated&&!!document.querySelector('#embeddingSettings')&&!!document.querySelector('#cloudSyncCard')`), 'production hydration');
   await evaluate(`(async()=>{WorkstationOnboarding?.close('skipped');await WorkspaceTour?.open();WorkspaceTour?.close('skipped');showView('settings','设置');SettingsWorkspace.init();})()`);
-  await until(() => evaluate(`document.querySelectorAll('#settingsNavigation [role=tab]').length===4`), 'actual SettingsNavigation Kit bundle');
+  await until(() => evaluate(`document.querySelectorAll('#settingsNavigation [role=tab]').length===5`), 'actual SettingsNavigation Kit bundle');
   await evaluate(`window.settingsRefs=Object.fromEntries(['apiBase','apiProtocol','apiKey','model','apiModelOptions','usageCurrency','usageInputRate','usageOutputRate','embeddingBase','embeddingModel','embeddingKey','cloudServerUrl','cloudUsername','cloudPassword','cloudDeviceName','saveSettings'].map(id=>[id,document.getElementById(id)]));window.settingsHandlers=Object.fromEntries(['saveSettings','testApi','embeddingSave','embeddingTest','cloudConnect'].map(id=>[id,document.getElementById(id).onclick]));window.settingsConfigurationBefore={base:localStorage.getItem('workstation-api-base'),model:localStorage.getItem('workstation-api-model'),key:localStorage.getItem('workstation-api-key'),usage:JSON.stringify(state.settings.usagePrice||null)};void 0;`);
+  // The old address/key form is a hidden data carrier behind the provider list; expose it only for the tests that drive its controls.
+  const legacyCard = visible => evaluate(`document.querySelector('.settings-connection-card').hidden=${!visible};void 0;`);
+  await legacyCard(true);
   await check('production initialization groups exactly four live panels and one real Kit tab bar', async () => {
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#settings .settings-section')].map(n=>n.dataset.settingsSection)`), ['models', 'sync', 'knowledge', 'appearance']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#settings .settings-section')].map(n=>n.dataset.settingsSection)`), ['models', 'sync', 'knowledge', 'plugins', 'appearance']);
     assert.equal(await evaluate(`document.querySelector('#settingsNavigation').dataset.halaskaRoot`), 'SettingsNavigation');
     assert.equal(await evaluate(`document.querySelector('#apiCredentials').closest('[role=tabpanel]').id`), 'settings-panel-models');
     assert.equal(await evaluate(`document.querySelector('#cloudSyncCard').closest('[role=tabpanel]').id`), 'settings-panel-sync');
@@ -184,19 +187,20 @@ async function finish() {
     await evaluate(`WorkstationI18n.setLanguage('zh-CN');void 0;`);
     await until(() => evaluate(`document.querySelector('#settings-tab-sync').textContent.includes('服务器')`), 'Chinese Kit labels');
   });
+  await legacyCard(false);
   await check('production model-picker management entry reveals models from a remembered non-model section', async () => {
     await select('knowledge'); await evaluate(`showView('agent','对话');void ConversationModels.open()`);
     await until(() => evaluate(`!!document.querySelector('#modelPickerSettings')&&!document.querySelector('#modelPicker').hidden`), 'model picker');
     await click('#modelPickerSettings');
     await until(() => evaluate(`document.body.dataset.view==='settings'&&SettingsWorkspace.selected()==='models'`), 'model management direct section');
-    assert.equal(await evaluate(`document.querySelector('#apiBase').getClientRects().length>0`), true);
+    assert.equal(await evaluate(`document.querySelector('#connectionsCard').getClientRects().length>0`), true);
     assert.equal(await evaluate(`document.querySelector('#apiKey').value`), values.apiKey);
     assert.equal(await evaluate(`document.querySelector('#usageInputRate').value`), values.usageInputRate);
   });
   await check('production onboarding connection step selects models without submitting settings', async () => {
     await select('sync'); await evaluate(`WorkstationOnboarding.open();void 0;`);
     await until(() => evaluate(`WorkstationOnboarding.isOpen()&&SettingsWorkspace.selected()==='models'`), 'onboarding model destination');
-    assert.equal(await evaluate(`document.querySelector('#provider').getClientRects().length>0`), true);
+    assert.equal(await evaluate(`document.querySelector('#connectionsCard').getClientRects().length>0`), true);
     await click('#onboardingSkip');
     assert.equal(await evaluate(`document.querySelector('#apiKey').value`), values.apiKey);
   });
@@ -205,7 +209,7 @@ async function finish() {
     await evaluate(`window.settingsRecoveryConversation=currentConversation()||createConversation();window.settingsRecoveryRun={id:'settings-smoke-failed-run',conversationId:settingsRecoveryConversation.id,status:'failed',modelConfig:{provider:'api'},errorDiagnostic:RunFailureDiagnostics.capture({code:'PROTOCOL_UNSUPPORTED'})};state.agentRuns.push(settingsRecoveryRun);settingsRecoveryConversation.messages.push({id:'settings-smoke-failed-message',role:'assistant',runId:settingsRecoveryRun.id,runStatus:'failed',text:'',retryRunId:settingsRecoveryRun.id});window.settingsRecoveryAccepted=openRunFailureRecovery(settingsRecoveryRun.id,'settings');void 0;`);
     assert.equal(await evaluate(`settingsRecoveryAccepted`), true);
     assert.equal(await evaluate(`SettingsWorkspace.selected()`), 'models');
-    assert.equal(await evaluate(`document.activeElement.id`), 'apiBase');
+    assert.equal(await evaluate(`!!document.activeElement.closest('#connectionsCard')`), true);
     assert.equal(await evaluate(`document.activeElement.getClientRects().length>0&&!document.activeElement.closest('[hidden]')`), true);
     assert.equal(await evaluate(`settingsRecoveryRun.status`), 'failed');
     assert.equal(await evaluate(`document.querySelector('#apiKey').value`), values.apiKey);
@@ -213,7 +217,7 @@ async function finish() {
   await check('actual 1200, 820 and 620 content widths keep each section and field within its pane in both palettes', async () => {
     for (const width of [1200, 820, 620]) {
       win.setContentSize(width, 1000);
-      for (const [index, section] of ['models', 'sync', 'knowledge', 'appearance'].entries()) {
+      for (const [index, section] of ['models', 'sync', 'knowledge', 'plugins', 'appearance'].entries()) {
         const theme = index % 2 ? 'dark' : 'light';
         await evaluate(`document.body.classList.toggle('light-mode',${theme === 'light'});WorkstationI18n.setLanguage(${JSON.stringify(width === 620 ? 'en' : 'zh-CN')});void 0;`);
         await select(section);
@@ -244,7 +248,8 @@ async function finish() {
     assert.equal(await evaluate(`SettingsWorkspace.selected()`), 'knowledge');
     assert.equal(await evaluate(`state.ui.settingsSection`), 'knowledge');
     assert.equal(await evaluate(`document.querySelector('#settings-tab-knowledge').getAttribute('aria-selected')`), 'true');
-    assert.equal(await evaluate(`document.querySelector('#embeddingSettings').getClientRects().length>0`), true);
+    // The semantic-search card now lives on Models → Embedding and is parked (hidden) here; the section shows a pointer to it.
+    assert.equal(await evaluate(`document.querySelector('#knowledgeEmbeddingPointer').getClientRects().length>0&&document.querySelector('#embeddingSettings').getClientRects().length===0`), true);
     assert.equal(await evaluate(`localStorage.getItem('workstation-api-base')`), null);
     assert.equal(await evaluate(`localStorage.getItem('workstation-api-key')`), null);
     assert.equal(await evaluate(`document.querySelector('#apiKey').value`), '');

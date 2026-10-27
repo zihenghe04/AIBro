@@ -16,10 +16,14 @@ func nativeUI(_ zh:String,_ en:String)->String {en}
     var failAudio=false;var authenticationRejected=false
     func send(_ text:String) async throws {let object=try JSONSerialization.jsonObject(with:Data(text.utf8)) as! [String:Any];if object["type"] as? String == "input_audio_buffer.append",failAudio{throw NativeQuickASRError.unavailable};sent.append(object)}
     func receive() async throws->Data {if !pending.isEmpty{return pending.removeFirst()};if closed{throw CancellationError()};return try await withCheckedThrowingContinuation{waiter=$0}}
+    var binary:[Data]=[]
+    func sendBinary(_ data:Data) async throws {binary.append(data)}
     func ping() async throws {}
     func close(){closed=true;let old=waiter;waiter=nil;old?.resume(throwing:CancellationError())}
     func event(_ type:String,_ extra:[String:Any]=[:]){var object=extra;object["type"]=type;let data=try! JSONSerialization.data(withJSONObject:object);if let old=waiter{waiter=nil;old.resume(returning:data)}else{pending.append(data)}}
     var audio:[[String:Any]]{sent.filter{$0["type"] as? String == "input_audio_buffer.append"}}
+    func message(_ type:String,_ extra:[String:Any]=[:]){var object=extra;object["message_type"]=type;let data=try! JSONSerialization.data(withJSONObject:object);if let old=waiter{waiter=nil;old.resume(returning:data)}else{pending.append(data)}}
+    var chunks:[[String:Any]]{sent.filter{$0["message_type"] as? String == "input_audio_chunk"}}
 }
 @main struct RealtimeASRChecks {
     @MainActor static func main() async throws {
@@ -116,6 +120,98 @@ func nativeUI(_ zh:String,_ en:String)->String {en}
         settings.setAvailable(false)
         check(!settings.save(config,key:"must-not-write") && writes==2,"private or unavailable settings cannot mutate credentials")
         do {_ = try settings.connection();check(false,"private connection must fail")}catch{check(true,"private connection is refused")}
+
+        // ---- ElevenLabs Scribe realtime (mock WebSocket only) ----
+        var eleven=NativeQuickASRConfiguration();eleven.provider = .elevenLabs;eleven.enabled=true;eleven.language="en"
+        let elevenURL=eleven.endpoint?.absoluteString ?? ""
+        check(elevenURL.hasPrefix("wss://api.elevenlabs.io/v1/speech-to-text/realtime?") && elevenURL.contains("model_id=scribe_v2_realtime") && elevenURL.contains("audio_format=pcm_16000") && elevenURL.contains("commit_strategy=vad") && elevenURL.contains("language_code=en"),"ElevenLabs endpoint, model, audio format and language are fixed by the official contract")
+        check(eleven.origin=="https://api.elevenlabs.io" && eleven.modelName=="scribe_v2_realtime" && eleven.update==nil,"ElevenLabs uses its own origin and model, and sends no session.update")
+        let legacy=try JSONDecoder().decode(NativeQuickASRConfiguration.self,from:Data("{\"enabled\":true,\"region\":\"singapore\",\"workspaceID\":\"\",\"language\":\"zh\"}".utf8))
+        check(legacy.provider == .bailian && legacy.region == .singapore && legacy.enabled,"configurations saved before ElevenLabs stay Model Studio")
+        let roundTrip=try JSONDecoder().decode(NativeQuickASRConfiguration.self,from:JSONEncoder().encode(eleven))
+        check(roundTrip==eleven,"provider survives a save/load round trip")
+        var esockets:[TestSocket]=[],erequests:[URLRequest]=[]
+        let eclock=TestClock(),esession=NativeQuickRealtimeASRSession(factory:{request in erequests.append(request);let socket=TestSocket();esockets.append(socket);return socket},sleep:{try await eclock.sleep($0)})
+        try esession.start(configuration:eleven,key:"synthetic-eleven-key")
+        esession.append(Data([1,0,2,0]));await settle()
+        check(erequests[0].value(forHTTPHeaderField:"xi-api-key")=="synthetic-eleven-key" && erequests[0].value(forHTTPHeaderField:"Authorization")==nil,"ElevenLabs realtime authenticates with xi-api-key only")
+        check(esockets[0].sent.isEmpty,"no configuration message is sent; audio waits for session_started")
+        esockets[0].message("session_started",["session_id":"s1"]);await settle()
+        check(esession.snapshot.phase == .connected && esockets[0].chunks.count==1,"session_started opens the audio drain")
+        let chunk=esockets[0].chunks[0]
+        check(chunk["sample_rate"] as? Int==16000 && chunk["commit"] as? Bool==false && chunk["audio_base_64"] as? String==Data([1,0,2,0]).base64EncodedString(),"audio goes out as input_audio_chunk with base64 PCM and sample_rate")
+        esockets[0].message("partial_transcript",["text":"hel"]);esockets[0].message("partial_transcript",["text":"hello wor"]);await settle()
+        check(esession.snapshot.interim=="hello wor" && esession.snapshot.finalized=="","a partial replaces the open segment")
+        esockets[0].message("committed_transcript",["text":"hello world."]);await settle()
+        esockets[0].message("partial_transcript",["text":"second"]);await settle()
+        check(esession.snapshot.finalized=="hello world." && esession.snapshot.interim=="second","a commit closes the segment and the next partial opens a new one")
+        esockets[0].message("committed_transcript",["text":"second thought."]);await settle()
+        esession.append(Data([9,0]))
+        async let finished=esession.finish();await settle()
+        let lastChunk=esockets[0].chunks.last!
+        check(lastChunk["commit"] as? Bool==true && esession.snapshot.phase == .finishing,"the last queued chunk carries the commit")
+        esockets[0].message("committed_transcript",["text":"last words."]);await settle()
+        let eelevenResult=await finished
+        check(eelevenResult.phase == .completed && eelevenResult.finalized=="hello world.\nsecond thought.\nlast words.","final commit completes the recording without losing earlier segments")
+        try esession.start(configuration:eleven,key:"synthetic-eleven-key");await settle()
+        esockets.last!.message("session_started");await settle()
+        async let silent=esession.finish();await settle()
+        check(esockets.last!.chunks.last?["commit"] as? Bool==true && esockets.last!.chunks.last?["audio_base_64"] as? String=="","finishing with an empty queue sends an empty committing chunk, as the official SDKs do")
+        esockets.last!.message("insufficient_audio_activity");await settle()
+        check(await silent.phase == .completed,"nothing to commit after silence still completes")
+        try esession.start(configuration:eleven,key:"synthetic-eleven-key");await settle()
+        esockets.last!.message("session_started");await settle()
+        esockets.last!.message("auth_error",["error":"synthetic-secret-server-echo"]);await settle()
+        check(esession.snapshot.phase == .failed && esession.snapshot.reason=="configuration_rejected" && esockets.count==3,"an auth error is terminal and is not retried")
+        let eleProbe=TestSocket()
+        let eleSettings=NativeQuickASRSettings();var eleSaved:(NativeQuickASRConfiguration,String)?
+        eleSettings.configure(owner:URL(fileURLWithPath:"/synthetic-eleven"),access:NativeQuickASRSecretAccess(load:{eleSaved?.0},read:{_ in eleSaved?.1 ?? ""},save:{eleSaved=($0,$1)},remove:{eleSaved=nil}));eleSettings.setAvailable(true)
+        eleSettings.testConnection(.init(configuration:eleven,key:"synthetic-eleven-key"),factory:{request in check(request.value(forHTTPHeaderField:"xi-api-key")=="synthetic-eleven-key","test request uses xi-api-key");return eleProbe});await settle()
+        check(eleProbe.sent.isEmpty,"ElevenLabs test connection sends no audio and no settings message")
+        eleProbe.message("session_started");await settle()
+        check(!eleSettings.testing && eleSettings.testMessage?.contains("Connected") == true,"session_started confirms the ElevenLabs test")
+        // ---- Self-hosted stream service (mock WebSocket only; placeholder address) ----
+        var own=NativeQuickASRConfiguration();own.provider = .selfHosted;own.enabled=true;own.language="zh";own.serverURL="ws://192.0.2.10:8000"
+        check(own.valid && own.endpoint?.absoluteString=="ws://192.0.2.10:8000/stream?language=Chinese","self-hosted endpoint adds /stream and maps zh to the full language name")
+        check(own.origin=="http://192.0.2.10:8000" && own.update==nil && own.host=="192.0.2.10","self-hosted credential scope uses the http form of the address and sends no session.update")
+        own.language="en";check(own.endpoint?.absoluteString.hasSuffix("language=English")==true,"en maps to English");own.language="";check(own.valid && own.endpoint?.absoluteString.hasSuffix("language=auto")==true,"blank means auto");own.language="auto";check(own.valid,"auto is accepted");own.language="ja";check(!own.valid,"only zh / en / auto are offered for the self-hosted service");own.language="zh"
+        for good in ["ws://asr-box:8000","wss://asr.example.com/stream","ws://nas.local:8000/stream","ws://192.0.2.10:8000/","ws://asr.example.com:8000"]{var c=own;c.serverURL=good;check(c.valid,"self-hosted accepts \(good)")}
+        for bad in ["ftp://192.0.2.10:8000","ws://192.0.2.10:8000/stream?x=1","ws://u:p@192.0.2.10:8000",""]{var c=own;c.serverURL=bad;check(!c.valid,"self-hosted rejects \(bad.isEmpty ? "blank" : bad)")}
+        for (typed,expected) in [("http://192.0.2.10:8000","ws://192.0.2.10:8000/stream"),("192.0.2.10:8000/v1","ws://192.0.2.10:8000/stream"),("https://asr.example.com/v1/audio/transcriptions","wss://asr.example.com/stream"),("ws://h:1/stream","ws://h:1/stream"),("http://h:8000/base/v1","ws://h:8000/base/stream"),("  http://h:8000/  ","ws://h:8000/stream")]{
+            check(NativeQuickASRConfiguration.streamAddress(typed)==expected,"a typed address \(typed) becomes \(expected)")
+        }
+        check(NativeQuickASRConfiguration.streamAddress("")==nil && NativeQuickASRConfiguration.streamAddress("ftp://x")==nil,"nothing usable is derived from blank or non-web input")
+        var typedOwn=own;typedOwn.serverURL="http://192.0.2.10:8000/v1";check(typedOwn.valid && typedOwn.endpoint?.absoluteString=="ws://192.0.2.10:8000/stream?language=Chinese","a base typed with http and /v1 connects to ws://…/stream")
+        typedOwn.serverURL="";check(typedOwn.serverURLProblem != nil && !typedOwn.valid,"a blank address has a problem text and is not valid")
+        let tokenRequest=try own.request(key:"a&b+c=d e")
+        check(tokenRequest.url?.query=="token=a%26b%2Bc%3Dd%20e&language=Chinese" && tokenRequest.value(forHTTPHeaderField:"Authorization")==nil,"the token is percent-encoded in the query, so it cannot add parameters, and no auth header is sent")
+        check(try JSONDecoder().decode(NativeQuickASRConfiguration.self,from:JSONEncoder().encode(own))==own,"self-hosted settings survive a save/load round trip")
+        var osockets:[TestSocket]=[],orequests:[URLRequest]=[]
+        let oclock=TestClock(),osession=NativeQuickRealtimeASRSession(factory:{request in orequests.append(request);let socket=TestSocket();osockets.append(socket);return socket},sleep:{try await oclock.sleep($0)})
+        try osession.start(configuration:own,key:"synthetic-own-token")
+        osession.append(Data([1,0,2,0]));await settle()
+        check(osockets[0].sent.isEmpty && osockets[0].binary.isEmpty,"nothing is sent before the server's ready message")
+        osockets[0].event("ready",["sample_rate":16000]);await settle()
+        check(osession.snapshot.phase == .connected && osockets[0].binary.count==1 && osockets[0].binary[0]==Data([1,0,2,0]) && osockets[0].audio.isEmpty && osockets[0].chunks.isEmpty,"after ready, PCM goes out as a raw binary frame")
+        osockets[0].event("partial",["text":"你"]);osockets[0].event("partial",["text":"你好世"]);await settle()
+        check(osession.snapshot.interim=="你好世" && osession.snapshot.finalized=="","a partial replaces the open text")
+        osession.append(Data([3,0]))
+        async let ownFinished=osession.finish();await settle()
+        check(osockets[0].sent.last?["type"] as? String=="stop" && osession.snapshot.phase == .finishing,"finishing sends the text frame {type:stop} after the audio")
+        osockets[0].event("final",["text":"你好世界。","language":"Chinese"]);await settle()
+        let ownResult=await ownFinished
+        check(ownResult.phase == .completed && ownResult.finalized=="你好世界。" && ownResult.interim=="","final completes the recording with the server's text")
+        try osession.start(configuration:own,key:"synthetic-own-token");await settle()
+        osockets.last!.event("ready");await settle()
+        osockets.last!.event("error",["message":"synthetic-server-detail"]);await settle()
+        check(osession.snapshot.phase == .reconnecting,"a server error reconnects instead of dropping the recording")
+        let ownProbe=TestSocket()
+        let ownSettings=NativeQuickASRSettings();var ownSaved:(NativeQuickASRConfiguration,String)?
+        ownSettings.configure(owner:URL(fileURLWithPath:"/synthetic-own"),access:NativeQuickASRSecretAccess(load:{ownSaved?.0},read:{_ in ownSaved?.1 ?? ""},save:{ownSaved=($0,$1)},remove:{ownSaved=nil}));ownSettings.setAvailable(true)
+        ownSettings.testConnection(.init(configuration:own,key:"synthetic-own-token"),factory:{request in check(request.url?.query?.hasPrefix("token=synthetic-own-token") == true,"test request carries the token in the query");return ownProbe});await settle()
+        check(ownProbe.sent.isEmpty && ownProbe.binary.isEmpty,"self-hosted test connection sends nothing but waits for ready")
+        ownProbe.event("ready");await settle()
+        check(!ownSettings.testing && ownSettings.testMessage?.contains("Connected") == true,"ready confirms the self-hosted test")
         print("\(checks-failures)/\(checks) realtime protocol/session/settings checks; no microphone or network")
         if failures>0{exit(1)}
     }

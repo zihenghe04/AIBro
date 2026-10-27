@@ -1,17 +1,69 @@
 import Foundation
+import Network
 import Combine
 
 @MainActor protocol NativeQuickASRSocket: AnyObject {
     func send(_ text: String) async throws
+    func sendBinary(_ data: Data) async throws
     func receive() async throws -> Data
     func ping() async throws
     func close()
     var authenticationRejected: Bool { get }
 }
 
+extension NativeQuickASRSocket { func sendBinary(_ data: Data) async throws { throw NativeQuickASRError.invalidMessage } }
+
+/// ws:// connection over Network.framework for the self-hosted service. App Transport Security refuses plain ws to an IP address
+/// that URLSession is asked to open, and cannot be told about one; this path is only used for ws:// (wss:// stays on URLSession).
+@MainActor final class NativeQuickASRPlainWebSocket: NativeQuickASRSocket {
+    private let connection: NWConnection
+    init(request: URLRequest) {
+        let options = NWProtocolWebSocket.Options()
+        options.autoReplyPing = true; options.maximumMessageSize = 512 * 1024
+        options.setAdditionalHeaders((request.allHTTPHeaderFields ?? [:]).map { ($0.key, $0.value) })
+        let parameters = NWParameters.tcp
+        parameters.defaultProtocolStack.applicationProtocols.insert(options, at: 0); parameters.preferNoProxies = true
+        connection = NWConnection(to: .url(request.url!), using: parameters)
+        connection.start(queue: .main)
+    }
+    private func transmit(_ data: Data, opcode: NWProtocolWebSocket.Opcode) async throws {
+        let context = NWConnection.ContentContext(identifier: "frame", metadata: [NWProtocolWebSocket.Metadata(opcode: opcode)])
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.send(content: data, contentContext: context, isComplete: true, completion: .contentProcessed { error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+            })
+        }
+    }
+    func send(_ text: String) async throws { try await transmit(Data(text.utf8), opcode: .text) }
+    func sendBinary(_ data: Data) async throws { try await transmit(data, opcode: .binary) }
+    func receive() async throws -> Data {
+        while true {
+            let message: (Data?, NWProtocolWebSocket.Opcode?) = try await withCheckedThrowingContinuation { continuation in
+                connection.receiveMessage { data, context, _, error in
+                    if let error { continuation.resume(throwing: error); return }
+                    let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata
+                    continuation.resume(returning: (data, metadata?.opcode))
+                }
+            }
+            switch message.1 {
+            case .text, .binary: if let data = message.0 { return data }
+            case .close: throw NativeQuickASRError.unavailable
+            default: continue
+            }
+        }
+    }
+    func ping() async throws { try await transmit(Data(), opcode: .ping) }
+    var authenticationRejected: Bool { false }
+    func close() { connection.cancel() }
+}
+
 /// Ephemeral, fixed-provider connection. No cookies/cache, ambient credentials,
 /// redirects or request/body logging. Constructed ONLY by an explicit recording.
 @MainActor final class NativeQuickASRWebSocket: NSObject, NativeQuickASRSocket, URLSessionTaskDelegate {
+    /// The default socket for a request: plain ws:// (self-hosted) over Network.framework, everything else over URLSession.
+    static func make(_ request: URLRequest) -> any NativeQuickASRSocket {
+        request.url?.scheme?.lowercased() == "ws" ? NativeQuickASRPlainWebSocket(request: request) : NativeQuickASRWebSocket(request: request)
+    }
     private var session: URLSession!
     private var socket: URLSessionWebSocketTask!
     init(request: URLRequest) {
@@ -24,6 +76,7 @@ import Combine
     }
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
     func send(_ text: String) async throws { try await socket.send(.string(text)) }
+    func sendBinary(_ data: Data) async throws { try await socket.send(.data(data)) }
     func receive() async throws -> Data {
         switch try await socket.receive() { case .data(let data): return data; case .string(let value): return Data(value.utf8); @unknown default: throw NativeQuickASRError.invalidMessage }
     }
@@ -50,15 +103,17 @@ import Combine
     private var active = false, ready = false, finishing = false, finishSent = false
     private var connection = 0, generation = 0, retries = 0
     private var gap = false
+    private var committedCount = 0, commitMark = 0
+    private var segmentNumber = 0 // ElevenLabs: partials replace the open segment; a commit closes it.
     private var phase: NativeQuickASRPhase = .idle
     private var reason: String?
     var transcriptContentBuilds: Int { transcript.contentBuilds }
-    init(factory: @escaping Factory = { NativeQuickASRWebSocket(request: $0) }, sleep: @escaping Sleep = { try await Task.sleep(for: .seconds($0)) }) { self.factory = factory; self.sleep = sleep }
+    init(factory: @escaping Factory = { NativeQuickASRWebSocket.make($0) }, sleep: @escaping Sleep = { try await Task.sleep(for: .seconds($0)) }) { self.factory = factory; self.sleep = sleep }
     func start(configuration: NativeQuickASRConfiguration, key: String) throws {
         guard configuration.enabled, configuration.valid else { throw NativeQuickASRError.configuration }
         _ = try configuration.request(key: key)
         cancel(); generation += 1
-        self.config = configuration; self.key = key; buffer = .init(); transcript = .init(); gap = false; retries = 0
+        self.config = configuration; self.key = key; buffer = .init(); transcript = .init(); gap = false; retries = 0; segmentNumber = 0; committedCount = 0; commitMark = 0
         active = true; ready = false; finishing = false; finishSent = false; phase = .idle; reason = nil; snapshot = .init()
         beginConnection()
     }
@@ -79,6 +134,8 @@ import Combine
         finishTask = Task { [weak self, sleep] in
             do { try await sleep(7) } catch { return }
             guard let self, self.active, self.generation == token else { return }
+            // ElevenLabs has no end-of-session event: the commit already went out, so a quiet server means nothing is left to wait for.
+            if self.config.completesOnFinal, self.finishSent, self.transcript.interimText.isEmpty { self.terminate(.completed, reason: nil); return }
             self.gap = true; self.terminate(.failed, reason: "finish_timeout")
         }
         return await withCheckedContinuation { continuation in finishContinuation = continuation; drain() }
@@ -96,11 +153,14 @@ import Combine
         snapshot = next; onChange?(next)
     }
     private func current(_ id: Int, _ token: Int) -> Bool { active && generation == token && connection == id && socket != nil }
+    private func send(_ frame: NativeQuickASRFrame, on socket: any NativeQuickASRSocket) async throws {
+        switch frame { case .json(let body): try await socket.send(json(body)); case .binary(let data): try await socket.sendBinary(data) }
+    }
     private func json(_ body: [String:Any]) throws -> String { String(decoding: try JSONSerialization.data(withJSONObject: body), as: UTF8.self) }
     private func beginConnection() {
         guard active else { return }
         connection += 1; let id = connection, token = generation
-        ready = false; finishSent = false
+        ready = false; finishSent = false; segmentNumber += 1
         do { socket = factory(try config.request(key: key)) } catch { terminate(.failed, reason: "configuration"); return }
         guard let socket else { return }
         phase = finishing ? .finishing : (retries > 0 ? .reconnecting : .connecting); publish()
@@ -125,30 +185,41 @@ import Combine
         connectTask = Task { [weak self] in
             do {
                 guard let self else { return }
-                try await socket.send(self.json(self.config.update))
+                if let update = self.config.updateFrame { try await self.send(update, on: socket) }
             } catch {
                 guard let self, self.current(id,token) else { return }
                 self.reconnect(reason: socket.authenticationRejected ? "authentication" : "configuration_send_failed", terminal: socket.authenticationRejected)
             }
         }
     }
-    private func receive(_ event: [String:Any], connection id: Int) {
-        switch event["type"] as? String {
-        case "session.updated":
+    private func receive(_ raw: [String:Any], connection id: Int) {
+        switch config.interpret(raw) {
+        case .ready:
             guard !ready else { return }; ready = true; timeoutTask?.cancel(); timeoutTask = nil
             phase = finishing ? .finishing : .connected; reason = nil; publish(); startHeartbeat(); drain()
-        case "conversation.item.input_audio_transcription.text", "conversation.item.input_audio_transcription.completed":
+        case .transcript(let item, let eventID, let text, let final):
             guard ready else { return }
-            do { try transcript.receive(event, connection: id); publish() }
-            catch { gap = true; terminate(.failed, reason: "transcript_limit") }
-        case "session.finished":
+            do {
+                if let item { try transcript.receive(item: item, eventID: eventID, text: text, final: final, connection: id) }
+                else if !(final && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) { try transcript.receiveSegment(segmentNumber, connection: id, text: text, final: final) }
+                publish()
+                if item == nil && final {
+                    segmentNumber += 1; committedCount += 1
+                    if config.completesOnFinal && finishing && finishSent && committedCount > commitMark && transcript.interimText.isEmpty { terminate(.completed, reason: nil) }
+                }
+            } catch { gap = true; terminate(.failed, reason: "transcript_limit") }
+        case .invalidTranscript:
+            guard ready else { return }
+            gap = true; terminate(.failed, reason: "transcript_limit")
+        case .sessionFinished:
             if finishing && finishSent { terminate(.completed, reason: nil) }
             else { reconnect(reason: "session_finished") }
-        case "error", "conversation.item.input_audio_transcription.failed":
-            let code = (event["error"] as? [String:Any])?["code"] as? String ?? ""
-            let terminal = ["invalid_api_key", "invalid_request_error", "invalid_value", "authentication_error", "invalid_parameter", "unauthorized"].contains(code)
-            reconnect(reason: terminal ? "configuration_rejected" : "service_error", terminal: terminal)
-        default: break
+        case .nothingToCommit:
+            // Silence or a throttled commit: after the final commit there is nothing left to wait for.
+            if config.completesOnFinal && finishing && finishSent && transcript.interimText.isEmpty { terminate(.completed, reason: nil) }
+        case .failure(let why, let terminal):
+            reconnect(reason: why, terminal: terminal)
+        case .ignore: break
         }
     }
     private func drain() {
@@ -160,7 +231,10 @@ import Combine
             while self.current(id,token), self.ready, !Task.isCancelled {
                 if let bytes = self.buffer.take() {
                     self.publish()
-                    do { try await socket.send(self.json(["event_id":UUID().uuidString,"type":"input_audio_buffer.append","audio":bytes.base64EncodedString()])) }
+                    // ElevenLabs: the last chunk of a finishing recording carries the commit.
+                    let last = self.config.finishesWithCommit && self.finishing && self.buffer.bytes == 0
+                    if last { self.finishSent = true; self.commitMark = self.committedCount }
+                    do { try await self.send(self.config.audioFrame(bytes, commit: last), on: socket) }
                     catch {
                         guard self.current(id,token) else { return }
                         self.gap = true // Delivery of this one chunk is uncertain. Do not replay it.
@@ -168,8 +242,8 @@ import Combine
                     }
                 } else {
                     if self.finishing, !self.finishSent {
-                        self.finishSent = true
-                        do { try await socket.send(self.json(["event_id":UUID().uuidString,"type":"session.finish"])) }
+                        self.finishSent = true; self.commitMark = self.committedCount
+                        do { try await self.send(self.config.finishFrame, on: socket) }
                         catch { if self.current(id,token) { self.gap = true; self.terminate(.failed,reason:"finish_send_failed") } }
                     }
                     return

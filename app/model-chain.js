@@ -18,7 +18,9 @@
     if (!model && !account) return null; // Explicit account provider may use its official default.
     const provider = account ? value.provider : 'api';
     const effort = value.effort && value.effort !== 'auto' ? String(value.effort) : '';
-    return { provider, model, effort };
+    // `connection` = which configured provider (v2 id) a custom-API model belongs to; absent on older configs.
+    const connection = provider === 'api' && typeof value.connection === 'string' ? value.connection.trim().slice(0, 300) : '';
+    return { provider, ...(connection ? { connection } : {}), model, effort };
   }
 
   function workspaceConfig(settings, workspace) {

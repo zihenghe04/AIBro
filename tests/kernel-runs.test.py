@@ -129,6 +129,39 @@ class RegistryTests(unittest.TestCase):
         self.assertIsNone(self.runs.claim('h'))
         self.assertEqual(self.types(run['id']), ['run/queued', 'run/finished'])
 
+    def test_model_override_is_validated_and_kept(self):
+        run, _ = self.runs.create({'prompt': 'a', 'source': {'kind': 'scheduler', 'id': 'nightly'}, 'model': {'connection': 'codex-cli', 'model': 'gpt-5.5', 'effort': 'low'}})
+        self.assertEqual(run['request']['model'], {'connection': 'codex-cli', 'model': 'gpt-5.5', 'effort': 'low'})
+        self.assertIsNone(self.runs.create({'prompt': 'b'})[0]['request']['model'])
+        for bad in ({'connection': ''}, {'connection': 'codex-cli', 'apiKey': 'sk'}, 'codex-cli', {'connection': 'x' * 400}):
+            with self.assertRaises(KernelError): self.runs.create({'prompt': 'c', 'model': bad})
+
+    def test_pause_waits_for_resume_then_requeues(self):
+        run, _ = self.runs.create({'prompt': 'a'})
+        claim = self.runs.claim('h')
+        paused = self.runs.pause(run['id'], claim['leaseToken'], {'code': 'CODEX_QUOTA', 'message': 'Codex 订阅额度已用尽。' + 'x' * 500, 'steps': 3})
+        self.assertEqual(paused['status'], 'paused')
+        self.assertEqual((paused['pause']['code'], paused['pause']['steps'], len(paused['pause']['message'])), ('CODEX_QUOTA', 3, 300))
+        # Paused is neither lost nor claimable, and the old lease is gone.
+        self.clock.now += 3600
+        self.assertIsNone(self.runs.claim('h'))
+        self.assertEqual(self.runs.get(run['id'])['status'], 'paused')
+        with self.assertRaises(KernelError): self.runs.heartbeat(run['id'], claim['leaseToken'])
+        resumed = self.runs.resume(run['id'])
+        self.assertEqual((resumed['status'], resumed['resumes'], resumed['pause']), ('queued', 1, None))
+        self.assertEqual(len(resumed['pauses']), 1)
+        with self.assertRaises(KernelError) as caught: self.runs.resume(run['id'])
+        self.assertEqual(caught.exception.code, 'NOT_PAUSED')
+        self.assertEqual(self.runs.claim('h')['run']['id'], run['id'])
+        self.assertEqual(self.types(run['id']), ['run/queued', 'run/started', 'run/paused', 'run/resumed', 'run/started'])
+
+    def test_cancel_paused_run_finishes_it(self):
+        run, _ = self.runs.create({'prompt': 'a'})
+        claim = self.runs.claim('h')
+        self.runs.pause(run['id'], claim['leaseToken'], {'code': 'CODEX_RATE_LIMIT'})
+        self.assertEqual(self.runs.cancel(run['id'])['status'], 'cancelled')
+        self.assertEqual(self.types(run['id'])[-1], 'run/finished')
+
 
 class HttpTests(unittest.TestCase):
     def setUp(self):
@@ -170,6 +203,24 @@ class HttpTests(unittest.TestCase):
         status, listed = self.call('GET', '/__kernel/runs', None, self.window())
         self.assertEqual((status, len(listed['runs'])), (200, 1))
         self.assertNotIn(self.token, json.dumps(listed))
+
+    def test_host_pauses_and_a_client_resumes(self):
+        status, body = self.call('POST', '/__kernel/runs', {'prompt': 'x', 'model': {'connection': 'codex-cli'}}, self.bearer())
+        run_id = body['run']['id']
+        host = {'X-AIBro-Kernel-Host': HOST, 'Origin': f'http://127.0.0.1:{self.port}'}
+        status, claim = self.call('POST', '/__kernel/host/claim', {'host': 't'}, host)
+        self.assertEqual(claim['run']['request']['model']['connection'], 'codex-cli')
+        self.assertEqual(self.call('POST', f'/__kernel/host/runs/{run_id}/pause', {'leaseToken': claim['leaseToken'], 'code': 'CODEX_QUOTA', 'message': '额度用尽'}, self.bearer())[0], 403)
+        status, paused = self.call('POST', f'/__kernel/host/runs/{run_id}/pause', {'leaseToken': claim['leaseToken'], 'code': 'CODEX_QUOTA', 'message': '额度用尽'}, host)
+        self.assertEqual((status, paused['run']['status']), (200, 'paused'))
+        status, resumed = self.call('POST', f'/__kernel/runs/{run_id}/resume', {}, self.bearer())
+        self.assertEqual((status, resumed['run']['status']), (200, 'queued'))
+
+    def test_codex_kernel_routes_need_the_host_token(self):
+        status, body = self.call('POST', '/__kernel/host/codex/step', {'runId': 'krun_x', 'messages': [{'role': 'user', 'content': 'hi'}]}, self.window())
+        self.assertEqual((status, body['error']['code']), (403, 'HOST_ONLY'))
+        status, body = self.call('POST', '/__kernel/host/codex/close', {'runId': 'krun_x'}, {'X-AIBro-Kernel-Host': HOST, 'Origin': f'http://127.0.0.1:{self.port}'})
+        self.assertEqual((status, body), (200, {'ok': False}))
 
     def test_only_people_answer_and_only_the_window_applies(self):
         status, body = self.call('POST', '/__kernel/runs', {'prompt': 'x'}, self.bearer())

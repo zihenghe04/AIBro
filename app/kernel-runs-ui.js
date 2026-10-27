@@ -9,13 +9,17 @@
      core as the agent's own actions (WorkstationCore.applyPlan), then saved
      and acknowledged with a receipt. An item that already carries the call id
      is not created twice.
-   Polls only while the page is hydrated; quiet when nothing is running. */
+   - paused runs (P9b: the model's usage limit) stay in the panel with the
+     reason and 继续 / 停止 until someone decides.
+   Polls only while the page is hydrated; quiet when nothing is running.
+   While a conversation runs here, the window tells the service (foreground
+   hint), so scheduled runs wait their turn (never for long). */
 (function(root){
   'use strict';
   const BUSY_MS=3000,QUIET_MS=10000;
-  const T={title:'后台运行',approve:'批准',reject:'拒绝',cancel:'停止',empty:'没有需要处理的后台运行',
-    status:{queued:'排队中',running:'运行中','awaiting-approval':'待审批',completed:'已完成',failed:'失败',cancelled:'已停止',interrupted:'已中断'},
-    tools:{create_task:'新建任务',create_note:'新建笔记'}};
+  const T={title:'后台运行',approve:'批准',reject:'拒绝',cancel:'停止',resume:'继续',empty:'没有需要处理的后台运行',
+    status:{queued:'排队中',running:'运行中','awaiting-approval':'待审批',paused:'已暂停',completed:'已完成',failed:'失败',cancelled:'已停止',interrupted:'已中断'},
+    tools:{create_task:'新建任务',create_note:'新建笔记',mark_task_done:'标记完成'},sources:{scheduler:'计划任务',user:'主窗口',mobile:'手机',external:'本机客户端'},outOfScope:'超出任务声明的范围'};
   let runs=[],timer=null,open=false,applying=false,panel=null,button=null;
   const api=async(path,body)=>{
     const response=await root.fetch(path,{method:body===undefined?'GET':'POST',cache:'no-store',headers:body===undefined?{}:{'Content-Type':'application/json'},...(body!==undefined?{body:JSON.stringify(body)}:{})});
@@ -89,6 +93,7 @@
       try{
         if(target.dataset.decision)await api(`/__kernel/runs/${encodeURIComponent(target.dataset.run)}/approvals/${encodeURIComponent(target.dataset.approval)}`,{decision:target.dataset.decision});
         else if(target.dataset.cancel)await api(`/__kernel/runs/${encodeURIComponent(target.dataset.run)}/cancel`,{});
+        else if(target.dataset.resume)await api(`/__kernel/runs/${encodeURIComponent(target.dataset.run)}/resume`,{});
       }catch(error){if(typeof toast==='function')toast(error.message);}
       await refresh();
     });
@@ -96,24 +101,32 @@
   }
   function paint(){
     ensure();if(!button)return;
-    const shown=runs.filter(run=>active(run)||pending(run).length);
-    const waiting=shown.reduce((n,run)=>n+pending(run).length,0);
+    const shown=runs.filter(run=>active(run)||run.status==='paused'||pending(run).length);
+    const waiting=shown.reduce((n,run)=>n+pending(run).length+(run.status==='paused'?1:0),0);
     button.hidden=!shown.length;button.dataset.attention=waiting?'1':'0';
-    button.textContent=waiting?`${T.title} · 待审批 ${waiting}`:`${T.title} · ${shown.length}`;
+    const paused=shown.filter(run=>run.status==='paused').length,notes=[];
+    if(waiting-paused)notes.push(`待审批 ${waiting-paused}`);
+    if(paused)notes.push(`已暂停 ${paused}`);
+    button.textContent=`${T.title} · ${notes.length?notes.join(' · '):shown.length}`;
     panel.hidden=!open||!shown.length;
     if(panel.hidden)return;
     panel.replaceChildren(el('h3',null,T.title));
     for(const run of shown){
       const box=el('div','kernel-run');box.dataset.runId=run.id;
-      box.append(el('div',null,run.request?.title||run.id),el('div','kernel-run-meta',`${T.status[run.status]||run.status} · 来源：${run.source?.kind||'?'}`));
+      box.append(el('div',null,run.request?.title||run.id),el('div','kernel-run-meta',`${T.status[run.status]||run.status} · 来源：${T.sources[run.source?.kind]||run.source?.kind||'?'}`));
       for(const approval of pending(run)){
         const card=el('div','kernel-approval');card.dataset.approvalId=approval.id;
-        card.append(el('div',null,`${T.tools[approval.tool]||approval.tool}${approval.destructive?'（不可撤销）':''}`),el('pre',null,approval.summary||''));
+        card.append(el('div',null,`${T.tools[approval.tool]||approval.tool}${approval.destructive?'（不可撤销）':''}${(approval.reasons||[]).includes('out-of-scope')?' · '+T.outOfScope:''}`),el('pre',null,approval.summary||''));
         const actions=el('div','kernel-actions');
         for(const [decision,label] of [['allowed-once',T.approve],['rejected',T.reject]]){const b=el('button',null,label);b.type='button';b.dataset.run=run.id;b.dataset.approval=approval.id;b.dataset.decision=decision;actions.append(b);}
         card.append(actions);box.append(card);
       }
-      if(active(run)){const actions=el('div','kernel-actions'),b=el('button',null,T.cancel);b.type='button';b.dataset.run=run.id;b.dataset.cancel='1';actions.append(b);box.append(actions);}
+      if(run.status==='paused'){
+        box.append(el('div','kernel-approval kernel-paused',run.pause?.message||T.status.paused));
+        const actions=el('div','kernel-actions');
+        for(const [key,label] of [['resume',T.resume],['cancel',T.cancel]]){const b=el('button',null,label);b.type='button';b.dataset.run=run.id;b.dataset[key]='1';actions.append(b);}
+        box.append(actions);
+      }else if(active(run)){const actions=el('div','kernel-actions'),b=el('button',null,T.cancel);b.type='button';b.dataset.run=run.id;b.dataset.cancel='1';actions.append(b);box.append(actions);}
       panel.append(box);
     }
   }
@@ -122,8 +135,10 @@
     try{runs=(await api('/__kernel/runs?limit=20')).runs||[];}catch{runs=[];}
     paint();
   }
+  const conversing=()=>typeof sendMessage==='function'&&!!(sendMessage.busy||sendMessage.preflight);
   async function tick(){
     clearTimeout(timer);
+    try{if(ready()&&conversing())await api('/__kernel/foreground',{busy:true});}catch{}
     try{await refresh();if(runs.some(active))await applyEffects();}catch{}
     timer=setTimeout(tick,runs.some(active)?BUSY_MS:QUIET_MS);
   }

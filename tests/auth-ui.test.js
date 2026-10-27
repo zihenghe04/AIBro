@@ -24,7 +24,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 function harness({ stored = {}, initialState = {}, desktop = false, integration = false } = {}) {
-  const ids = ['provider','model','apiBase','apiKey','composerModel','apiCredentials','openaiAuthPanel','openaiAuthStatus','openaiAccountDetails','openaiSignIn','openaiCancelLogin','openaiSignOut','openaiRefreshStatus','openaiLoginLink','openaiModel','openaiAuthHelp'];
+  const ids = ['provider','model','apiBase','apiKey','composerModel','apiCredentials','openaiAuthPanel','openaiAuthStatus','openaiAccountDetails','openaiSignIn','openaiCancelLogin','openaiSignOut','openaiRefreshStatus','openaiLoginLink','codexLoginMode','codexTest','codexDetect','openaiModel','openaiAuthHelp'];
   const nodes = Object.fromEntries(ids.map(id => [id, new Element()]));
   nodes.provider.value = 'api'; nodes.openaiModel.options = [{ value: '', text: '账号默认模型' }];
   const storage = new Map(Object.entries(stored)); const calls = []; const queues = new Map(); const timers = new Map(); const opened = []; const toasts = [];
@@ -199,4 +199,61 @@ test('third Claude provider persists via existing preference while hiding both A
  const h=harness({integration:true,stored:{'workstation-provider':'claude-auth'}});h.init();assert.equal(h.api.provider(),'claude-auth');assert.equal(h.nodes.apiCredentials.hidden,true);assert.equal(h.nodes.openaiAuthPanel.hidden,true);assert.equal(h.calls.length,0);
  h.nodes.apiBase.value='https://draft.example.invalid/v1';h.nodes.apiKey.value='public-synthetic-key';h.nodes.model.value='draft-api-model';await h.change('provider','api');await h.change('provider','claude-auth');
  assert.equal(h.storage.get('workstation-provider'),'claude-auth');assert.equal(h.nodes.apiBase.value,'https://draft.example.invalid/v1');assert.equal(h.nodes.apiKey.value,'public-synthetic-key');assert.equal(h.nodes.model.value,'draft-api-model');assert.equal(h.calls.length,0);
+});
+
+test('shared mode only asks for exit-code detection, reads cached models, hides sign-in/out and tests on demand', async () => {
+  const h = harness(); let mode = 'shared'; const modes = [];
+  h.api.init({ getState: () => h.state, save: () => {}, toast: () => {}, onChange: () => h.api.render(), codexMode: () => mode, setCodexMode: value => { mode = value; modes.push(value); } });
+  h.queue('/__codex/detect?mode=shared', { mode: 'shared', installed: true, version: '9.9.9', loggedIn: true, loginExitCode: 0 });
+  h.queue('/__auth/models?cache=1&cacheonly=1&mode=shared', { data: [{ id: 'm-1', displayName: 'Model 1' }], cached: true });
+  await h.change('provider', 'openai-auth');
+  assert.deepEqual(h.calls.map(call => call.path), ['/__codex/detect?mode=shared', '/__auth/models?cache=1&cacheonly=1&mode=shared']);
+  assert.equal(h.nodes.openaiSignIn.hidden, true); assert.equal(h.nodes.openaiSignOut.hidden, true);
+  assert.equal(h.nodes.codexLoginMode.value, 'shared'); assert.match(h.nodes.codexDetect.textContent, /Codex 9\.9\.9/);
+  assert.equal(h.nodes.openaiModel.options.length, 2);
+  h.queue('/__codex/test?mode=shared', { ok: true, message: '可用 · Codex 9.9.9 · 1 个模型' });
+  h.queue('/__auth/models?cache=1&cacheonly=1&mode=shared', { data: [{ id: 'm-1' }, { id: 'm-2' }] });
+  await h.nodes.codexTest.click(); await h.tick(0);
+  assert.equal(h.calls.find(call => call.path === '/__codex/test?mode=shared').method, 'POST');
+  assert.match(h.nodes.codexDetect.textContent, /可用/);
+  assert.ok(!h.calls.some(call => /__auth\/(status|login|logout)/.test(call.path)));
+  mode = 'shared'; h.queue('/__auth/status', signedOut); h.nodes.codexLoginMode.value = 'private'; await h.nodes.codexLoginMode.dispatch('change'); await h.tick(0);
+  assert.deepEqual(modes, ['private']);
+});
+
+test('shared mode readiness needs an installed, logged-in CLI and never signs in for the user', async () => {
+  const h = harness();
+  h.api.init({ getState: () => h.state, save: () => {}, toast: () => {}, onChange: () => h.api.render(), codexMode: () => 'shared', setCodexMode: () => {} });
+  h.queue('/__codex/detect?mode=shared', { installed: false, loggedIn: false });
+  await assert.rejects(h.api.ensureReady(), /Codex CLI/);
+  h.queue('/__codex/detect?mode=shared', { installed: true, version: '9.9.9', loggedIn: false });
+  await assert.rejects(h.api.ensureReady(), /codex login/);
+});
+
+test('oauth mode asks the server for mode=oauth, polls while signing in even when ChatGPT is not the default, and shows the device code', async () => {
+  const h = harness({ desktop: true }); let accountEvents = 0;
+  h.api.init({ getState: () => h.state, save: () => {}, toast: () => {}, onChange: () => h.api.render(), onAccount: () => { accountEvents++; }, codexMode: () => 'oauth', setCodexMode: () => {} });
+  h.nodes.provider.value = 'api';
+  h.queue('/__auth/login?mode=oauth', { method: 'device', fallback: true, loginId: 'dev', userCode: 'ABCD-1234', verificationUrl: 'https://auth.openai.com/codex/device', note: '本机 1455 端口正被其他程序占用，已改用设备码登录。' });
+  await h.nodes.openaiSignIn.click();
+  assert.match(h.nodes.openaiAuthStatus.textContent, /ABCD-1234/); assert.match(h.nodes.openaiAuthStatus.textContent, /1455/);
+  assert.deepEqual(h.opened, ['https://auth.openai.com/codex/device']);
+  assert.equal([...h.timers.values()].filter(timer => timer.ms === 1800).length, 1);
+  h.queue('/__auth/status?mode=oauth', { available: true, authenticated: true, account: { email: 'me@example.invalid', planType: 'plus' }, login: { pending: false } });
+  h.queue('/__auth/models?mode=oauth', { data: [{ id: 'gpt-x', displayName: 'GPT X' }] });
+  await h.tick(1800);
+  assert.equal(h.nodes.openaiSignOut.hidden, false); assert.match(h.nodes.openaiAuthStatus.textContent, /钥匙串/);
+  assert.match(h.nodes.openaiAccountDetails.textContent, /me@example\.invalid/);
+  assert.ok(accountEvents >= 2);
+  assert.ok(h.calls.every(call => /mode=oauth/.test(call.path)));
+});
+
+test('oauth mode reports an expired sign-in and refuses to continue until the user signs in again', async () => {
+  const h = harness();
+  h.api.init({ getState: () => h.state, save: () => {}, toast: () => {}, onChange: () => h.api.render(), codexMode: () => 'oauth', setCodexMode: () => {} });
+  h.queue('/__auth/status?mode=oauth', { available: true, authenticated: false, needsReauth: true, account: { email: 'me@example.invalid' }, login: { pending: false } });
+  await assert.rejects(() => h.api.ensureReady(), /登录已失效/);
+  assert.match(h.nodes.openaiAuthStatus.textContent, /失效/); assert.equal(h.nodes.openaiSignIn.hidden, false);
+  h.queue('/__auth/status?mode=oauth', signedOut);
+  await assert.rejects(() => h.api.ensureReady(), /登录 ChatGPT/);
 });

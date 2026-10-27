@@ -2,7 +2,7 @@
 const {app,BrowserWindow}=require('electron');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),http=require('node:http'),net=require('node:net'),assert=require('node:assert/strict');
 const {spawn,spawnSync}=require('node:child_process');
-const ROOT=path.resolve(__dirname,'..'),PORT=18897,ORIGIN='http://127.0.0.1:'+PORT,TEMP=fs.mkdtempSync(path.join(os.tmpdir(),'aw-reading-pane-smoke-')),STORE=path.join(TEMP,'store');
+const ROOT=path.resolve(__dirname,'..'),PORT=Number(process.env.READING_PANE_SMOKE_PORT||18897),ORIGIN='http://127.0.0.1:'+PORT,TEMP=fs.mkdtempSync(path.join(os.tmpdir(),'aw-reading-pane-smoke-')),STORE=path.join(TEMP,'store');
 fs.mkdirSync(path.join(STORE,'files'),{recursive:true});fs.mkdirSync(path.join(TEMP,'profile'));app.setPath('userData',path.join(TEMP,'profile'));
 const pdf=spawnSync(process.env.PYTHON||'python3',['-c',[
 'import fitz,sys,json','from pathlib import Path','p=Path(sys.argv[1]);d=fitz.open()',

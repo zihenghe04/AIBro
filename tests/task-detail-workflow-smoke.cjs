@@ -108,7 +108,7 @@ async function run() {
   const log=fs.openSync(path.join(OUT,'task-detail-renderer-server.log'),'w'); server=spawn('python3',[path.join(ROOT,'app/server.py')],{cwd:ROOT,env:{...process.env,AI_WORKSTATION_PORT:String(port),AI_WORKSTATION_DATA_DIR:STORE},stdio:['ignore',log,log]});fs.closeSync(log);
   await until(()=>new Promise(resolve=>http.get(origin+'/__health',response=>{response.resume();resolve(response.statusCode===200);}).on('error',()=>resolve(false))),'isolated server');
   await app.whenReady();win=new BrowserWindow({show:false,width:1280,height:920,useContentSize:true,webPreferences:{sandbox:true,contextIsolation:true,backgroundThrottling:false}});
-  win.webContents.session.webRequest.onBeforeRequest({urls:['http://*/*','https://*/*','ws://*/*','wss://*/*']},(request,done)=>{const url=new URL(request.url),allowed=url.origin===origin&&!/^\/__(?:proxy|api|llm|models|codex\/respond|cloud\/connect|auth\/|local\/)/.test(url.pathname);if(!allowed)externalRequests.push(request.url);done({cancel:!allowed});});
+  win.webContents.session.webRequest.onBeforeRequest({urls:['http://*/*','https://*/*','ws://*/*','wss://*/*']},(request,done)=>{const url=new URL(request.url),allowed=url.origin===origin&&!/^\/__(?:proxy|api|llm|models|codex\/respond|cloud\/connect|auth\/(?!status(?:$|\?)|models\?(?:[^#]*&)?cacheonly)|local\/)/.test(url.pathname+url.search);if(!allowed)externalRequests.push(request.url);done({cancel:!allowed});});
   win.webContents.on('console-message',event=>{if(event.level==='error')rendererErrors.push(event.message);});
   // Create the renderer before asking CDP to enable Page; a never-navigated
   // hidden BrowserWindow can otherwise wait indefinitely for its first target.

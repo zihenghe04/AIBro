@@ -177,15 +177,21 @@
   // Host: {calls (tool-calls.js), request(body,{signal,purpose}) → reply
   //   {content,reasoning,raw,finish,usage}, invoke(call,{signal}) → result text,
   //   specs, known, protocol, wire, model, emit(type,data), save(session),
-  //   signal, compaction:{compactor, thresholdTokens, retainTokens} | null,
+  //   signal, compaction:{compactor, thresholdTokens, retainTokens, usage} | null,
   //   resumePrompt, maxSteps, repeatLimit}.
+  // compaction.usage (P9b, the Codex model): the provider's reported input
+  // tokens also trigger compaction; an estimated count (usage.estimated)
+  // triggers it earlier, at USAGE_EARLY of the threshold.
+  // A request error with pause:true (usage limit) ends the run as "paused"
+  // with {pause:{code,message}}; nothing here retries it.
   // A cancelled run stops before the next model request or tool call; a call
   // already running gets graceMs to settle, otherwise its outcome is recorded
   // as unknown (never retried). Remaining calls of that turn are answered
   // "cancelled, not started".
   const CANCELLED_RESULT=JSON.stringify({ok:false,code:'CANCELLED',message:'运行已取消，未执行。',outcome:'not-started'});
   const UNKNOWN_RESULT=JSON.stringify({ok:false,code:'OUTCOME_UNKNOWN',message:'运行在该调用执行期间被取消，结果未知；不会重做。',outcome:'unknown'});
-  const usageOf=u=>u?{input:u.prompt_tokens??u.input_tokens??null,output:u.completion_tokens??u.output_tokens??null}:null;
+  const USAGE_EARLY=0.75;
+  const usageOf=u=>u?{input:u.prompt_tokens??u.input_tokens??null,output:u.completion_tokens??u.output_tokens??null,...(u.estimated===true?{estimated:true}:{})}:null;
   async function toolLoop(session,host){
     const {calls:Calls,request,invoke,specs=[],known=new Set(specs.map(spec=>spec.name)),protocol='native',wire='chat',model='kernel',
       emit=async()=>{},save=()=>{},signal=null,compaction=null,resumePrompt=null,maxSteps=40,repeatLimit=4,prefix='a',
@@ -220,9 +226,17 @@
       catch(error){content=JSON.stringify({ok:false,code:error?.code||'TOOL_FAILED',message:String(error?.message||error).slice(0,500)});}
       record(call,typeof content==='string'?content:JSON.stringify(content));
     };
-    const finish=async(stop,final=null)=>{
-      await emit('run/finished',{status:stop==='final'?'completed':stop,steps:session.steps,compactions:session.compactions||0});
-      return {final,stop,steps:session.steps,formatErrors:session.formatErrors||0,compactions:session.compactions||0};
+    const finish=async(stop,final=null,pause=null)=>{
+      await emit('run/finished',{status:stop==='final'?'completed':stop,steps:session.steps,compactions:session.compactions||0,...(pause?{pause}:{})});
+      return {final,stop,steps:session.steps,formatErrors:session.formatErrors||0,compactions:session.compactions||0,...(pause?{pause}:{})};
+    };
+    const paused=error=>finish('paused',null,{code:String(error.code||'PAUSED').slice(0,40),message:String(error.message||error).slice(0,300)});
+    // Reported (or estimated) context of the last reply, when the host asks for it.
+    const pressure=()=>{
+      const last=session.lastUsage;
+      if(!compaction?.usage||!last||!Number.isFinite(last.input))return false;
+      const limit=last.estimated?Math.floor(compaction.thresholdTokens*USAGE_EARLY):compaction.thresholdTokens;
+      return last.input>=limit&&Compactor.estimate(session.turns)>compaction.retainTokens;
     };
     // Resume: calls of the last assistant turn without a result are asked
     // again under the same call id; the gateway answers from its ledger.
@@ -242,8 +256,10 @@
       if(stopped())return finish('cancelled');
       if(Compactor){
         let result;
-        try{result=await Compactor.compact(session,{thresholdTokens:compaction.thresholdTokens,retainTokens:compaction.retainTokens,signal,summarize});}
-        catch(error){if(stopped())return finish('cancelled');throw error;}
+        const force=pressure();
+        try{result=await Compactor.compact(session,{thresholdTokens:compaction.thresholdTokens,retainTokens:compaction.retainTokens,signal,summarize,...(force?{force:true}:{})});}
+        catch(error){if(stopped())return finish('cancelled');if(error?.pause)return paused(error);throw error;}
+        if(force){session.lastUsage=null;result={...result,trigger:'usage'};}
         if(result.compacted||result.reason){(session.compactionLog||=[]).push({step:session.steps,...result});save(session);await emit('run/compacted',{step:session.steps,...result});}
       }
       if(stopped())return finish('cancelled');
@@ -254,14 +270,18 @@
       let reply;
       try{reply=await request(body(msgs),{signal,purpose:'step'});}
       catch(error){
-        await emit('model/response',{status:stopped()?'cancelled':'failed',step:session.steps,ms:Date.now()-t0,error:String(error?.message||error).slice(0,200)});
+        await emit('model/response',{status:stopped()?'cancelled':error?.pause?'paused':'failed',step:session.steps,ms:Date.now()-t0,error:String(error?.message||error).slice(0,200),...(error?.code?{code:String(error.code).slice(0,40)}:{})});
         if(stopped())return finish('cancelled');
+        // The step never happened: the next attempt (after a resume) asks again.
+        if(error?.pause){session.steps--;save(session);return paused(error);}
         throw error;
       }
       let raw=reply.raw,textFinal=null,textError=null;
       if(protocol==='text')({calls:raw,final:textFinal,error:textError}=Calls.parseText(reply.content));
       const list=Calls.normalize(raw,{prefix,session:session.id,turn:session.steps,known});
-      await emit('model/response',{status:'completed',step:session.steps,ms:Date.now()-t0,finish:reply.finish,usage:usageOf(reply.usage),textChars:String(reply.content||'').length,calls:list.map(c=>({callId:c.callId,name:c.name,error:c.error?.code||null}))});
+      const used=usageOf(reply.usage);
+      if(used)session.lastUsage=used;
+      await emit('model/response',{status:'completed',step:session.steps,ms:Date.now()-t0,finish:reply.finish,usage:used,textChars:String(reply.content||'').length,calls:list.map(c=>({callId:c.callId,name:c.name,error:c.error?.code||null})),...(reply.codex?{codex:reply.codex}:{})});
       session.turns.push({role:'assistant',content:reply.content,...(reply.reasoning?{reasoning:reply.reasoning}:{}),calls:list});
       save(session);
       if(!list.length){
@@ -323,5 +343,5 @@
     return {content,reasoning,raw:acc.raw(),finish,usage,completed};
   }
 
-  return Object.freeze({REPAIR_LIMIT,WRITE_KINDS,budget,staging,finalizer,run,recordResult,toolLoop,readModelStream,CANCELLED_RESULT,UNKNOWN_RESULT});
+  return Object.freeze({REPAIR_LIMIT,WRITE_KINDS,USAGE_EARLY,budget,staging,finalizer,run,recordResult,toolLoop,readModelStream,CANCELLED_RESULT,UNKNOWN_RESULT});
 });

@@ -52,7 +52,11 @@ import Combine
         self.dictation=dictation;self.verify=verify;self.submit=submit
         subscription=dictation.$phase.sink { [weak self] state in
             guard let self,self.lease != nil else{return}
-            if state == .recorded && self.phase == .recording {self.phase = .recorded}
+            if state == .recorded && self.phase == .recording {
+                self.phase = .recorded
+                // The speaker stopped talking: go straight to transcription/confirmation instead of waiting for a click.
+                if self.dictation.autoStopped {Task{@MainActor [weak self] in self?.finish()}}
+            }
             // Successful conversion also emits idle before returning text. Do
             // not revoke that completion; only reconcile a live audio session.
             if [.starting,.recording,.recorded].contains(self.phase) && (state == .idle || state == .error) {
@@ -76,7 +80,7 @@ import Combine
     func beginHold() {
         guard heldGeneration == nil else{return}
         if phase == .idle || phase == .failed && text.isEmpty && !dictation.retryAvailable {
-            start()
+            heldStart=true;start();heldStart=false
             if phase == .starting || phase == .recording {heldGeneration=generation}
         }else if phase == .failed || phase == .preview {onPresent?()}
     }
@@ -92,6 +96,7 @@ import Combine
         heldGeneration=nil
         if held==generation && [.starting,.recording,.recorded].contains(phase) {invalidate()}
     }
+    private var heldStart=false
     func start() {
         guard phase == .idle || phase == .failed && text.isEmpty && !dictation.retryAvailable else{return}
         guard dictation.lease == nil else {
@@ -101,6 +106,7 @@ import Combine
         generation+=1;let token=generation
         let request=NativeSpeechDictation.Lease(nonce:UUID().uuidString,conversationId:nil,revision:token,mode:.quickConversation)
         autoSubmitThisCommand=autoSubmitProvider()
+        dictation.autoStopAllowed=heldStart==false
         execution=nil;lease=request;text="";issue=nil;wantsReveal=true;phase = .starting;onPresent?()
         operation=Task { [weak self] in
             guard let self,self.generation==token,self.lease==request,!Task.isCancelled else{return}

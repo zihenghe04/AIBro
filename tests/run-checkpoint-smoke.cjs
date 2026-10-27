@@ -2,6 +2,7 @@
 const {app,BrowserWindow}=require('electron');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),net=require('node:net'),http=require('node:http'),{spawn}=require('node:child_process');
 const OUT=path.resolve(__dirname,'../test-results/run-checkpoint-20260930'),ASSETS=path.resolve(__dirname,'../app'),TEMP=fs.mkdtempSync(path.join(os.tmpdir(),'aibro-run-checkpoint-'));
+fs.mkdirSync(OUT,{recursive:true});
 app.setPath('userData',path.join(TEMP,'profile'));app.on('window-all-closed',()=>{});
 const result={scope:'Frozen full production Electron renderer, synthetic isolated workspace, no provider or user records.',runtime:process.versions,cases:[],skipped:[],failures:[],externalRequests:[],rendererErrors:[],modelCalls:0};
 let win,server,finished=false;const delay=ms=>new Promise(r=>setTimeout(r,ms));

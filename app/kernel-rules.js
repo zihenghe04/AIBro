@@ -16,8 +16,14 @@
     {id:'hard-length-limit',text:'用户给了字数、篇幅这类硬性上限时，按最严的口径计数：所有非空白字符都算，包括标点、英文字母、数字和必须写出的标题。写入前自己逐句数一遍（不要为了计数另写文件或运行命令），并留出约 15% 的余量；超了就先删减再写入。'},
     // P8b: the headless host runs while nobody watches.
     {id:'unattended',hosts:['headless'],text:'这是无人值守的后台运行：写操作可能要等用户在主窗口审批后才执行，以工具回执为准；不能当面问用户，信息不足时在最终回复里说明缺什么。'},
+    // M1 scheduler: a scheduled task runs with nobody to answer, under the scope its task declared.
+    {id:'scheduled-no-questions',hosts:['scheduled'],text:'这是计划任务的无人值守执行：不要向用户提问或请求确认，没有人会回答；信息不足时按最合理的假设继续，并在最终汇报里写明假设。'},
+    {id:'scheduled-no-self-scheduling',hosts:['scheduled'],text:'不要设定、调度或唤醒任何未来的提醒、任务或定时器；什么时候再运行只由 AI Bro 的调度器决定。'},
+    {id:'scheduled-scope',hosts:['scheduled'],text:'只在任务声明的范围内行动；超出范围的操作会暂停并等用户批准，被拒绝就如实汇报，不要换别的方式绕过。'},
+    {id:'scheduled-mark-done',hosts:['mark-done'],text:'任务真正完成后调用 mark_task_done，并附一两句结果摘要；没有调用它，这次执行不算完成。没做完就不要调用，在最终回复里说明卡在哪里。'},
   ]);
-  const forHost=host=>RULES.filter(rule=>!rule.hosts||rule.hosts.includes(host));
+  // host: one tag or several (a scheduled headless run: ['headless','scheduled','mark-done']).
+  const forHost=host=>{const tags=[].concat(host);return RULES.filter(rule=>!rule.hosts||rule.hosts.some(tag=>tags.includes(tag)));};
   // "规则：\n1. …" — the bench's original wording, numbered per host.
   function text(host='app'){
     return '规则：\n'+forHost(host).map((rule,i)=>`${i+1}. ${rule.text}`).join('\n');

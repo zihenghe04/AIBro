@@ -4,6 +4,8 @@ struct NativeQuickRealtimeASRSettingsView: View {
     @ObservedObject var store: NativeQuickRecordingStore
     @ObservedObject var settings: NativeQuickASRSettings
     let onClose: () -> Void
+    // Same key as NativeDictationPreferences.silenceKey; read by voice input to stop on its own after the speaker goes quiet.
+    @AppStorage("aibro.dictation.silenceSeconds") private var silence = 1.5
     @State private var deleting = false
     @State private var closing = false
     @State private var drafts: [String: NativeQuickASRSettingsDraft] = [:]
@@ -30,7 +32,7 @@ struct NativeQuickRealtimeASRSettingsView: View {
     var body: some View {
         VStack(alignment:.leading,spacing:16) {
             Text(nativeUI("实时转写", "Realtime transcription")).font(.system(size:17,weight:.semibold))
-            Text(nativeUI("开启后，录音时的音频会发送到你配置的通义百炼服务；完整录音仍保存在这台 Mac。", "When enabled, audio recorded here is sent to your configured Alibaba Cloud Model Studio service. The full recording stays on this Mac."))
+            Text(nativeUI("开启后，录音时的音频会发送到你配置的实时转写服务（通义百炼、ElevenLabs 或你自部署的服务）；完整录音仍保存在这台 Mac。", "When enabled, audio recorded here is sent to your configured realtime service (Alibaba Model Studio, ElevenLabs or your own server). The full recording stays on this Mac."))
                 .font(.system(size:12)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             HStack(spacing:10) {
                 Picker(nativeUI("方案", "Scheme"), selection: Binding(get:{draft.profileID},set:edit)) {
@@ -42,8 +44,23 @@ struct NativeQuickRealtimeASRSettingsView: View {
             }.disabled(settings.testing)
             TextField(nativeUI("方案名称", "Scheme name"),text:Binding(get:{draft.name},set:{value in var next=draft;next.name=value;update(next)}))
                 .textFieldStyle(.roundedBorder)
-            Toggle(nativeUI("录音时实时转写", "Transcribe while recording"),isOn:field(\.enabled)).toggleStyle(.switch)
+            Toggle(nativeUI("录音与语音输入时实时转写", "Transcribe live while recording and dictating"),isOn:field(\.enabled)).toggleStyle(.switch)
             Grid(alignment:.leading,horizontalSpacing:16,verticalSpacing:12) {
+                GridRow {
+                    Text(nativeUI("服务", "Service"))
+                    Picker("",selection:field(\.provider)) {
+                        Text(nativeUI("通义百炼", "Alibaba Model Studio")).tag(NativeQuickASRConfiguration.Provider.bailian)
+                        Text("ElevenLabs Scribe").tag(NativeQuickASRConfiguration.Provider.elevenLabs)
+                        Text(nativeUI("自部署（OpenAI 兼容服务流）", "Self-hosted (OpenAI-compatible stream)")).tag(NativeQuickASRConfiguration.Provider.selfHosted)
+                    }.labelsHidden()
+                }
+                if draft.configuration.provider == .selfHosted {
+                GridRow {
+                    Text(nativeUI("服务地址", "Server URL"))
+                    TextField("ws://<server>:8000", text: field(\.serverURL)).textFieldStyle(.roundedBorder)
+                }
+                }
+                if draft.configuration.provider == .bailian {
                 GridRow {
                     Text(nativeUI("地区", "Region"))
                     Picker("",selection:field(\.region)) {
@@ -55,6 +72,17 @@ struct NativeQuickRealtimeASRSettingsView: View {
                     Text(nativeUI("工作空间", "Workspace"))
                     TextField(nativeUI("可选 Workspace ID", "Optional Workspace ID"),text:field(\.workspaceID)).textFieldStyle(.roundedBorder)
                 }
+                }
+                if draft.configuration.provider == .selfHosted {
+                GridRow {
+                    Text(nativeUI("语言", "Language"))
+                    Picker("",selection:field(\.language)) {
+                        Text(nativeUI("自动识别", "Auto detect")).tag("")
+                        Text(nativeUI("中文", "Chinese")).tag("zh")
+                        Text(nativeUI("英文", "English")).tag("en")
+                    }.labelsHidden()
+                }
+                } else {
                 GridRow {
                     Text(nativeUI("语言", "Language"))
                     Picker("",selection:field(\.language)) {
@@ -69,12 +97,23 @@ struct NativeQuickRealtimeASRSettingsView: View {
                         Text(nativeUI("西班牙语", "Spanish")).tag("es")
                     }.labelsHidden()
                 }
+                }
+                GridRow {
+                    Text(nativeUI("说完自动结束", "Stop when silent"))
+                    Picker("",selection:$silence) {
+                        Text(nativeUI("关闭", "Off")).tag(0.0)
+                        Text(nativeUI("1 秒", "1 s")).tag(1.0)
+                        Text(nativeUI("1.5 秒", "1.5 s")).tag(1.5)
+                        Text(nativeUI("2 秒", "2 s")).tag(2.0)
+                        Text(nativeUI("3 秒", "3 s")).tag(3.0)
+                    }.labelsHidden()
+                }
                 GridRow {
                     Text("API Key")
-                    SecureField(saved?.configuration.origin == draft.configuration.origin ? nativeUI("已保存，留空保留", "Saved; leave blank to keep") : nativeUI("百炼独立 Key", "Model Studio Key"),text:Binding(get:{draft.key},set:{value in var next=draft;next.key=value;update(next)})).textFieldStyle(.roundedBorder)
+                    SecureField(saved?.configuration.origin == draft.configuration.origin ? nativeUI("已保存，留空保留", "Saved; leave blank to keep") : nativeUI("此服务的独立 Key", "Independent Key for this service"),text:Binding(get:{draft.key},set:{value in var next=draft;next.key=value;update(next)})).textFieldStyle(.roundedBorder)
                 }
             }.font(.system(size:12))
-            Text(nativeUI("qwen3-asr-flash-realtime · Key 仅本机加密保存，连接时验证。聊天 Key 不会用于转写。", "qwen3-asr-flash-realtime · Key is encrypted locally and checked when connecting. Chat credentials are not used."))
+            Text(draft.configuration.modelName + nativeUI(" · Key 仅本机加密保存，连接时验证。聊天 Key 不会用于转写。", " · Key is encrypted locally and checked when connecting. Chat credentials are not used."))
                 .font(.system(size:11)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             HStack(spacing:10) {
                 Button(settings.testing ? nativeUI("取消测试", "Cancel test") : nativeUI("测试连接", "Test connection")) {

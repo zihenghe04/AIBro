@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..');
 test('independent HTTP speech configuration, audio, transport and credential lifecycles',{skip:process.platform!=='darwin',timeout:150000},()=>{
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'aibro-speech-service-'));
  try{
-  const binary=path.join(tmp,'checks');const files=['NativeCredentials','NativeSpeechService','NativeSpeechCredentials'].map(x=>path.join(root,'native/Sources/AIBro',x+'.swift'));
+  const binary=path.join(tmp,'checks');const files=['NativeCredentials','NativeSpeechService','NativePlainHTTPPolicy','NativeSpeechCredentials'].map(x=>path.join(root,'native/Sources/AIBro',x+'.swift'));
   const built=spawnSync('xcrun',['swiftc','-parse-as-library','-swift-version','5',...files,path.join(__dirname,'native-speech-service.swift'),'-o',binary],{encoding:'utf8',timeout:120000});
   assert.equal(built.status,0,built.stdout+built.stderr);if(built.stderr)process.stdout.write(built.stderr);
   const ran=spawnSync(binary,[tmp],{encoding:'utf8',timeout:20000});process.stdout.write(ran.stdout);assert.equal(ran.status,0,ran.stdout+ran.stderr);

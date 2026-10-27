@@ -151,10 +151,12 @@ final class NativeCredentials: @unchecked Sendable {
         return key
     }
     private func authenticatedData(_ channel: String) -> Data { Data(("AI Bro credentials v2\u{0}" + service + "\u{0}" + channel).utf8) }
-    private func localRecord(_ channel: String, at directory: Int32?) throws -> [String: Any]? {
+    // Writers pass explainKey so a missing or malformed device key is reported as such instead of as a decrypt failure.
+    private func localRecord(_ channel: String, at directory: Int32?, explainKey: Bool = false) throws -> [String: Any]? {
         guard let directory, let sealed = try readFile(channel + ".sealed", at: directory, limit: Self.profileLimit + 28) else { return nil }
+        let earlyKey = explainKey ? try encryptionKey(at: directory, create: false) : nil
         do {
-            let key = try encryptionKey(at: directory, create: false)
+            let key = try earlyKey ?? encryptionKey(at: directory, create: false)
             let plaintext = try AES.GCM.open(AES.GCM.SealedBox(combined: sealed), using: key, authenticating: authenticatedData(channel))
             guard let envelope = try JSONSerialization.jsonObject(with: plaintext) as? [String: Any],
                   envelope["version"] as? Int == 2, envelope["channel"] as? String == channel else { throw failure("凭据内容无效。") }
@@ -170,7 +172,7 @@ final class NativeCredentials: @unchecked Sendable {
         try atomicWrite(sealed, name: channel + ".sealed", at: directory, limit: Self.profileLimit + 28)
     }
     private func writeRecord(_ channel: String, _ record: [String: Any]?, at directory: Int32) throws {
-        let old = try localRecord(channel, at: directory)
+        let old = try localRecord(channel, at: directory, explainKey: true)
         // Older callers still modify only the active scheme; inactive credentials survive.
         guard old?["profiles"] != nil else {
             var envelope: [String: Any] = ["version": 2, "channel": channel, "removed": record == nil, "profileRevision": (old?["profileRevision"] as? Int ?? 0) + 1]

@@ -25,7 +25,7 @@ async function run(){
   await app.whenReady();const forbidden=[],errors=[];
   for(let i=0;i<2;i++){
     const win=new BrowserWindow({show:false,width:1440,height:960,webPreferences:{sandbox:true,backgroundThrottling:false,partition:'cloud-qa-'+i}});windows.push(win);
-    win.webContents.session.webRequest.onBeforeRequest({urls:['<all_urls>']},(details,done)=>{const url=new URL(details.url);const blocked=/^https?:$/.test(url.protocol)&&(url.origin!==ORIGINS[i]||url.pathname.startsWith('/__proxy')||url.pathname==='/__codex/respond'||url.pathname.startsWith('/__auth/'));if(blocked)forbidden.push(url.pathname);done({cancel:blocked});});
+    win.webContents.session.webRequest.onBeforeRequest({urls:['<all_urls>']},(details,done)=>{const url=new URL(details.url);const blocked=/^https?:$/.test(url.protocol)&&(url.origin!==ORIGINS[i]||url.pathname.startsWith('/__proxy')||url.pathname==='/__codex/respond'||(url.pathname.startsWith('/__auth/')&&url.pathname!=='/__auth/status'&&!(url.pathname==='/__auth/models'&&url.searchParams.has('cacheonly'))));if(blocked)forbidden.push(url.pathname);done({cancel:blocked});});
     win.webContents.on('console-message',(event)=>{if(event.level==='error'){errors.push(event.message);console.error('RENDERER',event.message);}});
     await win.loadURL(ORIGINS[i]);
   }

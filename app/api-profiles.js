@@ -48,6 +48,20 @@
    try{const next=await bridge.saveProfile({...toProfile(copy(form)),id,name:savedName,expectedRevision:catalog.revision});catalog=receipt(next);return metadata(id);}
    catch(e){error=e.message;throw e;}finally{busy=false;paint();}
   }
+  // Adds (or updates, when the same service already has a plan) one plan without changing which plan is active:
+  // the native store makes a saved plan active, so the previous one is selected again.
+  async function saveNew({name,form,sameService=(a,b)=>a===b}){
+   if(!catalog)await load();
+   if(busy||isBusy())throw fail('方案正在处理，请稍后重试。');
+   const label=String(name||'').trim().slice(0,80);if(!label)throw Error('请给这个供应商起一个名称。');
+   const prior=catalog.activeProfileID,existing=catalog.profiles.find(p=>sameService(p.base,form.base)),id=existing?.id||makeID();
+   busy=true;error='';paint();
+   try{
+    catalog=receipt(await bridge.saveProfile({...toProfile(copy(form)),id,name:label,expectedRevision:catalog.revision}));
+    if(prior&&prior!==id&&metadata(prior))catalog=receipt(await bridge.selectProfile({id:prior,expectedRevision:catalog.revision}));
+    return metadata(id);
+   }catch(e){error=e.message;throw e;}finally{busy=false;paint();}
+  }
   function acknowledge(form){if(JSON.stringify(toProfile(readForm()))===JSON.stringify(toProfile(form))){changed=false;drafts.delete(selected);}paint();}
   async function remove(){
    if(busy||isBusy()||!catalog)return false;
@@ -66,8 +80,20 @@
    island=root.HalaskaUI.mount(host,'APIProfileBar',{...view(),label,onDiscard:discard,onReload:()=>void reload(),onChoose:id=>void choose(id),onName:editName,onNew:add,onSave,onRemove:()=>{if(confirmRemove())void remove();}});return true;
   }
   // Public address/model pairs only, used to seed the per-service model list from older single-model profiles.
-  function profilesForMigration(){return (catalog?.profiles||[]).map(p=>({base:p.base||'',model:p.model||''}));}
-  const api={load,reload,choose,add,save,read,remove,discard,hasPending,capture,touch,acknowledge,paint,mount,view,profilesForMigration};managers.add(api);return api;
+  function profilesForMigration(){return (catalog?.profiles||[]).map(p=>({name:p.name||'',base:p.base||'',model:p.model||'',settings:{protocol:p.settings?.protocol}}));}
+  // Another saved plan's Key for a role that is not the active connection. The native side still validates the endpoint and revision.
+  async function readForBase(base,sameService=(a,b)=>a===b){
+   if(!catalog)await load();
+   const p=(catalog?.profiles||[]).find(item=>sameService(item.base,base));
+   if(!p)throw fail('没有保存过这个服务的 API 方案，请先在设置里添加。');
+   return {...await bridge.readProfile({id:p.id,base:p.base,expectedRevision:catalog.revision}),base:p.base};
+  }
+  async function chooseBase(base,sameService=(a,b)=>a===b){
+   if(!catalog)await load();
+   const p=(catalog?.profiles||[]).find(item=>sameService(item.base,base));
+   return p?choose(p.id).then(()=>true):false;
+  }
+  const api={load,reload,choose,add,save,saveNew,read,readForBase,chooseBase,remove,discard,hasPending,capture,touch,acknowledge,paint,mount,view,profilesForMigration};managers.add(api);return api;
  }
  return {create,hasPending:()=>[...managers].some(manager=>manager.hasPending())};
 });

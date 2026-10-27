@@ -4,16 +4,16 @@
 <p align="center">Read course materials and papers, edit your notes, and plan tasks and events.</p>
 <p align="center"><sub>NATIVE MAC APP · LOCAL FIRST · YOUR MODELS · OPEN SOURCE</sub></p>
 <p align="center"><a href="README.md">简体中文</a> · English</p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.9"><strong>Download the Mac preview ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website and demos</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">Changelog</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.10"><strong>Download the Mac preview ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">Website and demos</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">Changelog</a></p>
 
 [![AI Bro: read course materials, ask questions, and edit study notes on Mac](launch/dist/assets/demo/hero-workspace.png)](https://zihenghe04.github.io/AIBro/?lang=en)
 <p align="center"><sub>Actual AI Bro 0.8.0 App interface, captured from an isolated demo workspace. Projects, documents, and responses are fictional; animations arrange interface steps and do not represent live model speed. <a href="https://zihenghe04.github.io/AIBro/?lang=en#workspace">Explore the workflows ↗</a></sub></p>
 
 Add course materials, papers, and notes to a project, then ask questions about them. AI Bro can help summarize key ideas, draft notes, and break work into tasks. Open the cited source to check an answer, or review and edit an AI draft before saving it. When you need the material for an exam or a report, search your saved documents and notes.
 
-The public download is **0.9.9, a Mac development preview** for Apple Silicon / macOS 14+, not yet Apple-notarized. [Release notes](docs/RELEASE_NOTES.md)
+The public download is **0.9.10, a Mac development preview** for Apple Silicon / macOS 14+, not yet Apple-notarized. [Release notes](docs/RELEASE_NOTES.md)
 
-This release moves runs onto a new execution kernel: every write and delete goes through one set of approval rules, runs can keep going in the background after the window closes, long tasks compact their context automatically, and native tool calls are available as an experiment. Settings gain a background-run permission, and under Full access undoable deletions run directly while irreversible actions still need approval. The Android 0.4.9 APK remains available in the [v0.9.4 release](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.4) ([mobile source instructions](mobile/README.md)); no installable iOS IPA is provided.
+This release rebuilds model settings (Text generation / Embedding / Speech recognition / Usage statistics, provider import from CC Switch, and a per-provider model picker in chat); ChatGPT account sign-in is now handled by AI Bro itself; speech recognition becomes a single configuration with ElevenLabs Scribe and self-hosted OpenAI-compatible services, including live transcription; and plugin management and scheduled tasks are added. The Android 0.4.9 APK remains available in the [v0.9.4 release](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.4) ([mobile source instructions](mobile/README.md)); no installable iOS IPA is provided.
 
 ---
 
@@ -75,14 +75,10 @@ For multiple devices, connect your own sync service over HTTPS or an SSH tunnel 
 
 ## Roadmap
 
-Shipped in 0.9.6–0.9.9: window restore, memory and save performance, automatic backups and startup self-check; three switchable themes, undoable deletes; multi-model list; tool registry and local MCP; a unified execution kernel (event log, unified approvals, native tool calls, background runs that keep going after the window closes, automatic context compaction for long tasks).
+Shipped in 0.9.6–0.9.10: window restore, memory and save performance, automatic backups and startup self-check; three switchable themes, undoable deletes; multi-model list; tool registry and local MCP; a unified execution kernel (event log, unified approvals, native tool calls, background runs that keep going after the window closes, automatic context compaction for long tasks); plugin management (the browser as the first plugin, importable external MCP servers); scheduled tasks (manual reminders and automatic tasks); the Codex CLI as a background kernel; the rebuilt model settings, ChatGPT account sign-in and unified speech recognition configuration.
 
 **Next**
 
-- **Finishing the foundations**
-  - Plugins: the browser becomes the first plugin, with per-site permissions, and pauses for you to take over at logins or captchas. You can also add external MCP servers as plugins by hand; their actions need your approval by default.
-  - Scheduled and automatic tasks: they recover after interruptions, catch up a missed run only once, and unattended tasks act only within the scope you declared.
-  - Models: use an API (OpenAI-compatible or Anthropic Messages), or the Codex CLI you are already signed in to on this Mac. Chat and translation each get their own model and reasoning level; the agent can also use the Codex CLI as its model, while tools and approvals stay with AI Bro.
 - **Today and reminders**: a daily brief, one-sentence events, reminders on time.
 - **Course spaces**: turn a pile of materials into a course in one step; highlights and annotations are saved; separate conversations per document.
 - **Paper library**: a continuous-scrolling PDF viewer; metadata, de-duplication, import from Zotero; side-by-side full-text translation; export notes, annotations and conversations together.
@@ -93,13 +89,13 @@ What we will not do: loosen permissions for unattended tasks by default; open un
 
 ## Get started
 
-1. Download the DMG and checksums from [v0.9.9 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.9), following the [installation guide](docs/DISTRIBUTION.md). Python and PDF support are bundled.
+1. Download the DMG and checksums from [v0.9.10 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.10), following the [installation guide](docs/DISTRIBUTION.md). Python and PDF support are bundled.
 2. Connect your model service in Settings and select a model.
 3. Create a project, add a document, and start a conversation.
 
 > Summarize the core ideas in this handout, include source page references, save a learning note, and suggest three revision tasks.
 
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.9"><strong>Download AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">See the demos</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.10"><strong>Download AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/?lang=en">See the demos</a></p>
 
 <details>
 <summary><strong>Preview boundaries and data handling</strong></summary>

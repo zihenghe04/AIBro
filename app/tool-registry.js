@@ -8,7 +8,9 @@
   const NAME=/^[a-z][a-z0-9_]{0,63}$/;
   const EFFECTS=['none','view','local','external'];
   const APPROVALS=['never','policy','always','host'];
-  const GATES=['strip','keys','schema'];
+  // opaque: an external tool (MCP plugin) whose arguments the registry cannot
+  // check; they pass as given (bounded by the executor) and its server validates them.
+  const GATES=['strip','keys','schema','opaque'];
   const CACHE_MODES=['reuse','live'];
   const clone=x=>JSON.parse(JSON.stringify(x));
   const freeze=x=>{if(x&&typeof x==='object'){Object.freeze(x);for(const v of Object.values(x))freeze(v);}return x;};
@@ -37,7 +39,8 @@
     if(spec.cache.key&&spec.cache.key.some(field=>!Object.hasOwn(spec.input.properties,field)))throw TypeError(spec.name+': cache key uses an undeclared field');
     spec.gate=spec.gate??'strip';
     if(!GATES.includes(spec.gate))throw TypeError(spec.name+': invalid gate');
-    if(spec.gate!=='strip'&&!(spec.gateError?.code&&spec.gateError?.message))throw TypeError(spec.name+': a rejecting gate needs gateError');
+    if(['keys','schema'].includes(spec.gate)&&!(spec.gateError?.code&&spec.gateError?.message))throw TypeError(spec.name+': a rejecting gate needs gateError');
+    if(spec.gate==='opaque'&&(spec.effect==='none'||spec.concurrency==='parallel'||spec.cache.mode!=='live'||spec.approval!=='host'))throw TypeError(spec.name+': an opaque tool is serial, live and asks through its executor');
     spec.legacyFields=spec.legacyFields||[];
     spec.hosts=spec.hosts||['webview'];
     spec.modelCallable=spec.modelCallable!==false;
@@ -75,12 +78,13 @@
       return ['type',...seen.map((field,i)=>({field,i})).sort((a,b)=>rank(a.field)-rank(b.field)||a.i-b.i).map(x=>x.field)];
     }
     let generic=null;const fields=()=>generic||=genericFields();
-    function validate(name,args){const spec=get(name);if(!spec)return [{path:'',message:'unknown tool'}];return Schema.validate(spec.input,args);}
+    function validate(name,args){const spec=get(name);if(!spec)return [{path:'',message:'unknown tool'}];if(spec.gate==='opaque')return args&&typeof args==='object'&&!Array.isArray(args)?[]:[{path:'',message:'arguments must be an object'}];return Schema.validate(spec.input,args);}
     // The scheduler's copy of a model request. Rejecting gates refuse a
     // request carrying anything beyond the declaration; other tools keep only
     // whitelisted fields, so provider-supplied authority is dropped.
     function safeRequest(request){
       const spec=get(request.type);
+      if(spec&&spec.gate==='opaque')return clone(request);
       if(spec&&spec.gate!=='strip'){
         const {type,...args}=request,allowed=Object.keys(spec.input.properties);
         const reject=()=>{throw Object.assign(Error(spec.gateError.message),{code:spec.gateError.code});};
@@ -103,6 +107,8 @@
     return {
       plugin,register,get,has:name=>!!get(name),list:()=>all(),
       setPluginEnabled(id,on){if(on)disabled.delete(id);else disabled.add(id);generic=null;},
+      // Removing an external plugin removes its declarations and its family.
+      unregisterPlugin(id){if(id==='core')throw Error('Core tools cannot be removed');for(const [name,spec] of specs)if(spec.plugin===id)specs.delete(name);plugins.delete(id);disabled.delete(id);generic=null;},
       // Derived tables (each replaces a hand-maintained list; see tests/tool-registry-equivalence.test.js).
       readTypes:()=>new Set(names(s=>s.effect==='none')),
       viewTypes:()=>new Set(names(s=>s.effect==='view')),

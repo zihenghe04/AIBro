@@ -101,12 +101,19 @@ struct NativeVoiceCommandView:View {
                         Label(issue,systemImage:"exclamationmark.circle").font(.system(size:11))
                             .foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true).textSelection(.enabled)
                     }
+                    if let notice=dictation.notice,!accepted {
+                        Label(notice,systemImage:"info.circle").font(.system(size:11)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                    }
+                    if coordinator.text.isEmpty,!dictation.liveText.isEmpty,[.recording,.recorded,.transcribing].contains(coordinator.phase) {
+                        Text(dictation.liveText).font(.system(size:13)).foregroundStyle(.primary).fixedSize(horizontal:false,vertical:true)
+                            .accessibilityLabel(nativeUI("正在识别", "Transcribing live")).accessibilityValue(dictation.liveText)
+                    }
                     if !coordinator.text.isEmpty {
                         Text(coordinator.text).font(.system(size:13)).foregroundStyle(.primary)
                             .fixedSize(horizontal:false,vertical:true).textSelection(.enabled)
                             .accessibilityLabel(nativeUI("识别的指令", "Recognized instruction"))
                             .accessibilityValue(coordinator.text)
-                    }else if coordinator.issue == nil {
+                    }else if coordinator.issue == nil && dictation.liveText.isEmpty {
                         Text(nativeUI("例如：明天下午三点打篮球，帮我记一下。", "For example: Remind me to play basketball tomorrow at 3 pm."))
                             .font(.system(size:12)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                     }

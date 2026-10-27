@@ -18,7 +18,7 @@
 /* Text coordinates share the raster's physical page space. Scaling this one
    layer preserves the browser selection while zooming or refining the image. */
 .pdf-text-layer{position:absolute;top:0;transform-origin:0 0;overflow:hidden;line-height:var(--leading-100);text-align:left;direction:ltr;user-select:text;-webkit-user-select:text;cursor:text;z-index:var(--z-1)}
-.pdf-text-layer[hidden]{display:none}.pdf-text-word{position:absolute;white-space:pre;color:transparent;font-family:sans-serif;font-weight:var(--font-weight-400);font-style:normal;transform-origin:0 0;letter-spacing:0;word-spacing:0;user-select:text;-webkit-user-select:text}
+.pdf-text-layer[hidden]{display:none}.pdf-text-word{position:absolute;white-space:pre;color:transparent;font-family:Helvetica,Arial,sans-serif;font-weight:var(--font-weight-400);font-style:normal;transform-origin:0 0;letter-spacing:0;word-spacing:0;user-select:text;-webkit-user-select:text}
 .pdf-text-word::selection{color:transparent;background:rgba(55,145,240,.32)}
 .pdf-reader-text-status{flex:none;white-space:nowrap}.pdf-reader-text-status[data-pdf-text-status=partial]{color:var(--muted)}
 @container (max-width:410px){.pdf-reader-text-status{display:none}}

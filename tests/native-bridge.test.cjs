@@ -353,7 +353,7 @@ test('native dismissal executes the actual close lifecycle without cancelling a 
  const swift=fs.readFileSync('native/Sources/AIBro/AIBro.swift','utf8'),hook=swift.match(/func dismissTransientModelPicker\(\) \{([\s\S]*?)\n    \}/)[1];
  assert.match(hook,/guard ready else \{ return \}/);
  const script=hook.match(/web\.evaluateJavaScript\("([^"]+)"/)[1];
- const model=fs.readFileSync('app/model-picker.js','utf8'),closeLifecycle=model.slice(model.indexOf('  function finishClose('),model.indexOf('  function changeProvider('));
+ const model=fs.readFileSync('app/model-picker.js','utf8'),closeLifecycle=model.slice(model.indexOf('  function finishClose('),model.indexOf('  async function loadCatalogue('));
  let abortedCatalogue=0;const picker={hidden:false},reader={hidden:false},otherDialog={open:true},attributes={};
  const transaction={state:'waiting for durable ACK'},env={transaction,document:{},$:id=>id==='modelPicker'?picker:id==='composerModel'?{setAttribute:(key,value)=>attributes[key]=value}:null};
  env.window=env;vm.createContext(env);vm.runInContext(`let saving=true,presented=true,closing=false,version=4,pendingPreference=transaction,returnFocus=null;let fetchAbort={abort:()=>catalogueAbort()};${closeLifecycle};window.ConversationModels={close};`,Object.assign(env,{catalogueAbort:()=>abortedCatalogue++}));

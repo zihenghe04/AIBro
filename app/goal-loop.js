@@ -144,7 +144,7 @@
       const credentials = config?.provider === 'api' ? await hooks.getApiConnection?.(hooks.captureApiConnection?.()) : {};
       if (config?.provider === 'api' && (!credentials?.base || !credentials?.token || !config.model)) throw Error('缺少可用的模型配置');
       const answer = await root.AgentTransport.requestPlan({
-        ...config, ...credentials, signal: controller.signal,
+        ...config, ...credentials, ...(root.trackModelUsage?.(config, credentials) || {}), signal: controller.signal,
         input: [{ role: 'developer', content: [{ type: 'input_text', text: prompt(loop.goal, round, loop.limit, summaryOf(run)) }] },
                 { role: 'user', content: [{ type: 'input_text', text: '请只输出判定 JSON。' }] }]
       });

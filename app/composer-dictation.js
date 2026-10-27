@@ -37,10 +37,19 @@
      return;
     }
     elapsed=Number.isFinite(reply.elapsed)?Math.max(0,reply.elapsed):elapsed;
-    if(reply.phase==='recorded'){stopPoll();publish('recorded');}
+    if(reply.phase==='recorded'){
+     stopPoll();publish('recorded');
+     // The speaker went quiet: stop and transcribe without a click.
+     if(reply.autoStopped===true)finish();
+    }
     else if(reply.phase==='error'){stopPoll();failure(reply);}
     else if(reply.phase==='idle'||reply.phase==='cancelled'){cancel();}
-    else hooks.onChange?.(snapshot());
+    else{
+     // Live transcription: show what has been heard so far in the status line until the final text is inserted.
+     if(typeof reply.liveText==='string'&&reply.liveText&&reply.liveText!==message)message=reply.liveText;
+     else if(!reply.liveText&&typeof reply.notice==='string'&&reply.notice&&!message)message=reply.notice;
+     hooks.onChange?.(snapshot());
+    }
    }catch{if(current===session&&valid(session.lease)){stopPoll();publish('error',t('无法读取录音状态，可取消后重试。','Could not read recording status. Cancel and try again.'));}}finally{polling=false;}
   }
   async function start(){
@@ -55,7 +64,7 @@
     publish('authorizing');const reply=await api.start(lease);
     if(current!==session||!valid(lease)){if(current===session)cancel();return false;}
     if(!sameLease(reply,lease)||reply.status!=='recording'){failure(reply);return false;}
-    elapsed=0;publish('recording');poller=(hooks.setInterval||root.setInterval)(poll,1000);return true;
+    elapsed=0;publish('recording');poller=(hooks.setInterval||root.setInterval)(poll,500);return true;
    }catch{if(current===session&&valid(lease))failure();return false;}
   }
   async function finish(retry=false){

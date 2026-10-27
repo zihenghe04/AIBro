@@ -76,7 +76,7 @@ function FetchedChooser({catalog}){
 function ModelCatalogEditor({catalog}){
  const rows=catalog.entries;
  return <div className="model-catalog">
-  <div className="model-catalog-heading"><div><Heading level={4} style={{fontSize:13,margin:0}}>{t('模型列表','Model list')}</Heading><Text as="p" size="xs" secondary style={{margin:'4px 0 0',lineHeight:1.6}}>{t('对话里的模型选择器列出这些模型。改动点“保存模型与权限”后生效。','The chat model picker lists these models. Changes apply after Save models & permissions.')}</Text></div>
+  <div className="model-catalog-heading"><div><Heading level={4} style={{fontSize:13,margin:0}}>{t('模型列表','Model list')}</Heading><Text as="p" size="xs" secondary style={{margin:'4px 0 0',lineHeight:1.6}}>{t('对话里的模型选择器列出这些模型。改动点“保存权限与用量”后生效。','The chat model picker lists these models. Changes apply after Save permissions & usage.')}</Text></div>
    <div className="model-catalog-actions"><Button size="sm" variant="outline" icon={<Download size={14} aria-hidden="true"/>} loading={catalog.fetching} disabled={catalog.fetching} onClick={catalog.onFetch}>{t('获取模型列表','Fetch models')}</Button><Button size="sm" variant="outline" icon={<Plus size={14} aria-hidden="true"/>} onClick={catalog.onAdd}>{t('手动添加','Add manually')}</Button></div></div>
   {catalog.status&&<p className="model-catalog-status" role="status">{catalog.status}</p>}
   {catalog.chooser&&catalog.fetched.length>0&&<FetchedChooser catalog={catalog}/>}
@@ -103,7 +103,7 @@ export function ModelSettingsSurface({controls={},attach,catalog=null}){
    <div className="model-section-body"><RetainedField {...props} id="apiBase" label={t('API 地址','API address')}/><RetainedField {...props} id="apiProtocol" label={t('接口协议','API protocol')} select/><RetainedField {...props} id="apiToolProtocol" label={t('工具调用方式','Tool calling')} select description={t('文本协议是默认方式；原生工具调用为试验选项，服务不支持时请改回文本协议。','Text protocol is the default. Native tool calling is a trial; switch back if the service does not support it.')}/>
     <div className="model-key-field"><RetainedField {...props} id="apiKey" label="API Key" secret/><div className="model-credential-notice"><KeyRound size={13} aria-hidden="true"/><HostSlot id="apiCredentialStatus" attach={attach}/></div><div className="model-key-actions"><HostSlot id="apiCredentialUnlock" attach={attach}/><RetainedAction {...props} id="clearApiKey" variant="ghost" icon={<Trash2 size={13} aria-hidden="true"/>}/></div></div>
     <div className="model-connection-test"><RetainedAction {...props} id="testApi" icon={<FlaskConical size={14} aria-hidden="true"/>}/><HostSlot id="apiStatus" attach={attach} className="model-connection-status"/></div>
-    <Text as="p" size="xs" secondary style={{margin:0,lineHeight:1.7}}>{t('测试只读取模型列表，不验证生成能力，也不会保存输入。地址、协议、Key 和默认模型需要点击本分区上方“保存模型与权限”后保留。','Testing only reads the model list; it does not verify generation or save your input. Use Save models & permissions above to keep the address, protocol, key and default model.')}</Text>
+    <Text as="p" size="xs" secondary style={{margin:0,lineHeight:1.7}}>{t('测试只读取模型列表，不验证生成能力，也不会保存输入。地址、协议、Key 和默认模型需要点击本分区上方“保存权限与用量”后保留。','Testing only reads the model list; it does not verify generation or save your input. Use Save permissions & usage above to keep the address, protocol, key and default model.')}</Text>
    </div>
   </Card>
   <Card padding={0} style={{background:'var(--panel)',border:'1px solid var(--line)',borderRadius:18,boxShadow:'none'}}>

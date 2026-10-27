@@ -93,7 +93,7 @@ async function run() {
   await app.whenReady();
   win=new BrowserWindow({show:false,width:1280,height:880,webPreferences:{sandbox:true,contextIsolation:true,backgroundThrottling:false}});
   win.webContents.session.webRequest.onBeforeRequest({urls:['http://*/*','https://*/*','ws://*/*','wss://*/*']},(request,done)=>{
-    const url=new URL(request.url),allowed=url.origin===origin&&!/^\/__(?:proxy|codex\/respond|cloud\/connect|auth\/)/.test(url.pathname);
+    const url=new URL(request.url),allowed=url.origin===origin&&!/^\/__(?:proxy|codex\/respond|cloud\/connect|auth\/(?!status(?:$|\?)|models\?(?:[^#]*&)?cacheonly))/.test(url.pathname+url.search);
     if(!allowed)externalRequests.push(request.url);done({cancel:!allowed});
   });
   win.webContents.on('console-message',event=>{if(event.level==='error')rendererErrors.push(event.message);});

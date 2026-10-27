@@ -4,16 +4,16 @@
 <p align="center">读课件和论文，整理可编辑的笔记，安排待办与日程。</p>
 <p align="center"><sub>Mac 原生 App · 本地优先 · 自选模型 · 开源</sub></p>
 <p align="center">简体中文 · <a href="README.en.md">English</a></p>
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.9"><strong>下载 Mac 预览版 ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/">查看官网与演示</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">更新日志</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.10"><strong>下载 Mac 预览版 ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/">查看官网与演示</a> &nbsp; · &nbsp; <a href="CHANGELOG.md">更新日志</a></p>
 
 [![AI Bro：在 Mac 上阅读课件、提问和编辑学习笔记](launch/dist/assets/demo/hero-workspace.png)](https://zihenghe04.github.io/AIBro/)
 <p align="center"><sub>AI Bro 0.8.0 实际 App 界面，来自独立演示工作区。项目、资料与回答均为虚构；动图为界面步骤编排，不代表实时模型速度。<a href="https://zihenghe04.github.io/AIBro/#workspace">查看工作流演示 ↗</a></sub></p>
 
 把课件、论文和笔记放进项目，向自己的资料提问。AI Bro 可以帮你整理重点、起草笔记和拆分任务；你可以打开引用的原文核对，也可以审阅、修改并保存 AI 生成的内容。写报告或复习时，再从已保存的资料中查找需要的内容。
 
-当前公开下载为 **0.9.9 Mac 开发预览版**，面向 Apple Silicon / macOS 14+，尚未 Apple 公证。[查看本版说明](docs/RELEASE_NOTES.md)
+当前公开下载为 **0.9.10 Mac 开发预览版**，面向 Apple Silicon / macOS 14+，尚未 Apple 公证。[查看本版说明](docs/RELEASE_NOTES.md)
 
-本版换上新的执行内核：所有写入和删除走同一套审批规则，关掉窗口后执行可在后台继续，长任务自动压缩上下文，并可试用原生工具调用；设置里新增“后台运行权限”；“完全访问”下可撤销的删除直接执行，不可恢复的操作仍需批准。Android 0.4.9 APK 仍在 [v0.9.4 Release](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.4) 提供（[移动源码说明](mobile/README.md)）；iOS 未提供可直接安装的 IPA。
+本版重做模型设置（文本生成 / 嵌入 / 语音识别 / 使用统计四个分段，可从 CC Switch 导入供应商，聊天里按服务商选模型）；ChatGPT 账号登录改由 AI Bro 自己完成；语音识别合并成一份配置，新增 ElevenLabs Scribe 和自部署的 OpenAI 兼容服务，支持边说边出字；并加入插件管理和计划任务。Android 0.4.9 APK 仍在 [v0.9.4 Release](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.4) 提供（[移动源码说明](mobile/README.md)）；iOS 未提供可直接安装的 IPA。
 
 ---
 
@@ -75,14 +75,10 @@
 
 ## 路线图
 
-已在 0.9.6–0.9.9 发布：窗口恢复、内存与保存性能、自动备份与启动自检；三套主题、可撤销删除；多模型列表；工具注册表与本机 MCP；统一执行内核（事件日志、统一审批、原生工具调用、关掉窗口也能在后台运行、长任务自动压缩上下文）。
+已在 0.9.6–0.9.10 发布：窗口恢复、内存与保存性能、自动备份与启动自检；三套主题、可撤销删除；多模型列表；工具注册表与本机 MCP；统一执行内核（事件日志、统一审批、原生工具调用、关掉窗口也能在后台运行、长任务自动压缩上下文）；插件管理（浏览器作为第一个插件，可导入外部 MCP 服务器）；计划任务（人工提醒与自动任务）；Codex CLI 可作后台内核；重做的模型设置、ChatGPT 账号登录和统一的语音识别配置。
 
 **接下来**
 
-- **地基收尾**
-  - 插件机制：浏览器作为第一个插件，带站点权限，遇到登录或验证码会暂停等你接手；也可以手动添加外部 MCP 服务器作为插件，它们的操作默认需要你批准。
-  - 定时与自动任务：中断后能恢复，错过的只补一次，无人值守任务只在你声明的范围内行动。
-  - 模型接入：可以用 API（OpenAI 兼容、Anthropic Messages），也可以用本机已登录的 Codex CLI。问答和翻译分别选模型和思考强度；Agent 也可以用 Codex CLI 作模型，工具和审批仍由 AI Bro 自己执行。
 - **今日与提醒**：每天的简报、一句话建日程、准时提醒。
 - **课程空间**：资料一键整理成课程；高亮和批注会保存；按资料分开的对话。
 - **文献库**：连续滚动的阅读器；元数据、去重、从 Zotero 导入；整篇对照翻译；笔记、批注、对话一起导出。
@@ -93,13 +89,13 @@
 
 ## 开始使用
 
-1. 从 [v0.9.9 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.9) 下载 DMG 与校验文件，按[安装指南](docs/DISTRIBUTION.md)安装。App 内置 Python 与 PDF 运行时。
+1. 从 [v0.9.10 Releases](https://github.com/zihenghe04/AIBro/releases/tag/v0.9.10) 下载 DMG 与校验文件，按[安装指南](docs/DISTRIBUTION.md)安装。App 内置 Python 与 PDF 运行时。
 2. 在设置中连接模型服务，选择模型。
 3. 新建项目，加入一份资料，开始第一段对话。
 
 > 根据这份讲义整理核心概念，保留来源页码，保存成学习笔记，再列出三项复习任务。
 
-<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.9"><strong>下载 AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/">查看使用演示</a></p>
+<p align="center"><a href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.10"><strong>下载 AI Bro for Mac ↗</strong></a> &nbsp; · &nbsp; <a href="https://zihenghe04.github.io/AIBro/">查看使用演示</a></p>
 
 <details>
 <summary><strong>预览版边界与数据说明</strong></summary>

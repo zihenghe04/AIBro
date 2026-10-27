@@ -364,7 +364,7 @@ test('editing usage fields survives renderSettings and a failed save without cha
   assert.equal(await h.context.saveApiSettings(),false);h.context.renderSettings();
   assert.equal(h.node('usageInputRate').value,'3');assert.equal(h.node('usageOutputRate').value,'6');
   assert.deepEqual(h.state.settings.usagePrice,{currency:'$',input:1,output:2});
-  assert.equal(h.node('saveSettings').textContent,'保存模型与权限');
+  assert.equal(h.node('saveSettings').textContent,'保存权限与用量');
 });
 
 test('usage save freezes the submitted prices and preserves newer drafts through later render and save', async () => {
@@ -378,7 +378,7 @@ test('usage save freezes the submitted prices and preserves newer drafts through
   assert.equal(await h.context.saveApiSettings(),true);
   assert.deepEqual(JSON.parse(JSON.stringify(h.state.settings.usagePrice)),{currency:'¥',input:9,output:6});
   assert.equal(h.context.saveApiSettings.usageDirty,false);
-  h.timers.at(-1)();assert.equal(h.node('saveSettings').textContent,'保存模型与权限');
+  h.timers.at(-1)();assert.equal(h.node('saveSettings').textContent,'保存权限与用量');
 });
 
 
@@ -442,4 +442,20 @@ test('a workspace failure after credential persistence is a partial save and ret
   h.context.renderSettings();assert.equal(h.node('apiKey').value,'fixture-entered');assert.equal(h.node('usageInputRate').value,'7');assert.equal(h.permissions[0].value,'auto');
   assert.equal(h.context.saveApiSettings.usageDirty,true);assert.equal(vm.runInContext('apiSettingsDirty',h.context),true);
   assert.equal(JSON.stringify(h.state).includes('fixture-entered'),false);
+});
+
+test('a conversation that picked another provider sends with that provider’s own address, key and format', async () => {
+  const Catalog = require('../app/model-catalog.js'), C = require('../app/connections.js'), P = require('../app/providers.js');
+  const A = 'https://relay-a.example.invalid/v1', B = 'https://relay-b.example.invalid/v1';
+  const h = fixture({ values: { apiBase: A } });
+  const reads = [];
+  Object.assign(h.context.window, { Connections: C, Providers: P, ModelCatalog: Catalog });
+  C.migrate(h.state.settings, { provider: 'api', base: A, model: 'a-1', protocol: 'chat', profiles: [{ base: B, model: 'b-1', settings: { protocol: 'anthropic' } }], codexModel: '' });
+  P.ensure(h.state.settings);
+  h.context.apiProfiles = { capture: () => ({}), readForBase: async base => { reads.push(base); return { base, token: 'tok-b' }; } };
+  const routed = await h.context.getApiConnection(undefined, C.apiId(B));
+  assert.equal(routed.token, 'tok-b'); assert.equal(routed.protocol, 'anthropic'); assert.equal(C.apiId(routed.base), C.apiId(B));
+  assert.equal(await h.context.routedApiConnection(C.apiId(A)), null, 'the active connection uses the normal path');
+  assert.equal(await h.context.routedApiConnection('missing'), null);
+  assert.equal(reads.length, 1);
 });

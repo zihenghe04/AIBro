@@ -45,7 +45,7 @@
    timer=setTimeout(()=>{active.valid=false;stopCurrentRun();},Math.max(1,job.attempt.expiresAt*1000-Date.now()));
    poll=setInterval(async()=>{if(!active)return;try{const check=await request('check',{id:job.id,token:claim.token});if(active===lease&&!check.valid){lease.valid=false;stopCurrentRun();}}catch{if(active===lease){lease.valid=false;stopCurrentRun();}}},2000);
    const previousRuns=new Set(state.agentRuns.map(run=>run.id));
-   await sendMessage({goal:job.prompt,conversationId:chat.id,background:true,automaticJobId:job.id,automaticAttemptId:job.attempt.id});
+   await sendMessage({goal:job.prompt,conversationId:chat.id,background:true,automaticJobId:job.id,automaticAttemptId:job.attempt.id,declaredTools:job.scope?.tools||[]});
    const run=state.agentRuns.filter(r=>!previousRuns.has(r.id)&&r.automaticJobId===job.id&&r.automaticAttemptId===job.attempt.id).at(-1);runId=run?.id;
    if(!run)throw Error(t('发送前检查未通过，自动任务未启动；核对当前设置后可继续此任务。','Preflight did not start this automation. Review the current settings, then resume it.'));
    await persist();await request('finish',{id:job.id,token:claim.token,runId});

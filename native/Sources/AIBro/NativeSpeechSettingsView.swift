@@ -8,6 +8,8 @@ struct NativeSpeechSettingsView: View {
     @ObservedObject var settings: NativeSpeechSettings
     let onClose: () -> Void
     private enum DraftAction:Equatable {case choose(String),new,close}
+    // Same key as NativeDictationPreferences.silenceKey; read by voice input to stop on its own after the speaker goes quiet.
+    @AppStorage("aibro.dictation.silenceSeconds") private var silence = 1.5
     @State private var removing=false
     @State private var baseline:NativeSpeechSettingsDraft?
     @State private var pending:DraftAction?
@@ -22,6 +24,15 @@ struct NativeSpeechSettingsView: View {
     }
     private func field<T>(_ path:WritableKeyPath<NativeSpeechConfiguration,T>)->Binding<T> {
         Binding(get:{draft.configuration[keyPath:path]},set:{value in change{$0.configuration[keyPath:path]=value}})
+    }
+    /// Switching protocol swaps the address and model for that service's defaults unless the user already typed their own.
+    private var providerBinding:Binding<NativeSpeechConfiguration.Provider> {
+        Binding(get:{draft.configuration.provider},set:{next in change{
+            let old=NativeSpeechConfiguration.defaults(for:$0.configuration.provider),fresh=NativeSpeechConfiguration.defaults(for:next)
+            if $0.configuration.baseURL==old.baseURL || $0.configuration.baseURL.isEmpty {$0.configuration.baseURL=fresh.baseURL}
+            if $0.configuration.model==old.model || $0.configuration.model.isEmpty {$0.configuration.model=fresh.model}
+            $0.configuration.provider=next
+        }})
     }
     private func request(_ action:DraftAction) {
         settings.clearTestResult()
@@ -57,20 +68,35 @@ struct NativeSpeechSettingsView: View {
                 GridRow {Text(nativeUI("名称","Name"));TextField(nativeUI("便于区分的方案名称","Scheme name"),text:Binding(get:{draft.name},set:{value in change{$0.name=value}})).textFieldStyle(.roundedBorder).accessibilityIdentifier("speech-scheme-name")}
                 GridRow {
                     Text(nativeUI("协议","Protocol"))
-                    Picker("",selection:field(\.provider)) {
+                    Picker("",selection:providerBinding) {
                         Text(nativeUI("阿里云语音","Alibaba Cloud speech")).tag(NativeSpeechConfiguration.Provider.aliyun)
                         Text(nativeUI("OpenAI 兼容转写","OpenAI-compatible transcription")).tag(NativeSpeechConfiguration.Provider.openAI)
+                        Text("ElevenLabs Scribe").tag(NativeSpeechConfiguration.Provider.elevenLabs)
+                        Text(nativeUI("自部署服务（OpenAI 兼容）","Self-hosted (OpenAI-compatible)")).tag(NativeSpeechConfiguration.Provider.selfHosted)
                     }.labelsHidden()
                 }
-                GridRow {Text(nativeUI("服务地址","Base URL"));TextField("https://…",text:field(\.baseURL)).textFieldStyle(.roundedBorder)}
-                GridRow {Text(nativeUI("模型","Model"));TextField("qwen-audio-3.0-asr-flash",text:field(\.model)).textFieldStyle(.roundedBorder)}
-                GridRow {Text(nativeUI("语言","Language"));TextField(nativeUI("留空自动识别，如 zh / en","Auto if blank, e.g. zh / en"),text:field(\.language)).textFieldStyle(.roundedBorder)}
+                GridRow {Text(nativeUI("服务地址","Base URL"));TextField(draft.configuration.provider == .selfHosted ? "http://<server>:8000/v1":"https://…",text:field(\.baseURL)).textFieldStyle(.roundedBorder)}
+                GridRow {Text(nativeUI("模型","Model"));TextField(NativeSpeechConfiguration.defaults(for:draft.configuration.provider).model,text:field(\.model)).textFieldStyle(.roundedBorder)}
+                if draft.configuration.provider == .selfHosted {
+                    GridRow {Text(nativeUI("超时（秒）","Timeout (s)"));TextField("180",text:Binding(get:{draft.configuration.timeoutSeconds.map(String.init) ?? ""},set:{value in change{$0.configuration.timeoutSeconds=Int(value.trimmingCharacters(in:.whitespaces))}})).textFieldStyle(.roundedBorder).accessibilityIdentifier("speech-scheme-timeout")}
+                }
+                GridRow {Text(nativeUI("语言","Language"));TextField(nativeUI("留空自动识别，如 zh / en / auto","Auto if blank, e.g. zh / en / auto"),text:field(\.language)).textFieldStyle(.roundedBorder)}
+                GridRow {
+                    Text(nativeUI("说完自动结束", "Stop when silent"))
+                    Picker("",selection:$silence) {
+                        Text(nativeUI("关闭", "Off")).tag(0.0)
+                        Text(nativeUI("1 秒", "1 s")).tag(1.0)
+                        Text(nativeUI("1.5 秒", "1.5 s")).tag(1.5)
+                        Text(nativeUI("2 秒", "2 s")).tag(2.0)
+                        Text(nativeUI("3 秒", "3 s")).tag(3.0)
+                    }.labelsHidden()
+                }
                 GridRow {
                     Text("API Key")
                     SecureField(canKeepKey ? nativeUI("本方案已保存，留空保留","Saved for this scheme; blank keeps it"):nativeUI("请填写此方案、此地址的 Key","Key for this scheme and endpoint"),text:Binding(get:{draft.key},set:{value in change{$0.key=value}})).textFieldStyle(.roundedBorder)
                 }
             }.font(.system(size:12)).disabled(settings.busy)
-            Text(nativeUI("测试会向当前表单中的服务发送 1 秒合成静音，可能计费；不开麦、不上传录音。仅验证响应，不保存设置。","Testing sends one second of generated silence to the service in this form and may incur a charge. No microphone or recording is used. It checks the response without saving settings."))
+            Text(draft.configuration.provider == .selfHosted ? nativeUI("测试只查询服务的 /health 和 /v1/models（后者带 Key），不发送音频。注意：http 是明文传输，Key 不加密，请只在可信网络中使用。","The test only queries /health and /v1/models (with the Key); no audio is sent. Note: http is not encrypted, so the Key travels in the clear; use it on trusted networks only.") : nativeUI("测试会向当前表单中的服务发送 1 秒合成静音，可能计费；不开麦、不上传录音。仅验证响应，不保存设置。","Testing sends one second of generated silence to the service in this form and may incur a charge. No microphone or recording is used. It checks the response without saving settings."))
                 .font(.system(size:11)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             HStack {
                 Button(nativeUI("测试连接","Test connection")){let current=draft;Task{_ = await settings.testConnection(schemeID:current.schemeID,configuration:current.configuration,key:current.key,expectedRevision:current.catalogRevision)}}

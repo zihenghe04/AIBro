@@ -2,6 +2,8 @@
 (function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;else root.PDFReader=api;})(globalThis,function(root){
  'use strict';
  const instances=new WeakMap(),RASTER_DELAY=180;
+ // The text layer is transparent; DOM and canvas must resolve the same face or the scaleX fit drifts (the generic sans-serif differs between the two on newer macOS).
+ const TEXT_LAYER_FONT='Helvetica, Arial, sans-serif';
  // Match the local preview service's hard 0.5–2 scale bounds. Retaining a
  // sharper current-page raster avoids redraws when the reader later shrinks.
  function rasterScale({width,height,pageWidth,pageHeight,dpr=1}){
@@ -147,7 +149,7 @@
     textLayer?.remove();textLayer=null;textWords=words;pageText=words.map((word,index)=>word.text+(index===words.length-1?'':word.line===words[index+1].line?' ':'\n')).join('');
     if(words.length){
      textLayer=node('div','pdf-text-layer');textLayer.setAttribute('role','document');Object.assign(textLayer.dataset,{selectionSource:'import',selectionId:String(item.id||''),selectionPage:String(page),selectionTitle:String(item.name||'PDF')});textLayer.setAttribute('aria-label',t(`第 ${page} 页原文`,`Original text, page ${page}`));textLayer.style.width=`${data.width}px`;textLayer.style.height=`${data.height}px`;
-     words.forEach((word,index)=>{const span=node('span','pdf-text-word'),fontSize=word.height*.8;span.textContent=word.text+(index===words.length-1?'':word.line===words[index+1].line?' ':'\n');span.style.left=`${word.x}px`;span.style.top=`${word.y}px`;span.style.fontSize=`${fontSize}px`;span.style.lineHeight=`${word.height}px`;span.style.height=`${word.height}px`;if(measure)measure.font=`${fontSize}px sans-serif`;const measured=measure?.measureText(word.text).width||word.width;span.style.transform=`rotate(${word.angle}deg) scaleX(${word.width/Math.max(.01,measured)})`;textLayer.append(span);});sheet.append(textLayer);
+     words.forEach((word,index)=>{const span=node('span','pdf-text-word'),fontSize=word.height*.8;span.textContent=word.text+(index===words.length-1?'':word.line===words[index+1].line?' ':'\n');span.style.left=`${word.x}px`;span.style.top=`${word.y}px`;span.style.fontSize=`${fontSize}px`;span.style.lineHeight=`${word.height}px`;span.style.height=`${word.height}px`;if(measure)measure.font=`${fontSize}px ${TEXT_LAYER_FONT}`;const measured=measure?.measureText(word.text).width||word.width;span.style.transform=`rotate(${word.angle}deg) scaleX(${word.width/Math.max(.01,measured)})`;textLayer.append(span);});sheet.append(textLayer);
     }
     if(phase==='ready'){const position=capturePosition();dimensions={width:data.width,height:data.height};applySize();restorePosition(position);}else styleText();
     renderToolbar();applyCitation();

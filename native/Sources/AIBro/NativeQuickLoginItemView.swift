@@ -3,6 +3,7 @@ import SwiftUI
 
 struct NativeQuickLoginItemView: View {
     @ObservedObject var store: NativeQuickLoginItemStore
+    @AppStorage(NativeLoginLaunch.backgroundKey) private var background = false
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(isOn: Binding(get: { store.status.isRegistered }, set: { value in
@@ -12,6 +13,11 @@ struct NativeQuickLoginItemView: View {
                     .font(.system(size: 12))
             }.toggleStyle(.switch).controlSize(.small)
                 .disabled(store.changing || store.status == .unknown)
+            Toggle(isOn: $background) {
+                Text(nativeUI("登录时在后台启动（不打开窗口，计划任务照常补跑）", "Start in the background at login (no window; scheduled tasks still catch up)"))
+                    .font(.system(size: 12))
+            }.toggleStyle(.switch).controlSize(.small)
+                .disabled(!store.status.isRegistered)
             if store.status == .requiresApproval {
                 HStack(alignment: .firstTextBaseline) {
                     Text(nativeUI("等待系统允许", "Awaiting system approval")).foregroundStyle(.secondary)

@@ -30,6 +30,10 @@ struct BrowserFailure: LocalizedError {
     private(set) var epoch = 0
     private var allowedOrigins = Set<String>()
     private var approve: ((Bool) -> Void)?
+    // An approval question waits at most 10 minutes, then counts as a refusal.
+    static let approvalTimeout:UInt64=600_000_000_000
+    private var approvalGeneration=0
+    private var approvalTimedOut=false
     private var pageWaiters: [UUID:CheckedContinuation<Void,Error>] = [:]
     private var handoffWaiters: [UUID:CheckedContinuation<Void,Error>] = [:]
     private var operationBusy = false
@@ -94,6 +98,14 @@ struct BrowserFailure: LocalizedError {
         let callback=approve;approve=nil;pendingTitle="";pendingDetail=""
         callback?(allow);changed()
     }
+    private func armApprovalTimeout() {
+        approvalGeneration+=1;let generation=approvalGeneration
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds:Self.approvalTimeout)
+            guard let self,self.approve != nil,self.approvalGeneration == generation else {return}
+            self.approvalTimedOut=true;self.notice="等待你的允许超过 10 分钟，已按拒绝处理。";self.decide(false);self.approvalTimedOut=false
+        }
+    }
     private func approval(title:String,detail:String) async throws {
         guard asksPermission else {return}
         guard approve == nil else {throw BrowserFailure(code:"BUSY",message:"先处理当前浏览器审批")}
@@ -103,8 +115,8 @@ struct BrowserFailure: LocalizedError {
                 guard let self else {continuation.resume(throwing:BrowserFailure(code:"CANCELLED",message:"浏览器已结束"));return}
                 self.status=self.closed ? "closed":self.cancelled ? "cancelled":self.paused ? "paused":"ready"
                 if yes && !self.cancelled && !self.closed {continuation.resume()}
-                else {continuation.resume(throwing:BrowserFailure(code:self.cancelled ? "CANCELLED":"DENIED",message:self.cancelled ? "浏览器任务已停止":"已拒绝此浏览器操作"))}
-            };changed()
+                else {continuation.resume(throwing:BrowserFailure(code:self.cancelled ? "CANCELLED":self.approvalTimedOut ? "APPROVAL_TIMEOUT":"DENIED",message:self.cancelled ? "浏览器任务已停止":self.approvalTimedOut ? "等待允许超过 10 分钟，已按拒绝处理":"已拒绝此浏览器操作"))}
+            };armApprovalTimeout();changed()
         }
     }
     private func finishPage(_ error:Error? = nil) {
@@ -116,8 +128,14 @@ struct BrowserFailure: LocalizedError {
         let key=UUID()
         try await withCheckedThrowingContinuation { (continuation:CheckedContinuation<Void,Error>) in
             pageWaiters[key]=continuation
+            // 45 s of loading; time spent awaiting approval or with the user in control does not count.
             Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds:45_000_000_000)
+                var loading:UInt64=0
+                while loading < 45_000_000_000 {
+                    try? await Task.sleep(nanoseconds:500_000_000)
+                    guard let self,self.pageWaiters[key] != nil else {return}
+                    if self.status != "awaiting-approval" && !self.paused {loading+=500_000_000}
+                }
                 if let waiter=self?.pageWaiters.removeValue(forKey:key) { waiter.resume(throwing:BrowserFailure(code:"NAVIGATION_TIMEOUT",message:"网页尚未加载完成，可查看页面后重试")) }
             }
         }
@@ -149,6 +167,8 @@ struct BrowserFailure: LocalizedError {
         case "navigate", "open":
             if action == "open",(request["url"] as? String ?? "").isEmpty {return payload()}
             let url=try checkedURL(request["url"] as? String ?? "")
+            // The workspace's site permission (browser plugin) already asked about this site.
+            if request["siteApproved"] as? Bool == true {allowedOrigins.insert(Self.origin(url))}
             if !allowedOrigins.contains(Self.origin(url)) {
                 try await approval(title:"允许此任务打开网站？",detail:url.absoluteString)
                 try check(request);allowedOrigins.insert(Self.origin(url))
@@ -220,8 +240,8 @@ struct BrowserFailure: LocalizedError {
         approve={ [weak self] yes in
             guard let self else {decisionHandler(.cancel);return}
             if yes && !self.cancelled {self.allowedOrigins.insert(key);self.status="loading";decisionHandler(.allow)}
-            else {self.status=self.closed ? "closed":self.cancelled ? "cancelled":self.paused ? "paused":"ready";decisionHandler(.cancel);self.finishPage(BrowserFailure(code:"NAVIGATION_DENIED",message:"网站跳转未获允许"))}
-        };changed()
+            else {self.status=self.closed ? "closed":self.cancelled ? "cancelled":self.paused ? "paused":"ready";decisionHandler(.cancel);self.finishPage(BrowserFailure(code:self.approvalTimedOut ? "APPROVAL_TIMEOUT":"NAVIGATION_DENIED",message:self.approvalTimedOut ? "等待允许超过 10 分钟，已按拒绝处理":"网站跳转未获允许"))}
+        };armApprovalTimeout();changed()
     }
     func webView(_ webView:WKWebView,didStartProvisionalNavigation navigation:WKNavigation!) {epoch+=1;snapshotID="";status="loading";changed()}
     func webView(_ webView:WKWebView,didFinish navigation:WKNavigation!) {title=webView.title ?? "网页";address=webView.url?.absoluteString ?? address;status=paused ? "paused":"ready";finishPage();changed()}

@@ -61,6 +61,11 @@
   // the native browser) runs with ctx.approval="ask"; any other "ask" has no
   // answerer in this window and is refused.
   const DENIED_TEXT='未获批准，未执行。';
+  // P3: a plugin tool runs only if it is in the toolset this run froze when it
+  // started (plugin-host.js allows()); enabling or disabling a plugin applies
+  // to the next run. Core tools are never affected.
+  const Plugins=()=>typeof module==='object'&&module.exports?require('./plugin-host'):root.AIBroPlugins;
+  const OUTSIDE_TOOLSET_TEXT='此工具不在本轮可用的工具中（所属插件未启用或已移除），未执行。';
   function create({run,execute,signal,checkpoint=async()=>{},changed=()=>{},validate=()=>{},concurrency=3,parentId=null,events,approval=null,callIdFor=null}){
     // P7: a request that came from a native tool call keeps the id derived
     // from the provider's tool_call id; anything else (or a reused id) gets a fresh one.
@@ -111,6 +116,12 @@
         const entry=entries[i];
         try{
           checkBatch();
+          const planned=Tools.get(entry.type),P=Plugins();
+          if(planned&&P&&!P.allows(run.toolset,planned)){
+            entry.status='failed';entry.outcome='not-started';entry.error=OUTSIDE_TOOLSET_TEXT;entry.errorCode='UNKNOWN_TOOL';results[i]={error:OUTSIDE_TOOLSET_TEXT,code:'UNKNOWN_TOOL'};
+            toolEvent(events,run,'tool/outcome',entry,{status:entry.status,outcome:'not-started',errorCode:'UNKNOWN_TOOL'});
+            return;
+          }
           const {vote,spec}=authorize(entry);let hostApproval=null;
           if(vote==='ask'&&spec?.approval==='host'){hostApproval='ask';toolEvent(events,run,'approval/asked',entry,{answerer:'host'});}
           else if(vote!=='allow'){

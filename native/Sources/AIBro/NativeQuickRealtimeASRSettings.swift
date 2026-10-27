@@ -107,6 +107,11 @@ struct NativeQuickASRProfile: Identifiable, Equatable {
             cancelTest(); return true
         } catch { self.error = nativeUI("未保存。请检查方案名称及此地区、工作空间的 Key；原配置保留。", "Not saved. Check the scheme name and Key for this region/workspace; previous settings are retained."); return false }
     }
+    @discardableResult func selectProfile(_ id: String) -> Bool {
+        guard available, !testing, profiles.contains(where: { $0.id == id }), let call = access?.profiles else { return false }
+        do { try apply(call("profile-select", ["id": id, "expectedRevision": revision])); cancelTest(); return true }
+        catch { self.error = nativeUI("未切换。方案可能已在另一处修改，请刷新。", "Not switched. The scheme may have changed elsewhere; refresh."); return false }
+    }
     @discardableResult func removeProfile(_ id: String) -> Bool {
         guard available, !testing, let call = access?.profiles else { return false }
         do { try apply(call("profile-remove", ["id": id, "expectedRevision": revision])); cancelTest(); return true }
@@ -119,7 +124,7 @@ struct NativeQuickASRProfile: Identifiable, Equatable {
     /// Validate the actual configured WebSocket session without acquiring a mic
     /// or sending audio. session.updated confirms authentication and options.
     func testConnection(_ draft: NativeQuickASRSettingsDraft,
-                        factory: @escaping NativeQuickRealtimeASRSession.Factory = { NativeQuickASRWebSocket(request: $0) }) {
+                        factory: @escaping NativeQuickRealtimeASRSession.Factory = { NativeQuickASRWebSocket.make($0) }) {
         guard available, !testing, draft.configuration.valid else { return }
         cancelTest(); let generation = testGeneration; testing = true
         testTask = Task { [weak self] in
@@ -140,15 +145,16 @@ struct NativeQuickASRProfile: Identifiable, Equatable {
                     guard !Task.isCancelled, let self, self.testGeneration == generation else { return }
                     socket?.close()
                 }
-                try await socket.send(String(decoding: JSONSerialization.data(withJSONObject: draft.configuration.update), as: UTF8.self))
+                if let update = draft.configuration.update { try await socket.send(String(decoding: JSONSerialization.data(withJSONObject: update), as: UTF8.self)) } // self-hosted sends nothing before ready
                 for _ in 0..<16 {
                     let bytes = try await socket.receive(); try Task.checkCancellation()
                     guard self.available, self.testGeneration == generation else { return }
                     guard let event = try JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { throw NativeQuickASRError.invalidMessage }
-                    if event["type"] as? String == "session.updated" {
+                    let started = draft.configuration.isStartAck(event)
+                    if started {
                         self.testMessage = nativeUI("连接成功，实时转写配置已被服务接受。未录音或上传音频。", "Connected. Realtime settings were accepted. No microphone or audio upload was used."); return
                     }
-                    if event["type"] as? String == "error" { throw NativeQuickASRError.configuration }
+                    if draft.configuration.isRejection(event) { throw NativeQuickASRError.configuration }
                 }
                 throw NativeQuickASRError.invalidMessage
             } catch {

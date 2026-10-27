@@ -29,7 +29,8 @@ Records hold no credentials. One JSON file per run under ``<data>/kernel/runs``.
 import hmac, ipaddress, json, os, re, secrets, tempfile, threading, time, urllib.parse
 from pathlib import Path
 
-STATUSES = ('queued', 'running', 'awaiting-approval', 'completed', 'failed', 'cancelled', 'interrupted')
+# paused (P9b): the model's usage limit was hit; the run waits for a person (or its scheduler) to resume it.
+STATUSES = ('queued', 'running', 'awaiting-approval', 'paused', 'completed', 'failed', 'cancelled', 'interrupted')
 TERMINAL = {'completed', 'failed', 'cancelled', 'interrupted'}
 SOURCES = ('external', 'scheduler', 'mobile', 'user')
 MODES = ('request', 'smart', 'full')
@@ -38,6 +39,13 @@ RUN_ID = re.compile(r'^krun_[a-z0-9]{6,40}$')
 ITEM_ID = re.compile(r'^[A-Za-z0-9_.:-]{1,256}$')
 PROMPT_MAX, TITLE_MAX, SUMMARY_MAX, ARGS_MAX, RESULT_MAX = 8000, 120, 2000, 64 * 1024, 20000
 LEASE_SECONDS, EFFECT_DEADLINE, MAX_REQUEUE, KEEP_RUNS, WAIT_MAX = 45, 600, 2, 500, 25
+# Foreground first: runs a person started (main window, phone, a local client)
+# go before scheduled ones; at most BACKGROUND_LIMIT scheduled runs work at
+# once (waiting for a person does not count); while the main window reports a
+# conversation in progress, scheduled runs wait, but never longer than
+# STARVE_SECONDS after they were queued.
+PAUSE_HOLDS = ('CODEX_QUOTA', 'CODEX_RATE_LIMIT', 'CODEX_LOGIN')
+BACKGROUND_SOURCES, BACKGROUND_LIMIT, STARVE_SECONDS, FOREGROUND_HINT_SECONDS = ('scheduler',), 1, 120, 20
 SECRET_KEY = re.compile(r'(api[-_]?key|apikey|secret|token|password|passwd|authorization|cookie|credential|headers?)$', re.I)
 
 
@@ -63,6 +71,19 @@ def _clean(value, depth=0):
     return str(value)[:200]
 
 
+def _schedule(value):
+    """A scheduler task's run context: ids, declared scope, reserved model override."""
+    if not isinstance(value, dict): raise KernelError(400, 'INVALID_REQUEST', 'schedule 无效')
+    scope = value.get('scope') if isinstance(value.get('scope'), dict) else {}
+    tools = [t for t in scope.get('tools', []) if isinstance(t, str) and ITEM_ID.match(t)][:50] if isinstance(scope.get('tools'), list) else []
+    return {'taskId': _text(value.get('taskId'), 64, 'schedule.taskId', True), 'executionId': _text(value.get('executionId'), 64, 'schedule.executionId', True),
+            'scope': {'declared': scope.get('declared') is True, 'access': scope.get('access') if scope.get('access') in ('read', 'ask', 'write') else 'read',
+                      'tools': tools, 'computerUse': scope.get('computerUse') is True},
+            'modelOverride': _clean(value.get('modelOverride')) if isinstance(value.get('modelOverride'), dict) else None,
+            'budgetMinutes': value.get('budgetMinutes') if isinstance(value.get('budgetMinutes'), int) and 1 <= value.get('budgetMinutes') <= 120 else 15,
+            'catchUp': value.get('catchUp') is True}
+
+
 class KernelRuns:
     def __init__(self, data_dir, events=None, host_token='', clock=time.time):
         self.dir = Path(data_dir) / 'kernel'
@@ -72,6 +93,8 @@ class KernelRuns:
         self.cond = threading.Condition()
         self.runs = {}
         self._token = None
+        self.foreground_until = 0
+        self.extra_pending = None  # callable adding fields to the host's pending view (scheduler reminders)
         self._load()
         # Clients read the token file; create it at startup, not on first use.
         try: self.api_token()
@@ -172,7 +195,9 @@ class KernelRuns:
     # -- client API ------------------------------------------------------
     def create(self, payload, source_kind='external'):
         if not isinstance(payload, dict): raise KernelError(400, 'INVALID_REQUEST', '请求必须是 JSON 对象')
-        allowed = {'prompt', 'title', 'source', 'projectId', 'workspace', 'permissionMode', 'idempotencyKey', 'maxSteps'}
+        allowed = {'prompt', 'title', 'source', 'projectId', 'workspace', 'permissionMode', 'idempotencyKey', 'maxSteps', 'model'}
+        # Only the in-process scheduler attaches a task's declared scope (scheduler.py).
+        if source_kind == 'scheduler': allowed.add('schedule')
         extra = set(payload) - allowed
         if extra: raise KernelError(400, 'INVALID_REQUEST', '不支持的字段：' + ','.join(sorted(extra))[:200])
         prompt = _text(payload.get('prompt'), PROMPT_MAX, 'prompt', True)
@@ -187,6 +212,12 @@ class KernelRuns:
         steps = payload.get('maxSteps')
         if steps is not None and (not isinstance(steps, int) or isinstance(steps, bool) or not 1 <= steps <= 60): raise KernelError(400, 'INVALID_REQUEST', 'maxSteps 无效（1–60）')
         key = _text(payload.get('idempotencyKey'), 128, 'idempotencyKey')
+        # The run's model, overriding the user's kernel setting (a schedule or a conversation picks it):
+        # {connection: "codex-cli" | "api:<service>", model?, effort?}. Never a key.
+        model = payload.get('model')
+        if model is not None:
+            if not isinstance(model, dict) or set(model) - {'connection', 'model', 'effort'}: raise KernelError(400, 'INVALID_REQUEST', 'model 无效')
+            model = {'connection': _text(model.get('connection'), 300, 'model.connection', True), 'model': _text(model.get('model'), 200, 'model.model'), 'effort': _text(model.get('effort'), 20, 'model.effort')}
         with self.cond:
             if key:
                 for run in self.runs.values():
@@ -196,7 +227,8 @@ class KernelRuns:
                    'startedAt': None, 'finishedAt': None, 'source': source, 'idempotencyKey': key, 'cancelRequested': False, 'requeues': 0,
                    # The host freezes the strictest of this and the user's current mode.
                    'request': {'prompt': prompt, 'title': title, 'projectId': _text(payload.get('projectId'), 512, 'projectId'),
-                               'workspace': _text(payload.get('workspace'), 64, 'workspace'), 'permissionMode': mode, 'maxSteps': steps},
+                               'workspace': _text(payload.get('workspace'), 64, 'workspace'), 'permissionMode': mode, 'maxSteps': steps, 'model': model,
+                               **({'schedule': _schedule(payload['schedule'])} if 'schedule' in payload else {})},
                    'approvals': [], 'effects': [], 'result': None, 'error': None, 'lease': None}
             self.runs[run['id']] = run
             self._save(run); self._trim()
@@ -210,6 +242,11 @@ class KernelRuns:
             rows = [r for r in self.runs.values() if (not statuses or r['status'] in statuses) and (not attention or any(a['status'] == 'pending' for a in r.get('approvals', [])))]
             rows.sort(key=lambda r: r['createdAt'], reverse=True)
             return [self.public(r) for r in rows[:max(1, min(200, limit))]]
+
+    def find_by_key(self, key):
+        with self.cond:
+            run = next((r for r in self.runs.values() if r.get('idempotencyKey') == key), None)
+            return self.public(run) if run else None
 
     def get(self, run_id):
         with self.cond:
@@ -226,9 +263,10 @@ class KernelRuns:
             for effect in run.get('effects', []):
                 if effect['status'] == 'pending':
                     effect.update(status='expired', receipt={'ok': False, 'code': 'CANCELLED', 'message': '运行已取消，未执行。', 'outcome': 'not-started'})
-            if run['status'] == 'queued':
+            if run['status'] in ('queued', 'paused'):
+                reason = 'before-start' if run['status'] == 'queued' else 'while-paused'
                 run.update(status='cancelled', finishedAt=int(self.clock() * 1000))
-                self._emit(run, 'run/finished', {'status': 'cancelled', 'reason': 'before-start'})
+                self._emit(run, 'run/finished', {'status': 'cancelled', 'reason': reason})
             elif run['status'] == 'awaiting-approval': run['status'] = 'running'
             self._save(run); self.cond.notify_all()
             return self.public(run)
@@ -295,17 +333,44 @@ class KernelRuns:
     def pending(self):
         with self.cond:
             self._sweep()
-            waiting = [{'runId': r['id'], 'approvalId': a['id'], 'title': r['request']['title'], 'tool': a['tool'], 'destructive': a.get('destructive') is True}
+            waiting = [{'runId': r['id'], 'approvalId': a['id'], 'title': r['request']['title'], 'tool': a['tool'],
+                        'scheduled': r['source'].get('kind') == 'scheduler', 'outOfScope': 'out-of-scope' in a.get('reasons', []), 'destructive': a.get('destructive') is True}
                        for r in self.runs.values() for a in r.get('approvals', []) if a['status'] == 'pending']
-            return {'queued': sum(r['status'] == 'queued' for r in self.runs.values()),
+            view = {'queued': sum(r['status'] == 'queued' for r in self.runs.values()),
                     'active': sum(r['status'] in ('running', 'awaiting-approval') for r in self.runs.values()), 'approvals': waiting}
+        if self.extra_pending:
+            try: view.update(self.extra_pending())
+            except Exception: pass  # reminders never block the host's view of runs
+        return view
+
+    def foreground(self, busy):
+        """The main window's hint: a conversation is running now (expires by itself)."""
+        with self.cond:
+            self.foreground_until = self.clock() + FOREGROUND_HINT_SECONDS if busy else 0
+            return {'busy': bool(busy)}
+
+    def _next(self):
+        now = self.clock()
+        queued = sorted((r for r in self.runs.values() if r['status'] == 'queued'), key=lambda r: r['createdAt'])
+        background = lambda r: r['source'].get('kind') in BACKGROUND_SOURCES
+        working = sum(r['status'] == 'running' and background(r) for r in self.runs.values())
+        front = [r for r in queued if not background(r)]
+        # A model connection whose usage limit paused a run holds the other scheduled runs on it (each would only pause and notify again);
+        # a run someone resumed goes anyway. An unnamed model (the kernel default) is one connection of its own.
+        key = lambda r: ((r['request'].get('model') or {}).get('connection') or '')
+        held = {key(r) for r in self.runs.values() if r['status'] == 'paused' and (r.get('pause') or {}).get('code') in PAUSE_HOLDS}
+        back = [r for r in queued if background(r) and (key(r) not in held or r.get('resumes'))] if working < BACKGROUND_LIMIT else []
+        starving = [r for r in back if now * 1000 - r['createdAt'] >= STARVE_SECONDS * 1000]
+        if starving: return starving[0]
+        if front: return front[0]
+        if back and now >= self.foreground_until: return back[0]
+        return None
 
     def claim(self, host_id):
         with self.cond:
             self._sweep()
-            queued = sorted((r for r in self.runs.values() if r['status'] == 'queued'), key=lambda r: r['createdAt'])
-            if not queued: return None
-            run = queued[0]
+            run = self._next()
+            if not run: return None
             run.update(status='running', startedAt=int(self.clock() * 1000), lease={'token': secrets.token_hex(24), 'host': str(host_id)[:64]})
             self._extend(run); self._save(run)
             self._emit(run, 'run/started', {'host': 'headless', 'attempt': run.get('requeues', 0) + 1})
@@ -383,6 +448,35 @@ class KernelRuns:
             self._extend(run); self._save(run)
             return {'effect': {k: v for k, v in effect.items() if k != 'claimToken'}, 'cancelRequested': bool(run.get('cancelRequested'))}
 
+    def pause(self, run_id, lease_token, payload):
+        """The host stops a run it cannot continue now (the model's usage limit). It keeps its effects and waits."""
+        with self.cond:
+            run = self._leased(run_id, lease_token)
+            for approval in run['approvals']:
+                if approval['status'] == 'pending': approval['status'] = 'cancelled'
+            if run.get('cancelRequested'):
+                run.update(status='cancelled', finishedAt=int(self.clock() * 1000), lease=None)
+                self._emit(run, 'run/finished', {'status': 'cancelled', 'reason': 'paused-after-cancel'})
+            else:
+                # Never refuse a pause over its fields: a refused pause would leave the run to be re-run.
+                pause = {'code': re.sub(r'[^A-Z0-9_]', '', str(payload.get('code') or ''))[:40] or 'PAUSED', 'message': str(payload.get('message') or '运行已暂停')[:300],
+                         'at': int(self.clock() * 1000), 'steps': int(payload.get('steps') or 0) if isinstance(payload.get('steps'), int) else 0}
+                run.update(status='paused', pause=pause, lease=None)
+                run.setdefault('pauses', []).append(pause)
+                self._emit(run, 'run/paused', pause)
+            self._save(run); self.cond.notify_all()
+            return self.public(run)
+
+    def resume(self, run_id):
+        """A paused run goes back to the queue; the host starts it over and is told which writes already happened."""
+        with self.cond:
+            run = self._get(run_id)
+            if run['status'] != 'paused': raise KernelError(409, 'NOT_PAUSED', '这个运行没有暂停')
+            run.update(status='queued', startedAt=None, resumes=run.get('resumes', 0) + 1, pause=None)
+            self._emit(run, 'run/resumed', {'resumes': run['resumes']})
+            self._save(run); self.cond.notify_all()
+            return self.public(run)
+
     def finish(self, run_id, lease_token, payload):
         status = payload.get('status')
         if status not in ('completed', 'failed', 'cancelled'): raise KernelError(400, 'INVALID_REQUEST', 'status 无效')
@@ -394,7 +488,10 @@ class KernelRuns:
                 # Never refuse a finish over its size: a refused finish would leave the run to be re-run.
                 final = result.get('final') if isinstance(result.get('final'), str) else None
                 if final and len(final) > RESULT_MAX: final = final[:RESULT_MAX] + '…'
-                result = {'final': final, 'stop': str(result.get('stop', ''))[:32], 'steps': int(result.get('steps') or 0), 'compactions': int(result.get('compactions') or 0)}
+                done = result.get('markedDone')
+                result = {'final': final, 'stop': str(result.get('stop', ''))[:32], 'steps': int(result.get('steps') or 0), 'compactions': int(result.get('compactions') or 0),
+                          # The scheduler's completion check: the model called mark_task_done.
+                          **({'markedDone': {'summary': str(done.get('summary') or '')[:2000]}} if isinstance(done, dict) else {})}
             for approval in run['approvals']:
                 if approval['status'] == 'pending': approval['status'] = 'cancelled'
             # A run the user stopped ends as stopped, whatever the host concluded.
@@ -499,6 +596,7 @@ def handle_request(handler, runs, events=None, native_token=''):
                     elif action == 'ask': result = {'approval': runs.ask(run_id, lease, body)}
                     elif action == 'effects': result = {'effect': runs.add_effect(run_id, lease, body)}
                     elif action == 'finish': result = {'run': runs.finish(run_id, lease, body)}
+                    elif action == 'pause': result = {'run': runs.pause(run_id, lease, body)}
                     else: raise KernelError(404, 'NOT_FOUND', '未知接口')
                     handler.send_json(result); return True
                 if method == 'GET' and len(parts) == 5:
@@ -507,6 +605,10 @@ def handle_request(handler, runs, events=None, native_token=''):
                     if action == 'approvals': handler.send_json(runs.wait_approval(run_id, lease, parts[4], timeout)); return True
                     if action == 'effects': handler.send_json(runs.wait_effect(run_id, lease, parts[4], timeout)); return True
             raise KernelError(404, 'NOT_FOUND', '未知接口')
+
+        if parts == ['foreground'] and method == 'POST':
+            need(window, 'WINDOW_ONLY', '只有主窗口能报告前台对话')
+            handler.send_json(runs.foreground(_body(handler).get('busy') is True)); return True
 
         if parts[0] == 'effects':
             need(window or native, 'WINDOW_ONLY', '写入只能由主窗口应用')
@@ -529,6 +631,7 @@ def handle_request(handler, runs, events=None, native_token=''):
         run_id = parts[1]
         if len(parts) == 2 and method == 'GET': handler.send_json({'run': runs.get(run_id)}); return True
         if len(parts) == 3 and parts[2] == 'cancel' and method == 'POST': _body(handler); handler.send_json({'run': runs.cancel(run_id)}); return True
+        if len(parts) == 3 and parts[2] == 'resume' and method == 'POST': _body(handler); handler.send_json({'run': runs.resume(run_id)}); return True
         if len(parts) == 3 and parts[2] == 'events' and method == 'GET':
             runs.get(run_id)
             after = int((query.get('after') or ['0'])[0]); limit = max(1, min(1000, int((query.get('limit') or ['500'])[0])))

@@ -19,7 +19,7 @@ const generationHost = section('async function generateNoteSelection(', '\nasync
 const feedbackHost = section('async function stageAnswerFeedbackDraft(', '\nwindow.AnswerFeedback?.init(');
 const modelHost = section('function resolveRunModel(', '\n// 用户主动停止');
 const captureHost = section('function captureApiConnection(', '\n// 接口协议偏好');
-const connectionHost = section('async function getApiConnection(', '\nfunction renderSettings(');
+const connectionHost = section('async function routedApiConnection(', '\nfunction renderSettings(');
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 const tick = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 const copy = value => JSON.parse(JSON.stringify(value));

@@ -131,6 +131,7 @@ struct NativeQuickRecordingLibrary: View {
         .onAppear { mounted=true;reconcileSelection();resumeMetadataEditor() }
         .onDisappear {mounted=false;projectionCache.clear();cancelRowFocus();store.cancelSuggestion();store.stopPlayback()}
         .onChange(of:selection?.id) { _, id in store.selectPlayback(id) }
+        .onChange(of:store.realtimeSettingsDraft?.profileID) { _, id in if id != nil {showRealtimeSettings=true} }
         .onChange(of:selecting){_,active in if !active{cancelRowFocus()}}
         .onChange(of: filtered.map(\.id)) { _, _ in reconcileSelection();multi.reconcile(selectableIDs) }
         .onChange(of:store.available){_,available in if !available {projectionCache.clear();cancelRowFocus();multi.clear();selecting=false;selectedID=nil;compactDetail=false;categorizing=false;confirmingBatch=false;showRealtimeSettings=false}else{resumeMetadataEditor()}}
@@ -168,8 +169,7 @@ struct NativeQuickRecordingLibrary: View {
                 Text(NativeQuickRecordingLayout.clock(store.elapsed)).font(.system(size: 12, weight: .medium, design: .monospaced)).monospacedDigit()
             }
             Menu {
-                Button(store.speechSettings.busy ? nativeUI("正在读取云转写设置…", "Loading cloud settings…") : nativeUI("云转写设置…", "Cloud transcription settings…")){openSpeechSettings()}.disabled(store.speechSettings.busy)
-                Button(nativeUI("录音时实时转写…", "Transcribe while recording…")){focusEditor();store.beginRealtimeSettings();showRealtimeSettings=store.realtimeSettingsDraft != nil}
+                Button(nativeUI("语音识别设置…", "Speech recognition settings…")){openSpeechSettings()}.disabled(store.speechSettings.busy)
             } label: {Image(systemName:"slider.horizontal.3").font(.system(size:13)).frame(width:28,height:28)}
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 .disabled(store.isActive || store.transcribingID != nil)
@@ -280,7 +280,8 @@ struct NativeQuickRecordingLibrary: View {
     }
     private func cancelRowFocus(){focusRequest+=1;focusedRow=nil}
     private func focusEditor(){cancelRowFocus();onFocus()}
-    private func openSpeechSettings(){focusEditor();store.beginSpeechSettings()}
+    /// Speech recognition (cloud + live schemes) is configured in the main window's Settings; the sheets below stay as a fallback.
+    private func openSpeechSettings(){if let open=store.openSettingsPage{open()}else{focusEditor();store.beginSpeechSettings()}}
     private func focusRow(_ id:String,selectionOnly:Bool=false){
         // Activate the nonactivating host first. The selection toolbar/row
         // changes must mount before requesting its concrete Button responder.

@@ -1,0 +1,85 @@
+/* Models → Embedding / Speech-to-text panes. Tokens only; follows light/dark/glass like the chat page. */
+.mr-host { display: grid; gap: var(--space-16, 16px); min-width: 0; }
+.mr-pane { display: grid; gap: var(--space-14, 14px); min-width: 0; }
+.mr-pane > .muted { margin: 0; }
+.mr-summary, .mr-section .mr-now { background: color-mix(in srgb, var(--text) 3.5%, transparent); border: 1px solid var(--line); border-radius: 16px; }
+.mr-summary .mr-now { border: 0; background: transparent; }
+.mr-section { display: grid; gap: var(--space-10, 10px); padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; min-width: 0; }
+.mr-section > h3 { margin: 0; font-size: 1em; }
+.mr-section > .pv-note { margin: 0; }
+.mr-field { display: grid; gap: var(--space-4, 4px); min-width: 0; }
+.mr-field > .mr-label { color: var(--muted); font-size: .92em; }
+.mr-field.mr-switch { grid-template-columns: 1fr auto; align-items: center; }
+.mr-actions { display: flex; gap: var(--space-8, 8px); flex-wrap: wrap; align-items: center; }
+.mr-pane .uk-select-wrap.uk-block { width: 100%; }
+/* The moved semantic-search card: drop its own title and frame, keep every control and id. */
+.mr-embed-card.card { background: transparent; border: 0; box-shadow: none; padding: 0; margin: 0; display: grid; gap: var(--space-10, 10px); }
+.mr-embed-card > h2 { display: none; }
+.mr-embed-card > .muted { display: none; }
+.mr-embed-card .setting-label { display: flex; gap: var(--space-8, 8px); align-items: center; }
+.mr-embed-card .setting-input { width: 100%; min-width: 0; }
+.mr-embed-card .setting-actions { display: flex; gap: var(--space-8, 8px); flex-wrap: wrap; align-items: center; }
+/* Left list + right detail, same structure as the text page. */
+.mr-split { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 1fr); gap: var(--space-16, 16px); align-items: start; }
+.mr-list { display: grid; gap: var(--space-8, 8px); min-width: 0; }
+.mr-list-head { display: grid; gap: 2px; }
+.mr-rows { display: grid; gap: 4px; }
+.mr-rows-inner { display: grid; gap: 4px; }
+.mr-detail, .mr-detail-box { display: grid; gap: var(--space-12, 12px); min-width: 0; }
+.mr-add { justify-self: start; }
+@container (max-width: 640px) { .mr-split { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .mr-split { grid-template-columns: 1fr; } }
+.mr-list, .mr-rows, .mr-rows-inner { overflow: hidden; }
+.mr-list .uk-row { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.mr-list .uk-row-text { min-width: 0; flex: 1; }
+.mr-list .uk-row-title, .mr-list .uk-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+/* Models → Text: purposes as secondary entries under the provider list. */
+.pv-leftcol { display: grid; gap: var(--space-14, 14px); align-content: start; min-width: 0; }
+.pv-roles { list-style: none; margin: 0; padding: 12px 0 0; border-top: 1px solid var(--line); display: grid; gap: 2px; }
+.pv-roles .pv-head { padding: 0 8px 6px; color: var(--muted); font-size: .88em; }
+.pv-role { all: unset; box-sizing: border-box; display: grid; gap: 1px; width: 100%; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.pv-role:hover { background: color-mix(in srgb, var(--text) 4.5%, transparent); }
+.pv-role:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pv-role[aria-current="true"] { background: var(--accent-soft); }
+.pv-role-name { font-weight: 600; }
+.pv-role small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-purpose-pane h3 { margin: 0; }
+/* ---- detail pane: header + grouped cards (same look as the provider detail on the text page) ---- */
+.mr-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mr-head-text { display: grid; gap: 2px; min-width: 0; }
+.mr-head-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mr-head-title strong { font-size: 1.12em; }
+.mr-summary { background: transparent; border: 0; padding: 0; }
+.mr-card { display: grid; gap: var(--space-12, 12px); padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--text) 2.5%, transparent); min-width: 0; }
+.mr-card > h3, .mr-card > summary { margin: 0; font-size: .95em; font-weight: 600; }
+.mr-card > summary { cursor: pointer; }
+.mr-advanced[open] > summary { margin-bottom: var(--space-8, 8px); }
+.mr-advanced { gap: var(--space-10, 10px); }
+.mr-embed-card.card { gap: var(--space-14, 14px); }
+.mr-embed-card .mr-field { display: grid; gap: 4px; position: relative; }
+.mr-embed-card .mr-field > label { color: var(--muted); font-size: .92em; }
+.mr-embed-card .mr-field > .mr-reveal { position: absolute; right: 6px; bottom: 5px; padding: 3px 10px; font-size: .85em; }
+.mr-embed-card .mr-field > #embeddingKey { padding-right: 64px; }
+.mr-switchrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.mr-switchrow p { margin: 2px 0 0; }
+.mr-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mr-chips:empty { display: none; }
+.mr-chip { all: unset; cursor: pointer; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: .85em; color: var(--muted); }
+.mr-chip:hover, .mr-chip.is-on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.mr-card-actions { padding-top: 2px; }
+.mr-feedback { display: grid; gap: 6px; }
+.mr-feedback progress { width: 100%; }
+.mr-readiness { margin: 0; }
+.mr-bin[hidden] { display: none; }
+/* Settings → Done: a bar outside the scrolling page (sibling inside the flex column .main), so the page's height is reduced by the bar and nothing is ever covered. */
+.settings-done-bar { display: none; flex: none; justify-content: flex-end; padding: var(--space-12, 12px) 36px; border-top: 1px solid var(--line); background: var(--canvas, var(--bg)); }
+body[data-view="settings"] .settings-done-bar { display: flex; }
+.settings-done-bar > button { min-width: 96px; border-radius: 999px; }
+
+/* Speech recognition: inline scheme editor */
+.mr-add-group { display: grid; gap: var(--space-8, 8px); }
+.mr-add-group > .mr-add, .mr-add-group > button { text-align: left; }
+.mr-reason { color: var(--muted); min-height: 1.2em; }
+.mr-reason:empty { display: none; }
+#rolesSpeechEditor .mr-field input, #rolesSpeechEditor .mr-field select { width: 100%; box-sizing: border-box; }
+#rolesSilenceCard select { max-width: 12em; }

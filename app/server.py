@@ -10,6 +10,12 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 from codex_bridge import BridgeError, CodexBridge
+import chatgpt_oauth
+import chatgpt_bridge
+from codex_connection import CodexConnection
+import local_client_api
+import ccswitch_import
+import usage_log
 from claude_bridge import ClaudeBridge, BridgeError as ClaudeBridgeError, MAX_LINE as CLAUDE_MAX_PROMPT
 from local_projects import LocalProjectError, LocalProjects
 from local_file_edits import LocalFileEdits
@@ -19,7 +25,9 @@ from wiki_migration import WikiMigration
 from wiki_bundle import WikiBundle
 from wiki_vault import WikiVault, WikiVaultError
 from project_jobs import ProjectJobs
+from scheduler import Scheduler, ScopeConfirmation
 import kernel_runs
+import codex_kernel
 from kernel_runs import KernelRuns
 from sync_store import SyncStore, all_imports, DIGEST
 import workspace_backup
@@ -35,6 +43,8 @@ import bookmark_fetch
 import bookmark_metadata
 from external_notifications import ExternalNotifications, handle_request as handle_external_notifications
 from event_log import EventLog, EventLogError
+from plugin_store import PluginStore, PluginStoreError
+from mcp_plugins import McpPlugins
 
 ASSET_DIR = Path(os.environ.get('AI_WORKSTATION_ASSET_DIR', Path(__file__).resolve().parent)).resolve()
 ASSET_MANIFEST = json.loads((ASSET_DIR / 'asset-manifest.json').read_text())
@@ -1064,6 +1074,19 @@ COMPARISON_DRAFTS = ComparisonDraftStore(DATA_DIR, STORE.load)
 NOTE_DRAFTS = NoteDraftStore(DATA_DIR, STORE.load)
 PROJECT_JOBS = ProjectJobs(STORE, SERVICE_INSTANCE)
 CODEX_BRIDGE = CodexBridge(DATA_DIR)
+# The user's own Codex account (shared) is a second bridge; it starts a process only when first used.
+CODEX_SHARED = CodexBridge(DATA_DIR, mode='shared')
+# AI Bro's own ChatGPT sign-in (OAuth) and direct Responses channel: mode 'oauth', no Codex CLI involved.
+CHATGPT_OAUTH = chatgpt_oauth.ChatGPTOAuth(chatgpt_oauth.default_vault(DATA_DIR.resolve()))
+CHATGPT_BRIDGE = chatgpt_bridge.ChatGPTBridge(CHATGPT_OAUTH)
+def codex_bridge(mode):
+    return CHATGPT_BRIDGE if mode == 'oauth' else CODEX_SHARED if mode == 'shared' else CODEX_BRIDGE
+CODEX_CONNECTION = CodexConnection(DATA_DIR, codex_bridge)
+# The kernel's Codex model (P9b): its own locked-down runtime per login mode, started on a run's first step.
+CODEX_KERNEL = codex_kernel.CodexKernel(DATA_DIR, CODEX_CONNECTION.detect)
+CC_IMPORTS = ccswitch_import.ImportSessions()
+USAGE_LOG = usage_log.UsageLog(DATA_DIR / 'usage.sqlite')
+CLIENT_API = local_client_api.LocalClientApi(DATA_DIR, CODEX_CONNECTION.detect, CODEX_CONNECTION.cached_models, codex_bridge)
 _CLAUDE = None
 _CLAUDE_DIRECTORY = None
 _CLAUDE_LOCK = threading.Lock()
@@ -1120,8 +1143,17 @@ def claude_error(error):
     return status, {'code': code, 'message': message}
 LOCAL_PROJECTS = LocalProjects(DATA_DIR)
 EVENT_LOG = EventLog(DATA_DIR)
+PLUGIN_STORE = PluginStore(DATA_DIR)
+MCP_PLUGINS = McpPlugins(PLUGIN_STORE)
+def plugin_snapshot():
+    value = PLUGIN_STORE.read()
+    return {'version': value['version'], 'builtin': value['builtin'], 'mcp': [MCP_PLUGINS.public(entry) for entry in value['mcp']]}
 # Headless kernel runs (P8b). The host token comes from the native shell per launch.
 KERNEL_RUNS = KernelRuns(DATA_DIR, EVENT_LOG, os.environ.get('AI_WORKSTATION_KERNEL_HOST_TOKEN', ''))
+# M1 scheduler: reminders and unattended tasks; automatic ones become kernel runs.
+SCHEDULER = Scheduler(STORE, SERVICE_INSTANCE, KERNEL_RUNS)
+KERNEL_RUNS.extra_pending = lambda: {'reminders': SCHEDULER.notifications()}
+SCHEDULER_TICK_SECONDS = 5
 NATIVE_CONTROL_TOKEN = os.environ.get('AI_WORKSTATION_NATIVE_NOTIFICATION_TOKEN', '')
 LOCAL_DOCUMENT_DRAFTS = LocalDocumentDraftStore(DATA_DIR, STORE.load, LOCAL_PROJECTS)
 DOCUMENT_MEDIA = DocumentMedia(STORE)
@@ -1179,6 +1211,39 @@ class Handler(SimpleHTTPRequestHandler):
             if self.headers.get('Sec-Fetch-Site') in ('cross-site', 'same-site'): return False
             return True
         except (ValueError, AttributeError): return False
+    def do_plugins(self, path):
+        # Device-local plugin settings (never synced). Only this loopback app.
+        if not self.valid_auth_origin(mutation=self.command != 'GET'):
+            self.send_json({'error': '仅允许当前工作站管理插件。', 'code': 'plugin_origin_denied'}, 403); return
+        try:
+            if self.command == 'GET' and path == '/__plugins':
+                self.send_json(plugin_snapshot()); return
+            if self.command != 'POST': self.send_error(404); return
+            payload = json.loads(self.read_body(16_000_000 if path.startswith('/__plugins/import/') else 262144) or b'{}')
+            if not isinstance(payload, dict): raise PluginStoreError('插件请求格式无效。')
+            if path == '/__plugins/builtin':
+                PLUGIN_STORE.set_builtin(payload.get('id'), payload.get('enabled')); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/browser/sites':
+                PLUGIN_STORE.browser_site(payload.get('origin'), payload.get('decision')); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/browser/settings':
+                PLUGIN_STORE.browser_settings(payload.get('unknownSites')); self.send_json(plugin_snapshot())
+            # External MCP plugins (mcp_plugins.py). Calls: propose → the user's decision on the card → run once.
+            elif path == '/__plugins/mcp/probe': self.send_json(MCP_PLUGINS.probe(payload.get('transport')))
+            elif path == '/__plugins/mcp/add': MCP_PLUGINS.add(payload); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/mcp/retest': MCP_PLUGINS.retest(str(payload.get('id') or '')); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/mcp/enable': MCP_PLUGINS.set_enabled(str(payload.get('id') or ''), payload.get('enabled')); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/mcp/tier': MCP_PLUGINS.set_tier(str(payload.get('id') or ''), str(payload.get('tool') or ''), payload.get('tier'), payload.get('confirm') is True); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/mcp/remove': MCP_PLUGINS.remove(str(payload.get('id') or '')); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/mcp/default-tier': MCP_PLUGINS.set_default_tier(str(payload.get('id') or ''), payload.get('tier'), payload.get('confirm') is True); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/import/parse': self.send_json(MCP_PLUGINS.import_parse(str(payload.get('kind') or ''), payload))
+            elif path == '/__plugins/import/probe': self.send_json(MCP_PLUGINS.import_probe(payload.get('importId'), payload.get('index'), payload.get('commandLine')))
+            elif path == '/__plugins/mcp/propose': self.send_json(MCP_PLUGINS.propose(payload))
+            elif path == '/__plugins/mcp/calls/get': self.send_json(MCP_PLUGINS.call(str(payload.get('callId') or '')))
+            elif path == '/__plugins/mcp/calls/decide': self.send_json(MCP_PLUGINS.decide(str(payload.get('callId') or ''), payload.get('approve')))
+            elif path == '/__plugins/mcp/calls/run': self.send_json(MCP_PLUGINS.run(str(payload.get('callId') or '')))
+            else: self.send_json({'error': '找不到插件接口。', 'code': 'plugin_not_found'}, 404)
+        except PluginStoreError as error: self.send_json(error.payload, error.status)
+        except ValueError: self.send_json({'error': '插件请求格式无效。', 'code': 'plugin_invalid'}, 400)
     def do_events(self, path):
         # Run event log (written alongside the snapshot). Same-origin only.
         if not self.valid_origin(): self.send_json({'error': '不允许来自其他网站的请求'}, 403); return
@@ -1249,11 +1314,18 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.valid_auth_origin(mutation=self.command == 'POST'):
             self.send_json({'error': {'message': '仅允许当前工作站访问账号连接。'}}, 403); return
         try:
-            if action == 'status': result = CODEX_BRIDGE.status()
-            elif action == 'models': result = CODEX_BRIDGE.models()
-            elif action == 'login': result = CODEX_BRIDGE.login_start()
-            elif action == 'cancel': result = CODEX_BRIDGE.cancel_login()
-            elif action == 'logout': result = CODEX_BRIDGE.logout()
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            mode = query.get('mode', [''])[0]
+            mode = mode if mode in ('shared', 'oauth') else 'private'
+            bridge = codex_bridge(mode)
+            if mode == 'oauth': result = chatgpt_bridge.handle_auth(bridge, action, query)
+            elif action == 'status': result = bridge.status()
+            elif action == 'models': result = CODEX_CONNECTION.cached_models(mode) if 'cacheonly' in query else CODEX_CONNECTION.models(mode, refresh='refresh' in query) if 'cache' in query else bridge.models()
+            elif action == 'login': result = bridge.login_start()
+            elif action == 'cancel': result = bridge.cancel_login()
+            elif action == 'logout': result = bridge.logout()
+            elif action == 'detect': result = CODEX_CONNECTION.detect(mode)
+            elif action == 'test': result = CODEX_CONNECTION.test(mode)
             else: self.send_error(404); return
             self.send_json(result)
         except BridgeError as error:
@@ -1470,7 +1542,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({'error': {'message': '仅允许当前工作站发起生成请求。'}}, 403); return
         try:
             request = json.loads(self.read_body() or b'{}')
-            model, inputs, effort = CODEX_BRIDGE.prepare(request)
+            bridge = codex_bridge(request.get('mode') if isinstance(request, dict) and request.get('mode') in ('shared', 'oauth') else 'private')
+            model, inputs, effort = bridge.prepare(request)
         except BridgeError as error:
             self.send_json({'error': {'message': str(error), 'code': error.code}}, error.status); return
         except (ValueError, TypeError):
@@ -1481,13 +1554,38 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Connection', 'close')
         self.send_header('X-Accel-Buffering', 'no')
         self.end_headers(); self.close_connection = True
-        stream = CODEX_BRIDGE.respond(model, inputs, effort, web_search=True) if request.get('webSearch') is True else CODEX_BRIDGE.respond(model, inputs, effort)
+        stream = bridge.respond(model, inputs, effort, web_search=True) if request.get('webSearch') is True else bridge.respond(model, inputs, effort)
         try:
             for event in stream:
                 self.wfile.write(('data: ' + json.dumps(event, ensure_ascii=False) + '\n\n').encode())
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, socket.timeout): pass
         finally: stream.close()
+    def do_chatgpt_responses(self):
+        # The background kernel's Responses channel for the ChatGPT account (mode 'oauth').
+        if not self.valid_auth_origin(mutation=True):
+            self.send_json({'error': {'message': '仅允许当前工作站发起生成请求。'}}, 403); return
+        try:
+            status, payload = CHATGPT_BRIDGE.raw_responses(json.loads(self.read_body(8_000_000) or b'{}'))
+        except BridgeError as error:
+            self.send_json({'error': {'message': str(error), 'code': error.code}}, error.status); return
+        except (ValueError, TypeError):
+            self.send_json({'error': {'message': '请求格式无效。'}}, 400); return
+        if status != 200:
+            self.send_json({'error': payload}, status); return
+        response, connection = payload
+        try:
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Connection', 'close')
+            self.end_headers(); self.close_connection = True
+            while True:
+                chunk = response.read1(8192)
+                if not chunk: break
+                self.wfile.write(chunk); self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, socket.timeout, OSError): pass
+        finally: connection.close()
     def do_state_post(self):
         try: self.send_json(STORE.save(json.loads(self.read_body() or b'{}')))
         except ConflictError as exc:
@@ -1968,7 +2066,7 @@ class Handler(SimpleHTTPRequestHandler):
                 except (BrokenPipeError, ConnectionResetError, OSError): pass
         try:
             body = self.read_body(MAX_FILE) if method == 'POST' else None; request = urllib.request.Request(raw, data=body, method=method)
-            for name in ('Authorization', 'Content-Type', 'Accept'):
+            for name in ('Authorization', 'Content-Type', 'Accept', 'X-Api-Key', 'Anthropic-Version'):
                 if self.headers.get(name): request.add_header(name, self.headers[name])
             watcher = threading.Thread(target=watch_client, daemon=True); watcher.start()
             with proxy_opener(connected, connecting).open(request, timeout=PROXY_CONNECT_TIMEOUT) as response:
@@ -2081,6 +2179,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if handle_external_notifications(self, EXTERNAL_NOTIFICATIONS): return
+        if local_client_api.handle_request(self, CLIENT_API): return
+        if usage_log.handle_request(self, USAGE_LOG): return
         if kernel_runs.handle_request(self, KERNEL_RUNS, EVENT_LOG, NATIVE_CONTROL_TOKEN): return
         path = urllib.parse.urlsplit(self.path).path
         if path == '/__health': self.send_json({'app': 'ai-workstation', 'version': VERSION, 'assetFingerprint': ASSET_FINGERPRINT, 'port': self.server.server_port, 'instanceId': SERVICE_INSTANCE})
@@ -2091,15 +2191,25 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/__cloud/'): self.do_cloud(path)
         elif path.startswith('/__claude/'): self.do_claude(path)
         elif path.startswith('/__local/'): self.do_local(path)
-        elif path in ('/__auth/status', '/__auth/models'): self.do_auth(path.rsplit('/', 1)[1])
+        elif path in ('/__auth/status', '/__auth/models', '/__auth/usage'): self.do_auth(path.rsplit('/', 1)[1])
+        elif path == '/__codex/detect': self.do_auth('detect')
         elif path == '/__recovery': self.do_recovery_get()
         elif path.startswith('/__recovery/'): self.do_recovery_get(urllib.parse.unquote(path.removeprefix('/__recovery/')))
         elif path == '/__wiki/migration':
             try:self.send_json(WikiMigration(STORE).preview())
             except Exception as exc:self.send_json({'error':str(exc)},400)
         elif path == '/__events': self.do_events(path)
+        elif path == '/__plugins': self.do_plugins(path)
         elif path == '/__project/jobs':
             try: self.send_json({'jobs':PROJECT_JOBS.list()})
+            except Exception as exc:self.send_json({'error':str(exc)},400)
+        elif path == '/__scheduler':
+            try: self.send_json(SCHEDULER.list())
+            except Exception as exc:self.send_json({'error':str(exc)},400)
+        elif path == '/__scheduler/executions':
+            try:
+                query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                self.send_json({'executions':SCHEDULER.executions((query.get('taskId') or [None])[0],int((query.get('limit') or ['50'])[0]))})
             except Exception as exc:self.send_json({'error':str(exc)},400)
         elif path == '/__state':
             try: self.send_json(STORE.load())
@@ -2120,6 +2230,10 @@ class Handler(SimpleHTTPRequestHandler):
         else: self.send_error(404)
     def do_POST(self):
         if handle_external_notifications(self, EXTERNAL_NOTIFICATIONS): return
+        if local_client_api.handle_request(self, CLIENT_API): return
+        if ccswitch_import.handle_request(self, CC_IMPORTS): return
+        if usage_log.handle_request(self, USAGE_LOG): return
+        if codex_kernel.handle_request(self, CODEX_KERNEL, KERNEL_RUNS.host_token): return
         if kernel_runs.handle_request(self, KERNEL_RUNS, EVENT_LOG, NATIVE_CONTROL_TOKEN): return
         auth_path = urllib.parse.urlsplit(self.path).path
         if auth_path.startswith('/__claude/'):
@@ -2136,14 +2250,30 @@ class Handler(SimpleHTTPRequestHandler):
             self.do_local(auth_path); return
         if auth_path in ('/__auth/login', '/__auth/cancel', '/__auth/logout'):
             self.do_auth(auth_path.rsplit('/', 1)[1]); return
+        if auth_path.startswith('/__plugins/'):
+            self.do_plugins(auth_path); return
         if auth_path == '/__codex/respond':
             self.do_codex_respond(); return
+        if auth_path == '/__chatgpt/responses':
+            self.do_chatgpt_responses(); return
+        if auth_path == '/__codex/test':
+            self.do_auth('test'); return
         if auth_path == '/__proxy':
             self.proxy('POST'); return
         if not self.valid_origin(): self.send_json({'error': '不允许来自其他网站的写入请求'}, 403); return
         path = urllib.parse.urlsplit(self.path).path
         if path == '/__state': self.do_state_post()
         elif path == '/__events/append': self.do_events(path)
+        elif path.startswith('/__scheduler/'):
+            try:
+                body=json.loads(self.read_body() or b'{}');action=path.rsplit('/',1)[-1]
+                if not isinstance(body,dict): raise ValueError('请求必须是 JSON 对象')
+                if action=='upsert': result=SCHEDULER.upsert(body)
+                elif action=='tick': result={'done':SCHEDULER.tick()}
+                else: result=SCHEDULER.change(body.get('id'),action)
+                self.send_json(result)
+            except ScopeConfirmation as exc:self.send_json({'error':str(exc),'code':exc.code},409)
+            except Exception as exc:self.send_json({'error':str(exc)},400)
         elif path.startswith('/__project/jobs/'):
             try:
                 body=json.loads(self.read_body() or b'{}');action=path.rsplit('/',1)[-1]
@@ -2213,6 +2343,13 @@ if __name__ == '__main__':
     except Exception as error: workspace_backup.log(f'startup check failed: {type(error).__name__}: {error}')
     upkeep = threading.Timer(BACKUP_DELAY_SECONDS, STORE.upkeep); upkeep.daemon = True; upkeep.start()
     events_upkeep = threading.Timer(BACKUP_DELAY_SECONDS, EVENT_LOG.prune); events_upkeep.daemon = True; events_upkeep.start()
+    def scheduler_loop():
+        # The scheduler itself waits STARTUP_DELAY before starting any run.
+        while True:
+            try: SCHEDULER.tick()
+            except Exception as error: workspace_backup.log(f'scheduler tick failed: {type(error).__name__}: {error}')
+            time.sleep(SCHEDULER_TICK_SECONDS)
+    threading.Thread(target=scheduler_loop, daemon=True).start()
     http_server = LoopbackHTTPServer(('127.0.0.1', PORT), Handler)
     PORT = http_server.server_port
     if os.environ.get('AI_WORKSTATION_PARENT_PIPE') == '1':
@@ -2226,6 +2363,8 @@ if __name__ == '__main__':
     print(f'AI Workstation {VERSION}: http://127.0.0.1:{PORT}', flush=True)
     try: http_server.serve_forever()
     finally:
+        MCP_PLUGINS.shutdown()  # external MCP servers stop with the app
         EXTERNAL_NOTIFICATIONS.close()
         close_claude_service()
+        CODEX_SHARED.close()
         http_server.server_close()

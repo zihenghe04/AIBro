@@ -1,0 +1,25 @@
+/* 计划任务 dialog (scheduler-ui.js); shares the project automation form's look. */
+#schedulerDialog { max-height:calc(100dvh - 40px); padding:var(--space-24); box-sizing:border-box; overflow:auto; background:var(--panel-raised,var(--bg)); border-color:var(--line); }
+#schedulerDialog .dialog-header { gap:var(--space-16); margin:0 0 var(--space-18); padding:0 0 var(--space-16); background:none; }
+#schedulerDialog .scheduler-list { display:grid; gap:var(--space-10); margin:var(--space-18) 0; }
+#schedulerDialog .tool-ledger-row { display:block; overflow-wrap:anywhere; }
+#schedulerDialog .tool-ledger-row > button { margin:var(--space-4) var(--space-6) 0 0; }
+#schedulerDialog .scheduler-attention, #schedulerDialog .scheduler-reminder, #schedulerDialog .scheduler-jobs { padding:var(--space-12) var(--space-14); border:1px solid var(--line); border-radius:var(--radius-10); overflow-wrap:anywhere; }
+#schedulerDialog .scheduler-attention { border-color:var(--accent); background:var(--accent-soft); }
+#schedulerDialog .scheduler-warning { margin:var(--space-6) 0; color:var(--danger); font-size:var(--font-size-12); line-height:var(--leading-165); }
+#schedulerDialog .scheduler-execution { padding:var(--space-6) 0; border-top:1px solid var(--line); font-size:var(--font-size-12); }
+#schedulerDialog .scheduler-execution > button { margin-top:var(--space-4); }
+#schedulerForm { padding:0; display:grid; gap:var(--space-16); }
+#schedulerForm .task-field { display:grid; gap:var(--space-8); min-width:0; }
+#schedulerForm .task-field > input, #schedulerForm .task-field > textarea, #schedulerForm .task-field > select { min-width:0; box-sizing:border-box; }
+#schedulerForm .automation-choice-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-6); }
+#schedulerForm .automation-choice-row > strong { flex-basis:100%; }
+#schedulerForm .automation-choice-row button[aria-pressed=true] { border-color:var(--accent); background:var(--accent-soft); }
+#schedulerForm .scheduler-scope-field { display:grid; gap:var(--space-8); margin:0; padding:var(--space-14); border:1px solid var(--line); border-radius:var(--radius-12); min-width:0; }
+#schedulerForm .scheduler-scope-field legend { padding:0 var(--space-6); font-weight:600; }
+#schedulerForm .scheduler-tools { display:grid; gap:var(--space-6); max-height:200px; overflow:auto; }
+#schedulerForm .scheduler-check { display:flex; align-items:flex-start; gap:var(--space-8); font-size:var(--font-size-12); line-height:var(--leading-165); }
+#schedulerForm .automation-form-actions { display:flex; flex-wrap:wrap; gap:var(--space-10); }
+#schedulerForm .automation-form-status { margin:0; font-size:var(--font-size-12); }
+#schedulerForm .automation-form-status[data-error=true] { color:var(--danger); }
+@media(max-width:580px) { #schedulerDialog { width:calc(100vw - 24px); padding:var(--space-18); } #schedulerForm .scheduler-scope-field { padding:var(--space-10); } }

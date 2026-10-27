@@ -202,6 +202,8 @@ function refreshNativeChoices(){
   // React islands provide their own accessible native hit target and Kit
   // presentation. Inserting a second trigger would corrupt their owned DOM.
   if(select.closest('[data-halaska-root]'))return;
+  // UIKit (app/ui-kit.js) already replaced this select with its own control.
+  if(select.classList.contains('uk-native'))return;
   if(select.size>1)return;
   let control=choiceRegistry.get(select);const short=select.matches(shortChoices);
   if(!control||!control.isConnected){

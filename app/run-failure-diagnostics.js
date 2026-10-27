@@ -40,8 +40,8 @@
   const knowledgeCodes = new Set(['INVALID_KNOWLEDGE_REQUESTS', 'KNOWLEDGE_BATCH_REQUIRES_SPLIT']);
   const knowledgeBatchLimit = 32;
   const phases = new Set(['configuration', 'connection', 'response', 'stream']);
-  const protocols = new Set(['responses', 'chat']);
-  const providerCodes = Object.freeze({ insufficient_quota: 'QUOTA_EXHAUSTED', quota_exceeded: 'QUOTA_EXHAUSTED', credit_balance_too_low: 'QUOTA_EXHAUSTED', billing_hard_limit_reached: 'QUOTA_EXHAUSTED', rate_limit_exceeded: 'RATE_LIMITED', rate_limit_error: 'RATE_LIMITED', model_not_found: 'MODEL_NOT_AVAILABLE', invalid_api_key: 'HTTP_UNAUTHORIZED', authentication_error: 'HTTP_UNAUTHORIZED', context_length_exceeded: 'CONTEXT_LENGTH_EXCEEDED', context_window_exceeded: 'CONTEXT_LENGTH_EXCEEDED', prompt_too_long: 'CONTEXT_LENGTH_EXCEEDED', input_too_long: 'CONTEXT_LENGTH_EXCEEDED', max_output_tokens: 'OUTPUT_LIMIT', content_filter: 'CONTENT_FILTER' });
+  const protocols = new Set(['responses', 'chat', 'anthropic']);
+  const providerCodes = Object.freeze({ insufficient_quota: 'QUOTA_EXHAUSTED', quota_exceeded: 'QUOTA_EXHAUSTED', credit_balance_too_low: 'QUOTA_EXHAUSTED', billing_hard_limit_reached: 'QUOTA_EXHAUSTED', rate_limit_exceeded: 'RATE_LIMITED', rate_limit_error: 'RATE_LIMITED', model_not_found: 'MODEL_NOT_AVAILABLE', invalid_api_key: 'HTTP_UNAUTHORIZED', authentication_error: 'HTTP_UNAUTHORIZED', context_length_exceeded: 'CONTEXT_LENGTH_EXCEEDED', context_window_exceeded: 'CONTEXT_LENGTH_EXCEEDED', prompt_too_long: 'CONTEXT_LENGTH_EXCEEDED', input_too_long: 'CONTEXT_LENGTH_EXCEEDED', max_output_tokens: 'OUTPUT_LIMIT', content_filter: 'CONTENT_FILTER', chatgpt_modelNotSupported: 'MODEL_NOT_AVAILABLE', chatgpt_quota: 'QUOTA_EXHAUSTED', chatgpt_auth: 'HTTP_UNAUTHORIZED', needs_reauth: 'HTTP_UNAUTHORIZED', authentication_required: 'HTTP_UNAUTHORIZED', chatgpt_stream_error: 'UPSTREAM_STREAM_INTERRUPTED' });
   function normalize(value) {
     if (!value || value.version !== 1 || typeof value.code !== 'string' || !Object.hasOwn(kinds, value.code)) return null;
     const result = { version: 1, code: value.code, category: kinds[value.code][0] };

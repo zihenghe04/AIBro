@@ -35,3 +35,60 @@
   .settings-save-bar { flex-direction: column; align-items: stretch; gap: var(--space-12); }
   .settings-save-bar button { align-self: flex-start; }
 }
+/* Settings → Plugins (plugin-settings.js): list, detail and import pages */
+.plugin-settings-card h2 { margin: 0 0 4px; }
+.plugin-settings-card h3 { font-size: 14px; margin: 16px 0 8px; }
+.plugin-settings-card h4 { font-size: 12px; margin: 12px 0 6px; color: var(--muted); font-weight: 600; }
+.plugin-settings-card textarea, .plugin-settings-card input[type="text"] { width: 100%; min-width: 0; font-family: var(--font-mono); font-size: 12px; }
+.plugin-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.plugin-head p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.plugin-back { border: 0; background: none; color: var(--accent); padding: 0; margin-bottom: 8px; cursor: pointer; font-size: 13px; }
+.plugin-list, .plugin-cands { margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.plugin-row, .plugin-cand { display: flex; align-items: center; gap: 12px; padding: 12px; cursor: pointer; flex-wrap: wrap; }
+.plugin-row + .plugin-row, .plugin-cand + .plugin-cand { border-top: 1px solid var(--line); }
+.plugin-row:hover { background: var(--panel-hover); }
+.plugin-cand { cursor: default; }
+.plugin-logo { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.plugin-row-main { flex: 1 1 12rem; min-width: 0; }
+.plugin-row-sub { display: block; font-size: 12px; overflow-wrap: anywhere; margin-top: 2px; }
+.plugin-row-open { border: 0; background: none; padding: 0; margin: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.plugin-row-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.plugin-code { font-family: var(--font-mono); }
+.plugin-chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); white-space: nowrap; vertical-align: middle; }
+.plugin-chip.ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, var(--line)); }
+.plugin-chip.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, var(--line)); }
+.plugin-chip.acc { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.plugin-cand-body { flex: 1 1 100%; display: grid; gap: 8px; padding-left: 44px; }
+.plugin-block { margin-top: 16px; padding: 4px 16px 16px; border: 1px solid var(--line); border-radius: 12px; }
+.plugin-field { display: flex; align-items: center; gap: 12px; margin: 8px 0; flex-wrap: wrap; }
+.plugin-seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; margin: 8px 0; }
+.plugin-seg button { border: 0; background: var(--panel); color: var(--muted); padding: 6px 14px; font-size: 12px; cursor: pointer; }
+.plugin-seg button + button { border-left: 1px solid var(--line-strong); }
+.plugin-seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.plugin-seg button:disabled { cursor: default; opacity: .6; }
+.plugin-tabs { display: flex; width: fit-content; }
+.plugin-tools { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.plugin-tools li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.plugin-tools li > code { overflow-wrap: anywhere; }
+.plugin-tools li > select { margin-left: auto; order: 2; max-width: 100%; }
+.plugin-tools li > .muted { order: 3; flex: 1 1 100%; font-size: 12px; overflow-wrap: anywhere; }
+.plugin-tools-more > summary { cursor: pointer; margin: 12px 0 8px; color: var(--muted); font-size: 13px; }
+.plugin-sites { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.plugin-sites li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.plugin-add-row { display: grid; grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr); gap: 8px; align-items: center; margin: 8px 0; }
+.plugin-site-add { grid-template-columns: minmax(0, 1fr) auto auto; }
+.plugin-add-row input { width: 100%; min-width: 0; font-family: var(--font-mono); }
+.plugin-add-row select { width: 100%; min-width: 0; }
+.plugin-check { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.plugin-note { font-size: 12px; color: var(--muted); padding: 8px 12px; border-radius: 8px; background: var(--accent-soft); margin: 0; }
+.plugin-note p { margin: 0 0 4px; }
+.plugin-copy { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plugin-copy code { flex: 1 1 12rem; padding: 4px 8px; border-radius: 6px; background: var(--panel-hover); overflow-wrap: anywhere; font-size: 12px; }
+.plugin-env { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 4px; }
+.plugin-notice { font-size: 12px; color: var(--warning); margin: 0; }
+.plugin-changed { color: var(--warning); }
+.plugin-error { color: var(--danger); font-size: 13px; }
+.plugin-cand-body > button, .plugin-cand-body > .plugin-note, .plugin-check .setting-actions { justify-self: start; }
+.plugin-cand-body > .plugin-note { width: 100%; }
+.plugin-cand-body > button { width: fit-content; }
+.settings-connection-card[hidden]{display:none!important}

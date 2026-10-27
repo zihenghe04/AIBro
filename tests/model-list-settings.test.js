@@ -128,7 +128,7 @@ test('kernel truncation and run compaction read the context window through conte
   assert.match(source, /evidenceChars:Math\.max\(4000,Math\.min\(evidenceInput\*2,\(evidenceInput-/);
   const page = fs.readFileSync(require.resolve('../app/kernel.html'), 'utf8'), host = fs.readFileSync(require.resolve('../app/kernel-host.js'), 'utf8');
   assert.ok(page.indexOf('src="model-catalog.js"') > 0 && page.indexOf('src="model-catalog.js"') < page.indexOf('src="kernel-host.js"'));
-  assert.match(host, /compaction:\{compactor:Compaction,\.\.\.runBudget\(state,conn\)\}/);
+  assert.match(host, /compaction:\{compactor:Compaction,\.\.\.\(codex\?codexBudget\(\):runBudget\(state,conn\)\)\}/);
 });
 
 test('background run permission is saved with models and permissions; unknown values fall back to follow', async () => {

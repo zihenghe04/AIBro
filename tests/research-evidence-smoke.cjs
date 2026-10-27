@@ -2,6 +2,7 @@
 const {app,BrowserWindow}=require('electron');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),net=require('node:net'),http=require('node:http'),{spawn}=require('node:child_process');
 const OUT=path.resolve(__dirname,'../test-results/research-evidence-20260930'),ASSETS=path.resolve(__dirname,'../app'),TEMP=fs.mkdtempSync(path.join(os.tmpdir(),'aibro-research-evidence-'));
+fs.mkdirSync(OUT,{recursive:true});
 app.setPath('userData',path.join(TEMP,'profile'));app.on('window-all-closed',()=>{});
 const result={scope:'Frozen full production Electron renderer, synthetic isolated workspace, no provider or user records.',runtime:process.versions,cases:[],skipped:[],failures:[],externalRequests:[],rendererErrors:[],modelCalls:0};
 let win,server,finished=false;const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -22,7 +23,7 @@ async function until(fn,label){for(let i=0;i<250;i++){if(await fn())return;await
  const evaluate=code=>win.webContents.executeJavaScript(code,true);
  await win.loadURL(origin);await until(()=>evaluate('typeof storageHydrated!=="undefined"&&storageHydrated'),'hydrated');
  async function check(name,code){try{const value=await evaluate(`(async()=>{const expect=(ok,message)=>{if(!ok)throw Error(message);};${code}})()`);result.cases.push({name,value});console.log('PASS '+name);}catch(e){result.failures.push({name,error:e.message});console.error('FAIL '+name+' '+e.message);}write();}
- await evaluate(fs.readFileSync(path.join(OUT,'seed.js'),'utf8'));
+ await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/research-evidence-seed.js'),'utf8'));
  const assert=require('node:assert/strict');
  const click=selector=>evaluate(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});if(!n)throw Error('Missing '+${JSON.stringify(selector)});if(n.disabled)throw Error('Disabled '+${JSON.stringify(selector)});n.focus();n.click();})()`);
  const writeField=async(selector,value)=>{await evaluate(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});for(let d=n.closest('details');d;d=d.parentElement.closest('details'))d.open=true;n.focus();n.select();})()`);await win.webContents.insertText(value);};

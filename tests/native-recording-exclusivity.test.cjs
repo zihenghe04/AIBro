@@ -34,7 +34,7 @@ ${handler}
       ['NativeQuickRealtimeASRSession',`extension NativeQuickRealtimeASRSession {func qaSetReceivedSnapshot(_ value:NativeQuickASRSnapshot){snapshot=value}}`],
     ])fs.writeFileSync(path.join(temp,name+'.swift'),fs.readFileSync(path.join(source,name+'.swift'),'utf8')+'\n'+extension+'\n');
     const binary=path.join(temp,'recording-exclusivity');
-    const names=['AgendaCore','NativeCredentials','NativeQuickRecordingBatch','NativeQuickRecordingTitle','NativeQuickRecordingPlayback','NativeSpeechService','NativeSpeechCredentials','NativeQuickRealtimeASRProtocol','NativeQuickRealtimeASRSettings','NativeQuickRealtimeASRHandoff'];
+    const names=['AgendaCore','NativeCredentials','NativeQuickRecordingBatch','NativeQuickRecordingTitle','NativeQuickRecordingPlayback','NativeSpeechService','NativePlainHTTPPolicy','NativeSpeechCredentials','NativeQuickRealtimeASRProtocol','NativeQuickRealtimeASRSettings','NativeQuickRealtimeASRHandoff'];
     const files=[path.join(root,'tests/native-recording-exclusivity.swift'),...names.map(name=>path.join(source,name+'.swift')),
       ...['NativeQuickRecordingStore','NativeQuickRealtimeASRAudio','NativeQuickRealtimeASRSession'].map(name=>path.join(temp,name+'.swift'))];
     const build=spawnSync('xcrun',['swiftc','-O','-enforce-exclusivity=checked','-swift-version','5','-parse-as-library','-target','arm64-apple-macosx14.0',...files,'-o',binary],{encoding:'utf8',timeout:100000,maxBuffer:8*1024*1024});

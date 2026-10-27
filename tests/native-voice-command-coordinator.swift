@@ -10,6 +10,7 @@ func nativeUI(_ zh:String,_ en:String)->String { en }
     @Published var phase:Phase = .idle
     var lease:Lease?
     var retryAvailable=false
+    var autoStopped=false,autoStopAllowed=true
     var starts=0,finishes=0,retries=0,cancels=0
     var startHook:(()->Void)?
     var convertHook:((Lease) async->[String:Any])?

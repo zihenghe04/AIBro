@@ -20,7 +20,7 @@ function fixture(options = {}) {
   const document = { createElement: tag => new Element(tag), querySelector: selector => { const value = nodes.get(selector); return Array.isArray(value) ? value[0] || null : value || null; }, querySelectorAll: selector => { const value = nodes.get(selector); return Array.isArray(value) ? value : value ? [value] : []; },
     addEventListener: (type, fn) => documentListeners.set(type, fn), removeEventListener: type => documentListeners.delete(type) };
   document.body = new Element('body'); document.body.dataset.view = 'agent';
-  for (const selector of ['#settings .page-heading', '#provider', '#composer', '.primary-nav', '#projectList', '#inspectorToggle', '#messageList', '#dashboardTasks', '#agentInput', '[data-view="dashboard"]', '[data-view="courses"]', '.primary-nav .active']) nodes.set(selector, new Element('button'));
+  for (const selector of ['#settings .page-heading', '#connectionsCard', '#providerAdd', '#composer', '.primary-nav', '#projectList', '#inspectorToggle', '#messageList', '#dashboardTasks', '#agentInput', '[data-view="dashboard"]', '[data-view="courses"]', '.primary-nav .active']) nodes.set(selector, new Element('button'));
   document.activeElement = nodes.get('.primary-nav .active');
   const env = { document, innerWidth: 1440, innerHeight: 900,
     addEventListener: (type, fn) => windowListeners.set(type, fn), removeEventListener: type => windowListeners.delete(type),

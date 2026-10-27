@@ -41,6 +41,25 @@
   setMode:(mode,event)=>['island','edge','menuBar'].includes(mode)?quickEntryChange(event,{action:'mode',mode}):Promise.resolve({status:'error',reason:'invalid_request'}),
   openSettings:event=>quickEntryChange(event,{action:'open'})
  });
+ // Speech-to-text settings live in the native shell (schemes and keys stay there). The Models page reads public state and asks
+ // for switch / test / open; changes need a user gesture, the reply never contains a key.
+ const speechChange=body=>(window.navigator?.userActivation?.isActive!==false)
+  ?rpc({command:'speech-settings',...body}):Promise.resolve({status:'error',reason:'user_gesture_required'});
+ // A scheme typed in Settings. Its `key` is write-only: native code stores it encrypted and never sends it back.
+ const speechDraft=(action,draft)=>draft&&typeof draft==='object'&&!Array.isArray(draft)?speechChange({action,draft:{...draft}}):Promise.resolve({status:'error',reason:'invalid_request'});
+ window.workstationDesktop.speech=Object.freeze({
+  state:()=>rpc({command:'speech-settings',action:'state'}),
+  select:id=>typeof id==='string'&&id?speechChange({action:'select',id}):Promise.resolve({status:'error',reason:'invalid_request'}),
+  setRealtime:enabled=>typeof enabled==='boolean'?speechChange({action:'realtime',enabled}):Promise.resolve({status:'error',reason:'invalid_request'}),
+  test:target=>['cloud','realtime'].includes(target)?speechChange({action:'test',target}):Promise.resolve({status:'error',reason:'invalid_request'}),
+  saveCloud:draft=>speechDraft('save-cloud',draft),testCloud:draft=>speechDraft('test-cloud',draft),
+  deleteCloud:id=>typeof id==='string'&&id?speechChange({action:'delete-cloud',id}):Promise.resolve({status:'error',reason:'invalid_request'}),
+  saveRealtime:draft=>speechDraft('save-realtime',draft),testRealtime:draft=>speechDraft('test-realtime',draft),
+  deleteRealtime:id=>typeof id==='string'&&id?speechChange({action:'delete-realtime',id}):Promise.resolve({status:'error',reason:'invalid_request'}),
+  selectRealtime:id=>typeof id==='string'&&id?speechChange({action:'select-realtime',id}):Promise.resolve({status:'error',reason:'invalid_request'}),
+  setSilence:seconds=>Number.isFinite(seconds)&&seconds>=0&&seconds<=10?speechChange({action:'silence',seconds}):Promise.resolve({status:'error',reason:'invalid_request'}),
+  open:(target,id)=>['cloud','cloud-new','realtime'].includes(target)&&(id===undefined||(target==='cloud'&&typeof id==='string'&&id))?speechChange({action:'open',target,...(id===undefined?{}:{id})}):Promise.resolve({status:'error',reason:'invalid_request'})
+ });
  // A composer-owned nonce grants recording, never message submission. The
  // separate native quick-voice panel has no RPC path through this controller.
  let dictationVerifier=null;

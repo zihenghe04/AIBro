@@ -84,7 +84,7 @@ async function finish(code) {
   win.webContents.on('console-message', event => { if (event.level === 'error') { rendererErrors.push(event.message); console.error('RENDERER', event.message); } });
   await win.loadURL(origin);
   await until(() => evaluate('typeof storageHydrated!=="undefined"&&storageHydrated'), 'hydrate');
-  await evaluate(fs.readFileSync(path.join(ROOT, 'test-results/document-images-20260930/fixture-client.js'), 'utf8'));
+  await evaluate(fs.readFileSync(path.join(ROOT, 'tests/fixtures/document-images-fixture-client.js'), 'utf8'));
   await until(() => evaluate('window.__documentImageFixtureReady'), 'fixture ready'); await settle();
 
 
@@ -102,6 +102,8 @@ async function finish(code) {
     await until(()=>evaluate('[...document.querySelectorAll(".document-toolbar-kit [role=radio]")].some(n=>n.textContent.trim()==="编辑"&&!n.disabled)'),'mode ready');
     await toMode('编辑');await paste();
     await until(()=>evaluate('NoteEditor.currentContent()?.content.includes("/__files/")'),'durable image insertion');
+    // The canonical markdown is committed before the editor image finishes decoding; wait for the real bytes.
+    await until(()=>evaluate('document.querySelector(".document-visual-editor img")?.naturalWidth===120'),'visual editor image decoded');
     assert.equal(await evaluate('document.querySelector(".document-visual-editor img")?.naturalWidth'),120);
     assert.equal(await evaluate('state.notes.find(n=>n.id==="image-note").content.includes("/__files/")'),false);
     const disk=await storeSnapshot();assert.equal(disk.imports.filter(x=>x.importOrigin?.kind==='document-image').length,1);

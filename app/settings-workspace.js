@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const KEY = 'workstation-settings-section-v1';
-  const SECTIONS = ['models', 'sync', 'knowledge', 'appearance'];
+  const SECTIONS = ['models', 'sync', 'knowledge', 'plugins', 'appearance'];
   let record = null;
   let hooks = {};
   const language = () => /^en(?:-|$)/i.test(root.document.documentElement.lang);
@@ -84,15 +84,35 @@
     render(); perform('state');
     return { refresh };
   }
+  function knowledgePointer(panel) {
+    const doc = root.document, card = doc.createElement('article');
+    card.id = 'knowledgeEmbeddingPointer'; card.className = 'card';
+    const title = doc.createElement('h2'), text = doc.createElement('p'), actions = doc.createElement('div'), open = doc.createElement('button'), parking = doc.createElement('div');
+    text.className = 'muted'; actions.className = 'setting-actions'; open.type = 'button'; open.className = 'secondary'; open.id = 'knowledgeEmbeddingOpen';
+    parking.id = 'embeddingParking'; parking.hidden = true;
+    const paint = () => {
+      title.textContent = language() ? 'Semantic search' : '语义检索';
+      text.textContent = language() ? 'The embedding model for semantic search is now set up on Settings → Models → Embedding, next to your chat models.' : '语义检索用的嵌入模型，现在和对话模型放在一起：设置 → 模型 → 嵌入。';
+      open.textContent = language() ? 'Open Models → Embedding' : '去 模型 → 嵌入';
+    };
+    open.addEventListener('click', () => { reveal('models'); root.document.dispatchEvent(new root.CustomEvent('aibro-open-models-tab', { detail: 'embedding' })); });
+    paint(); doc.addEventListener('workstation-language-change', paint);
+    // The native side (island, shortcut) sends people here to configure speech recognition.
+    doc.addEventListener('aibro-open-models-tab', event => { if (String(event.detail || '') === 'speech') reveal('models'); });
+    actions.append(open); card.append(title, text, actions); panel.append(card, parking);
+  }
   function groupCards() {
     if (!record) return;
     const { page, panels } = record;
     const move = (node, section) => { if (node && node.parentElement !== panels[section]) panels[section].append(node); };
+    move(page.querySelector('#connectionsCard'), 'models');
     move(page.querySelector('.settings-connection-card'), 'models');
     move(page.querySelector('[data-permission]')?.closest('article'), 'models');
     move(page.querySelector('#usageCostCard'), 'models');
     move(page.querySelector('#cloudSyncCard'), 'sync');
-    move(page.querySelector('#embeddingSettings'), 'knowledge');
+    // The semantic-search card lives on Models → Embedding while open and is parked (hidden) here otherwise.
+    const card = page.querySelector('#embeddingSettings'), parking = panels.knowledge.querySelector('#embeddingParking');
+    if (card && parking && card.parentElement === page) parking.append(card);
     for (const selector of ['.language-settings-card', '#soundAlertCard', '#appearanceCard']) move(page.querySelector(selector), 'appearance');
     for (const node of page.querySelectorAll(':scope > .build-info')) move(node, 'appearance');
   }
@@ -123,14 +143,23 @@
     const help = doc.createElement('p'); help.id = 'settingsSaveScope';
     const save = doc.getElementById('saveSettings');
     if (save) { save.setAttribute('aria-describedby', help.id); saveBar.append(help, save); panels.models.append(saveBar); }
+    const doneBar = doc.createElement('div'); doneBar.className = 'settings-done-bar';
+    const done = doc.createElement('button'); done.type = 'button'; done.id = 'settingsDone'; done.className = 'primary';
+    const paintDone = () => { done.textContent = language() ? 'Done' : '完成'; };
+    paintDone(); doc.addEventListener('workstation-language-change', paintDone);
+    done.addEventListener('click', () => { if (done.disabled) return; done.disabled = true; Promise.resolve(hooks.finish?.()).catch(() => {}).finally(() => { done.disabled = false; }); });
+    doneBar.append(done); page.after(doneBar); // sibling of the scrolling page inside .main (a flex column): the page shrinks by the bar's height
     record = { page, nav, island, panels, selected, help, touched: false };
+    knowledgePointer(panels.knowledge);
     page.classList.add('settings-sectioned');
     groupCards();
     record.quickEntry = quickEntryCard(panels.appearance);
+    // Settings → Plugins (plugin-settings.js): built-in switches and external MCP servers.
+    record.plugins = root.AIBroPluginSettings?.mount(panels.plugins, { toast: message => hooks.toast?.(message) }) || null;
     function updateLanguage() {
       help.textContent = language()
-        ? 'Save API settings, permissions and usage prices here. Connection type, account model and workspace models apply immediately.'
-        : '在此保存 API 配置、权限与用量单价。连接方式、账号模型和工作区模型修改后立即生效。';
+        ? 'Permissions and usage prices are saved with this button. Providers and models apply as soon as you change them.'
+        : '权限和用量单价用这个按钮保存；供应商和模型的修改立即生效。';
     }
     updateLanguage(); doc.addEventListener('workstation-language-change', updateLanguage);
     // Existing modules may initialize later. Observe only their append targets,
@@ -160,6 +189,7 @@
     if (panel.parentElement.firstElementChild !== panel) panel.parentElement.prepend(panel);
     island.update({ selected: section });
     if (section === 'appearance') record.quickEntry?.refresh();
+    if (section === 'plugins') record.plugins?.reload();
     try { root.localStorage.setItem(KEY, section); } catch (_) {}
     if (!options.restore) {
       record.touched = true;

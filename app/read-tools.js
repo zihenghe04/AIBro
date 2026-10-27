@@ -4,8 +4,9 @@
 (function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;else root.ReadTools=api;})(globalThis,()=>{
   'use strict';
   const entries=[];
-  // match: a type, a list of types, or a prefix ending in '*'.
+  // match: a type, a list of types, a prefix ending in '*', or a predicate.
   function matcher(match){
+    if(typeof match==='function')return match;
     if(typeof match==='string'&&match.endsWith('*')){const prefix=match.slice(0,-1);return type=>type.startsWith(prefix);}
     const types=new Set([].concat(match));return type=>types.has(type);
   }
@@ -34,7 +35,10 @@
   register('task_list',(request,ctx)=>need(ctx,'TaskContext').readCatalog(ctx.getState(),ctx.conversation,request,ctx.run));
   register('read_file',(request,ctx)=>ctx.fileContext.read(request));
   register('terminal',(request,ctx,{entry})=>need(ctx,'TerminalTools').execute(request,ctx.getState(),ctx.run,{signal:ctx.signal,save:ctx.save,refresh:ctx.refresh,toolCallId:entry?.id}));
-  register('browser_*',(request,ctx,{approval})=>ctx.lookup('BrowserTools').execute(request,ctx.getState(),ctx.run,{signal:ctx.signal,save:ctx.save,refresh:ctx.refresh,approval}),{available:has('BrowserTools')});
+  // The browser plugin (plugin-browser.js) adds site permissions and the sign-in/CAPTCHA pause around BrowserTools.
+  register('browser_*',(request,ctx,{approval})=>{const plugin=ctx.lookup('AIBroBrowserPlugin');return plugin?.execute?plugin.execute(request,ctx,{approval}):ctx.lookup('BrowserTools').execute(request,ctx.getState(),ctx.run,{signal:ctx.signal,save:ctx.save,refresh:ctx.refresh,approval});},{available:has('BrowserTools')});
+  // External MCP plugin tools are named <pluginId>__<tool> (plugin-mcp.js); core names never contain '__'.
+  register(type=>type.includes('__'),(request,ctx,{approval})=>need(ctx,'AIBroMcpPlugins').execute(request,ctx,{approval}));
   // Hybrid retrieval answers only when semantic search is enabled; otherwise
   // the ordinary keyword reader below serves the same request.
   register('search',(request,ctx)=>ctx.lookup('VectorKnowledge').searchRequest(ctx.getState(),ctx.scope,request,ctx.signal),{available:has('VectorKnowledge'),optional:true});

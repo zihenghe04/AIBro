@@ -48,3 +48,15 @@ test('native ownerless idle/error and foreign global busy retire recording witho
   const f=fixture();await f.c.start();f.api.status=async()=>status;await f.c.poll();assert.equal(f.c.snapshot().active,false);assert.notEqual(f.c.snapshot().phase,'recording');assert.equal(f.c.snapshot().retryAvailable,false);await Promise.resolve();assert.equal(f.calls.at(-1)[1].nonce,'nonce-1');assert.equal(f.context.inputValue,'原草稿');f.c.destroy();
  }
 });
+test('live dictation: heard text shows while recording; an auto-stopped recording is transcribed without a click',async()=>{
+ const f=fixture();let lease;f.api.start=async l=>(lease=l,{status:'recording',...l});await f.c.start();
+ f.api.status=async()=>({phase:'recording',elapsed:2,liveText:'你好世',...lease});await f.c.poll();
+ assert.equal(f.c.snapshot().phase,'recording');assert.equal(f.c.snapshot().message,'你好世');assert.equal(f.applied.length,0);
+ f.api.status=async()=>({phase:'recorded',elapsed:3,autoStopped:true,liveText:'你好世界',...lease});await f.c.poll();await new Promise(r=>setTimeout(r,0));await new Promise(r=>setTimeout(r,0));
+ assert.equal(f.applied.length,1,'auto stop goes straight to transcription');assert.equal(f.context.inputValue,'原草稿\n识别文字');f.c.destroy();
+});
+test('a recording stopped by the user (not auto) still waits for the explicit finish',async()=>{
+ const f=fixture();let lease;f.api.start=async l=>(lease=l,{status:'recording',...l});await f.c.start();
+ f.api.status=async()=>({phase:'recorded',elapsed:3,...lease});await f.c.poll();await new Promise(r=>setTimeout(r,0));
+ assert.equal(f.c.snapshot().phase,'recorded');assert.equal(f.applied.length,0);f.c.destroy();
+});

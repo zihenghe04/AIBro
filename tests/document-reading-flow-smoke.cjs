@@ -61,7 +61,7 @@ async function finish(code) {
   server = spawn('python3', [path.join(ROOT, 'app/server.py')], { cwd: ROOT,
     env: { ...process.env, AI_WORKSTATION_PORT: String(port), AI_WORKSTATION_DATA_DIR: STORE, PYTHONDONTWRITEBYTECODE: '1' }, stdio: ['ignore', log, log] });
   await until(() => new Promise(resolve => http.get(origin + '/__health', response => { response.resume(); resolve(response.statusCode === 200); }).on('error', () => resolve(false))), 'server');
-  fs.mkdirSync(path.join(TEMP,'project')); fs.writeFileSync(path.join(TEMP,'project','local.md'),fs.readFileSync(path.join(ROOT,'test-results/document-reading-20260930/fixture.md'),'utf8').replace('IMAGE_REFERENCE','fixture.png'));
+  fs.mkdirSync(path.join(TEMP,'project')); fs.writeFileSync(path.join(TEMP,'project','local.md'),fs.readFileSync(path.join(ROOT,'tests/fixtures/document-reading-fixture.md'),'utf8').replace('IMAGE_REFERENCE','fixture.png'));
   await app.whenReady();
   win = new BrowserWindow({ show: false, width: 1500, height: 980, webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false } });
   win.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (request, callback) => {
@@ -73,7 +73,7 @@ async function finish(code) {
   win.webContents.on('console-message', event => { if (event.level === 'error') { rendererErrors.push(event.message); console.error('RENDERER', event.message); } });
   await win.loadURL(origin);
   await until(() => evaluate('typeof storageHydrated!=="undefined"&&storageHydrated'), 'hydrate');
-  await evaluate(fs.readFileSync(path.join(ROOT, 'test-results/document-reading-20260930/fixture-client.js'), 'utf8'));
+  await evaluate(fs.readFileSync(path.join(ROOT, 'tests/fixtures/document-reading-fixture-client.js'), 'utf8'));
   await until(() => evaluate('window.__documentReadingFixtureReady'), 'fixture ready'); await settle();
 
 

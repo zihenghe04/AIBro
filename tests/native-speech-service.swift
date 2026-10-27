@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import Network
 func nativeUI(_ zh:String,_ en:String)->String{en}
 enum AgendaError:LocalizedError{case message(String);var errorDescription:String?{if case .message(let s)=self{return s};return nil}}
 
@@ -31,6 +32,39 @@ actor SpeechSecretFixture {
     nonisolated var access:NativeSpeechSecretAccess{.init(load:{await self.load()},read:{try await self.read($0)},save:{await self.save($0,$1)},remove:{await self.remove()})}
 }
 
+
+/// Real loopback HTTP server (Network.framework) so the self-hosted client runs the same code path as the app, with no external network.
+final class LoopbackServer:@unchecked Sendable {
+    let listener=try! NWListener(using:.tcp,on:.any);let queue=DispatchQueue(label:"loopback")
+    let lock=NSLock();var seen:[String]=[],bodies:[Data]=[]
+    var handler:(String,String)->Data={_,_ in Data("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".utf8)}
+    var port:UInt16{listener.port?.rawValue ?? 0}
+    func start()async{
+        listener.newConnectionHandler={[unowned self] c in self.serve(c)}
+        await withCheckedContinuation{(k:CheckedContinuation<Void,Never>) in var done=false;listener.stateUpdateHandler={if case .ready=$0,!done{done=true;k.resume()}};listener.start(queue:queue)}
+    }
+    func serve(_ c:NWConnection){
+        c.start(queue:queue);var data=Data()
+        func more(){c.receive(minimumIncompleteLength:1,maximumLength:65536){[unowned self] d,_,_,e in
+            if let d{data.append(d)}
+            if let r=data.range(of:Data("\r\n\r\n".utf8)){
+                let head=String(decoding:data[..<r.lowerBound],as:UTF8.self),length=head.lowercased().components(separatedBy:"content-length: ").dropFirst().first.flatMap{Int($0.prefix{$0.isNumber})} ?? 0
+                if data.count-r.upperBound>=length{
+                    let line=head.components(separatedBy:"\r\n")[0].split(separator:" ");self.lock.lock();self.seen.append(line[0]+" "+line[1]+(head.lowercased().contains("authorization: bearer") ? " auth":""));self.bodies.append(Data(data[r.upperBound...]));self.lock.unlock()
+                    c.send(content:self.handler(String(line[0]),String(line[1])),completion:.contentProcessed{_ in c.cancel()});return
+                }
+            }
+            if e==nil{more()}else{c.cancel()}
+        }}
+        more()
+    }
+}
+func http(_ status:Int,_ body:String,chunked:Bool=false)->Data {
+    if chunked{let a=String(body.prefix(5)),b=String(body.dropFirst(5));return Data("HTTP/1.1 \(status) X\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n\(String(a.utf8.count,radix:16))\r\n\(a)\r\n\(String(b.utf8.count,radix:16))\r\n\(b)\r\n0\r\n\r\n".utf8)}
+    return Data("HTTP/1.1 \(status) X\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)".utf8)
+}
+
+final class KeyBox:@unchecked Sendable{var value=""}
 @main struct SpeechTests {
     @MainActor static var checks=0
     @MainActor static func check(_ value:Bool,_ label:String){precondition(value,label);checks+=1;print("PASS \(checks): \(label)")}
@@ -54,6 +88,70 @@ actor SpeechSecretFixture {
         check(open.endpoint?.path=="/v1/audio/transcriptions","OpenAI appends the audio endpoint to the user's selected base")
         open.baseURL="https://example.invalid/v1/audio/transcriptions";check(open.endpoint?.path=="/v1/audio/transcriptions","OpenAI complete endpoint is not appended twice")
         var unchangedProvider=config;unchangedProvider.provider = .openAI;check(unchangedProvider.credentialScope != sameScope,"credential scope includes protocol, not only network origin")
+        var eleven=NativeSpeechConfiguration();eleven.provider = .elevenLabs;eleven.baseURL=NativeSpeechConfiguration.elevenLabsBase;eleven.model=NativeSpeechConfiguration.elevenLabsModel
+        check(eleven.valid && eleven.endpoint?.absoluteString=="https://api.elevenlabs.io/v1/speech-to-text","ElevenLabs default resolves to the official speech-to-text endpoint")
+        eleven.baseURL="https://api.elevenlabs.io/v1";check(eleven.endpoint?.absoluteString=="https://api.elevenlabs.io/v1/speech-to-text","ElevenLabs /v1 base resolves to the same endpoint")
+        eleven.baseURL="https://api.elevenlabs.io/v1/text-to-speech/abc";check(eleven.endpoint==nil && !eleven.valid,"a text-to-speech path is rejected for speech-to-text")
+        eleven.baseURL=NativeSpeechConfiguration.elevenLabsBase;eleven.language="en"
+        let elevenRequest=try NativeSpeechService.request(wav:SpeechTests.wav(seconds:0.2),configuration:eleven,key:"synthetic-eleven-key")
+        let elevenBody=String(decoding:elevenRequest.httpBody ?? Data(),as:UTF8.self)
+        check(elevenRequest.value(forHTTPHeaderField:"xi-api-key")=="synthetic-eleven-key" && elevenRequest.value(forHTTPHeaderField:"Authorization")==nil,"ElevenLabs authenticates with xi-api-key, not a bearer token")
+        check(elevenBody.contains("name=\"model_id\"\r\n\r\nscribe_v2") && elevenBody.contains("name=\"language_code\"\r\n\r\nen") && elevenBody.contains("name=\"file\"") && !elevenBody.contains("response_format"),"ElevenLabs multipart carries model_id, language_code and file only")
+        check(try NativeSpeechService.transcript(Data("{\"language_code\":\"en\",\"text\":\"hello there\",\"words\":[]}".utf8),provider:.elevenLabs)=="hello there","ElevenLabs top-level text is the transcript")
+        await rejects("ElevenLabs error detail is not a transcript",.invalidResponse){_=try NativeSpeechService.transcript(Data("{\"detail\":{\"status\":\"invalid_api_key\"},\"text\":\"x\"}".utf8),provider:.elevenLabs)}
+        let seen=KeyBox()
+        try await NativeSpeechService.testConnection(configuration:eleven,key:"synthetic-eleven-key",transport:{request in seen.value=request.value(forHTTPHeaderField:"xi-api-key") ?? "";return .init(status:200,body:Data("{\"text\":\"\"}".utf8))})
+        check(seen.value=="synthetic-eleven-key","ElevenLabs connection test uses the mocked transport only")
+        var elevenExportConfig=eleven;elevenExportConfig.language=""
+        check(elevenExportConfig.credentialScope != config.credentialScope && elevenExportConfig.credentialScope?.hasPrefix("elevenLabs|") == true,"ElevenLabs credential scope is its own")
+        // Self-hosted OpenAI-compatible service (placeholder addresses only).
+        var own=NativeSpeechConfiguration();own.provider = .selfHosted;own.baseURL="http://192.0.2.10:8000/v1";own.model="Qwen3-ASR-1.7B";own.language="auto"
+        check(own.valid && own.endpoint?.absoluteString=="http://192.0.2.10:8000/v1/audio/transcriptions","self-hosted accepts plain http for an IP address and appends the audio endpoint")
+        for ok in ["http://asr-box:8000/v1","http://nas.local:8000/v1","https://asr.example.com/v1","http://[::1]:8000/v1","http://asr.example.com:8000/v1"]{var c=own;c.baseURL=ok;check(c.valid,"self-hosted accepts \(ok)")}
+        for bad in ["http://192.0.2.10:8000/v1?x=1","ftp://192.0.2.10/v1","http://user:pw@192.0.2.10/v1"]{var c=own;c.baseURL=bad;check(!c.valid,"self-hosted rejects \(bad)")}
+        var plainOpenAI=own;plainOpenAI.provider = .openAI;check(!plainOpenAI.valid,"the OpenAI-compatible protocol stays https only")
+        var plainAli=own;plainAli.provider = .aliyun;check(!plainAli.valid,"Alibaba stays https only")
+        let ownRequest=try NativeSpeechService.request(wav:SpeechTests.wav(seconds:0.2),configuration:own,key:"synthetic-own-key")
+        let ownBody=String(decoding:ownRequest.httpBody ?? Data(),as:UTF8.self)
+        check(ownRequest.value(forHTTPHeaderField:"Authorization")=="Bearer synthetic-own-key" && ownBody.contains("name=\"model\"\r\n\r\nQwen3-ASR-1.7B") && !ownBody.contains("name=\"language\""),"self-hosted sends bearer + model and omits language for auto")
+        check(ownRequest.timeoutInterval==180,"self-hosted default timeout covers long recordings")
+        own.language="zh";own.timeoutSeconds=600
+        let ownZh=try NativeSpeechService.request(wav:SpeechTests.wav(seconds:0.2),configuration:own,key:"synthetic-own-key")
+        check(String(decoding:ownZh.httpBody ?? Data(),as:UTF8.self).contains("name=\"language\"\r\n\r\nzh") && ownZh.timeoutInterval==600,"self-hosted sends zh and honors the configured timeout")
+        own.timeoutSeconds=5;check(own.deadline==30,"timeout is clamped to a sane minimum");own.timeoutSeconds=nil
+        check((try JSONDecoder().decode(NativeSpeechConfiguration.self,from:Data("{\"provider\":\"openAI\",\"baseURL\":\"https://example.invalid/v1\",\"model\":\"m\",\"language\":\"\"}".utf8))).timeoutSeconds==nil,"older saved schemes without a timeout still decode")
+        let calls=KeyBox()
+        try await NativeSpeechService.testConnection(configuration:own,key:"synthetic-own-key",transport:{request in
+            calls.value+=(request.httpMethod ?? "")+" "+(request.url?.path ?? "")+" auth="+(request.value(forHTTPHeaderField:"Authorization") == nil ? "no":"yes")+";"
+            return request.url?.path=="/health" ? .init(status:200,body:Data("{\"ready\":true,\"loading\":false}".utf8)):.init(status:200,body:Data("{\"data\":[]}".utf8))})
+        check(calls.value=="GET /health auth=no;GET /v1/models auth=yes;","self-hosted test checks /health without credentials, then /v1/models with the Key, and sends no audio")
+        await rejects("a loading model reported by /health is shown as loading",.modelLoading){try await NativeSpeechService.testConnection(configuration:own,key:"k",transport:{_ in .init(status:200,body:Data("{\"ready\":false,\"loading\":true}".utf8))})}
+        await rejects("503 from the transcription endpoint means the model is loading",.modelLoading){try await NativeSpeechService.testConnection(configuration:own,key:"k",transport:{request in request.url?.path=="/health" ? .init(status:404,body:Data()):.init(status:503,body:Data("{\"error\":{\"message\":\"loading\"}}".utf8))})}
+        do{try await NativeSpeechService.testConnection(configuration:own,key:"synthetic-secret-key",transport:{request in request.url?.path=="/health" ? .init(status:200,body:Data("{\"ready\":true}".utf8)):.init(status:401,body:Data())});preconditionFailure("401")}
+        catch{let text=error.localizedDescription;check(text.contains("401") && text.contains("/v1/models") && !text.contains("synthetic-secret-key") && !text.contains("recording"),"a wrong token names the status and path, never the Key, and does not talk about a recording")}
+        do{try await NativeSpeechService.testConnection(configuration:own,key:"k",transport:{request in request.url?.path=="/health" ? .init(status:200,body:Data("{\"ready\":true}".utf8)):.init(status:404,body:Data())});preconditionFailure("404")}
+        catch{check(error.localizedDescription.contains("404") && error.localizedDescription.contains("/v1"),"a 404 on /v1/models points at the base URL path")}
+        do{try await NativeSpeechService.testConnection(configuration:own,key:"k",transport:{_ in throw NativeSpeechError.network});preconditionFailure("net")}
+        catch{check(error.localizedDescription.contains("/health") && !error.localizedDescription.contains("recording"),"a connection failure names the first request and not the recording")}
+        // Real sockets: the self-hosted client over Network.framework against a loopback server.
+        let server=LoopbackServer();await server.start()
+        var local=NativeSpeechConfiguration();local.provider = .selfHosted;local.baseURL="http://127.0.0.1:\(server.port)/v1";local.model="Qwen3-ASR-1.7B";local.language="auto"
+        server.handler={method,path in path=="/health" ? http(200,"{\"ready\":true,\"loading\":false}"):path=="/v1/models" ? http(200,"{\"data\":[]}"):path=="/v1/audio/transcriptions" ? http(200,"{\"text\":\"本地回环\"}",chunked:true):http(404,"{}")}
+        try await NativeSpeechService.testConnection(configuration:local,key:"synthetic-key")
+        check(server.seen==["GET /health","GET /v1/models auth"],"real sockets: /health goes out without credentials, /v1/models with the Key, and base /v1 is not doubled")
+        let localFile=root.appendingPathComponent("local.wav");try wav(seconds:0.3).write(to:localFile)
+        check(try await NativeSpeechService.transcribe(fileURL:localFile,configuration:local,key:"synthetic-key")=="本地回环","real sockets: multipart POST goes out and a chunked JSON response is decoded")
+        check(server.bodies.last.map{$0.count>9000 && String(decoding:$0.prefix(60),as:UTF8.self).contains("--AIBroSpeech")} == true,"the multipart body arrives complete")
+        server.handler={_,_ in http(503,"{\"error\":{\"message\":\"loading\"}}")}
+        await rejects("real sockets: 503 reads as loading",.modelLoading){try await NativeSpeechService.testConnection(configuration:local,key:"k")}
+        let closedPort=server.port;server.listener.cancel();try? await Task.sleep(nanoseconds:200_000_000)
+        var refused=local;refused.baseURL="http://127.0.0.1:\(closedPort)/v1"
+        do{try await NativeSpeechService.testConnection(configuration:refused,key:"k");preconditionFailure("refused")}
+        catch{check(error.localizedDescription.contains("refused") && error.localizedDescription.contains("/health"),"real sockets: a closed port reads as connection refused and names /health")}
+        let ownFile=root.appendingPathComponent("own.wav");try wav(seconds:0.3).write(to:ownFile)
+        await rejects("transcription 503 is the loading message",.modelLoading){_=try await NativeSpeechService.transcribe(fileURL:ownFile,configuration:own,key:"k",transport:{_ in .init(status:503,body:Data())})}
+        check(try await NativeSpeechService.transcribe(fileURL:ownFile,configuration:own,key:"k",transport:{_ in .init(status:200,body:Data("{\"text\":\"你好\"}".utf8))})=="你好","self-hosted {text} response is the transcript")
+        check(own.credentialScope?.hasPrefix("selfHosted|http://") == true,"self-hosted credential scope is its own")
         config = .init();let short=root.appendingPathComponent("synthetic.wav");let original=wav(seconds:1,sampleRate:48000);try original.write(to:short)
         let normalized=try await Task.detached{try NativeSpeechService.normalize(fileURL:short,provider:.aliyun)}.value
         check(normalized.prefix(4)==Data("RIFF".utf8) && normalized[22]==1 && normalized[24]==128 && normalized[25]==62 && normalized[34]==16,"synthetic 48k WAV is normalized to 16k mono PCM16")
