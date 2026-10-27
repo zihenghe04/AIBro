@@ -238,77 +238,113 @@ function heroChapter(win) {
   };
 }
 
-// ---- agenda: one sentence to a draft, then the calendar ----
+// ---- agenda: one sentence in chat → proposal → Agenda center ----
 function agendaChapter(win) {
+  // Real flow in 0.9.10: say it in chat → an agenda proposal card → review → saved → open it in the Agenda center.
   const run = runner(win);
   const scr = h('<section class="scr" data-s="agenda"></section>');
   $('.w-body', win).append(scr);
-  let touched = false;
-  const days = () => L() === 'en' ? ['Mon 26', 'Tue 27', 'Wed 28', 'Thu 29', 'Fri 30'] : ['周一 26', '周二 27', '周三 28', '周四 29', '周五 30'];
-  const ev = (d, start, end, cls, t, s) => ({ d, start, end, cls, t, s });
-  const EVENTS = () => [
-    ev(0, 10, 11.67, 'b2', T('机器学习 第5讲', 'ML lecture 5'), T('10:00 · 教学楼 204', '10:00 · Room 204')),
-    ev(1, 14, 15, '', T('导师 1 对 1', '1:1 with advisor'), '14:00'),
-    ev(2, 9, 10, '', T('读论文小组', 'Paper reading group'), '09:00'),
-    ev(3, 13.5, 15.5, 'b3', T('实验课', 'Lab session'), T('13:30 · 实验楼', '13:30 · Lab')),
-    ev(4, 10, 11, 'b2', T('交作业 3', 'Homework 3 due'), '10:00')
-  ];
-  const top = hr => ((hr - 9) * 52 + 1) + 'px', ht = (a, b) => ((b - a) * 52 - 3) + 'px';
+  let touched = false, phase = 'chat', ctrl;
   const SENT = () => T('周五下午三点组会，提前半小时提醒我', 'Group meeting Friday 3pm, remind me 30 minutes before');
-  function render() {
-    run.cancel();
-    const cols = days().map((d, i) => `<div class="col" data-d="${i}"><div class="hd${i === 1 ? ' today' : ''}">${d}</div>${EVENTS().filter(e => e.d === i).map(e => `<div class="ev ${e.cls}" style="top:${parseFloat(top(e.start)) + 34}px;height:${ht(e.start, e.end)}">${esc(e.t)}<small>${esc(e.s)}</small></div>`).join('')}</div>`).join('');
-    const hrs = [9, 10, 11, 12, 13, 14, 15, 16].map(x => `<div>${x}:00</div>`).join('');
-    scr.innerHTML = `<div class="page">
+  const WEEK = () => [
+    [T('周一', 'Mon'), 26, [T('提交观察记录', 'Hand in field notes')]],
+    [T('周二', 'Tue'), 27, [T('读《检索增强》并写摘要', 'Read the RAG paper, write a summary'), T('课程小组讨论', 'Course study group')]],
+    [T('周三', 'Wed'), 28, [T('整理本周文献', 'Sort this week’s papers'), T('机器学习 第5讲', 'ML lecture 5')]],
+    [T('周四', 'Thu'), 29, []],
+    [T('周五', 'Fri'), 30, [T('交作业 3', 'Homework 3 due')]],
+    [T('周六', 'Sat'), 31, []],
+    [T('周日', 'Sun'), 1, [T('组会前复查实验', 'Recheck runs before meeting')]]
+  ];
+  function calHTML() {
+    return `<div class="page cal">
       <div class="ph"><h4>${T('日程', 'Agenda')}<small>${T('日程已与本机工作区对齐', 'In sync with this Mac’s workspace')}</small></h4><span class="b ghost">${ic('bell')}${T('提醒', 'Reminders')}</span><span class="b ghost">${T('导入', 'Import')}</span><span class="b">${ic('plus')}${T('新建日程', 'New event')}</span></div>
-      <div style="display:flex;align-items:center;gap:10px"><span class="seg"><span>${T('今日', 'Today')}</span><span class="on">${T('周', 'Week')}</span><span>${T('月', 'Month')}</span></span><span style="margin-left:auto;font-size:12px;font-weight:600">${T('2026 年 10 月 26 日 – 30 日', 'Oct 26 – 30, 2026')}</span></div>
-      <div class="nl" role="button" tabindex="0" aria-label="${T('一句话新建日程', 'New event from one sentence')}">${ic('spark')}<span class="in" data-ph="${T('一句话新建，例如：周五下午三点组会，提前半小时提醒我', 'One sentence, e.g. Group meeting Friday 3pm, remind me 30 min before')}"></span><button class="send" type="button" aria-label="${T('生成草稿', 'Draft it')}">${ic('send')}</button></div>
-      <div class="wk"><div class="hrs"><div class="hd"></div>${hrs}</div>${cols}<div class="grid"></div></div>
-      <div class="prop" role="dialog" aria-label="${T('日程草稿', 'Event draft')}"><h5>${T('日程草稿', 'Event draft')}</h5><p class="pnote">${T('请确认日期、时间和提醒；保存前不会安排通知。', 'Check the date, time and reminder. Notifications are scheduled only after saving.')}</p>
-        <dl><dt>${T('标题', 'Title')}</dt><dd>${T('组会', 'Group meeting')}</dd><dt>${T('时间', 'When')}</dt><dd>${T('10月30日 周五 15:00–16:00', 'Fri Oct 30, 15:00–16:00')}</dd><dt>${T('提醒', 'Remind')}</dt><dd>${T('提前 30 分钟', '30 minutes before')}</dd><dt>${T('类型', 'Type')}</dt><dd><span class="pill">${T('会议', 'Meeting')}</span></dd></dl>
-        <div class="acts"><button class="b" type="button" data-act="cancel">${T('取消', 'Cancel')}</button><button class="b pri" type="button" data-act="save">${T('保存', 'Save')}</button></div></div>
-      <div class="toast">${ic('check')}<span></span></div></div>`;
-    const nl = $('.nl', scr), inp = $('.in', nl);
-    nl.addEventListener('click', e => { if (e.target.closest('.send')) return; touched = true; fill(); });
-    $('.send', nl).addEventListener('click', e => { e.stopPropagation(); touched = true; submit(); });
-    $('[data-act=save]', scr).addEventListener('click', () => { touched = true; save(); });
-    $('[data-act=cancel]', scr).addEventListener('click', () => { touched = true; $('.prop', scr).classList.remove('on'); inp.textContent = ''; });
+      <div class="cal-bar"><span class="seg"><span>${T('今日', 'Today')}</span><span class="on">${T('周', 'Week')}</span><span>${T('月', 'Month')}</span></span><span class="sp"></span><b>‹ ${T('2026年10月27日', 'Oct 27, 2026')} ›</b><span>${T('今天', 'Today')}</span></div>
+      <div class="cal-bar"><span class="fld" style="font-family:inherit;width:150px">${T('全部安排', 'All items')}</span><span class="fld" style="font-family:inherit;flex:1;color:var(--muted)">${T('搜索日程', 'Search agenda')}</span></div>
+      <div class="wk7">${WEEK().map(([d, n, items], i) => `<div class="dcol"><span class="dn">${d}</span><div class="dcard${i === 1 ? ' pick' : ''}" data-i="${i}"><div class="dh"><b>${n}${T('日', '')}</b><small>${items.length || ''}</small></div>${items.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div></div>`).join('')}</div>
+      <div class="dlist"><div class="dlh"><b>${T('10月27日 周二', 'Tue, Oct 27')}</b><small>${T('2 项安排', '2 items')}</small></div>
+        <div class="drow"><b>16:00<small>${T('任务', 'Task')}</small></b><span>${T('读《检索增强》并写摘要', 'Read the RAG paper, write a summary')}<small>${T('科研', 'Research')}</small></span>${ic('chev')}</div>
+        <div class="now"><span>17:49</span><i></i></div></div></div>`;
   }
-  let filling = false;
+  function render() {
+    run.cancel(); phase = 'chat';
+    scr.innerHTML = `<div class="pane on" data-sub="chat"><div class="w-wash"></div><div class="chat">
+        <div class="crumb">${T('工作区', 'Workspace')} / ${T('日常', 'Daily')} / <b>${T('新对话', 'New chat')}</b></div>
+        <div class="chat-log"><div class="chat-col"></div></div>
+        <div class="composer"><div class="in" data-ph="${T('发消息，或添加文件与网页…', 'Message, or add files and pages…')}"></div>
+          <div class="bar">${ic('plus')}${ic('at')}<span style="display:flex;gap:5px;align-items:center">${ic('folder')}${T('日常', 'Daily')}${ic('chev')}</span><span class="sp"></span><span class="model">${ic('spark')}gpt-5.6-luna</span>${ic('mic')}<button class="send" type="button" aria-label="${T('发送', 'Send')}">${ic('send')}</button></div></div></div></div>
+      <div class="pane" data-sub="cal">${calHTML()}</div>`;
+    $('.send', scr).addEventListener('click', () => { touched = true; send(); });
+    $('.composer .in', scr).addEventListener('click', () => { touched = true; fill(); });
+    if (ctrl && ctrl.active) { setNav(win, 'chats'); setTitle(win, T('对话', 'Chat')); }
+  }
+  let filling = false, sent = false;
   async function fill() {
-    const inp = $('.nl .in', scr); if (filling || inp.textContent) return;
-    filling = true; $('.nl', scr).classList.add('focus');
+    const inp = $('.composer .in', scr); if (filling || inp.textContent) return;
+    filling = true; $('.composer', scr).classList.add('focus');
     for (const ch of SENT()) { inp.textContent += ch; await sleep(reduced() ? 0 : 40); }
     filling = false;
   }
-  async function submit() {
-    const inp = $('.nl .in', scr);
-    if (!inp.textContent) { await fill(); await sleep(250); }
-    $('.nl', scr).classList.remove('focus');
-    $('.prop', scr).classList.add('on');
+  async function send() {
+    if (sent) return; sent = true;
+    const inp = $('.composer .in', scr);
+    if (!inp.textContent) await fill();
+    await sleep(200);
+    inp.textContent = ''; $('.composer', scr).classList.remove('focus');
+    const log = $('.chat-col', scr);
+    log.append(h(`<div class="msg-u">${esc(SENT())}</div>`));
+    await sleep(500);
+    const a = h(`<div class="msg-a"><div class="who"><img src="${LOGO}" alt="">AI Bro · gpt-5.6-luna</div><p>${T('我按你的原话生成了一条日程提案，保存前请审阅。', 'I drafted an agenda proposal from your words. Review it before saving.')}</p></div>`);
+    log.append(a);
+    await sleep(500);
+    const card = h(`<div class="acard"><div class="ah">${ic('cal')}<b>${T('组会', 'Group meeting')}</b><span class="pill mute">${T('日程提案', 'Proposal')}</span></div>
+      <dl><dt>${T('时间', 'When')}</dt><dd>${T('10月30日 周五 15:00–16:00', 'Fri Oct 30, 15:00–16:00')}</dd><dt>${T('提醒', 'Remind')}</dt><dd>${T('提前 30 分钟', '30 minutes before')}</dd><dt>${T('归属', 'Project')}</dt><dd>${T('日常', 'Daily')}</dd></dl>
+      <p class="pnote">${T('结束时间未指定，默认时长1小时，请在保存前确认。', 'No end time given; it defaults to one hour. Confirm before saving.')}</p>
+      <div class="acts"><button class="b" type="button" data-a="regen">${T('重新生成', 'Regenerate')}</button><button class="b pri" type="button" data-a="save">${T('审阅日程', 'Review')}</button></div></div>`);
+    a.append(card);
+    $('[data-a=save]', card).addEventListener('click', () => { touched = true; save(card); });
   }
-  function save() {
-    $('.prop', scr).classList.remove('on');
-    $('.nl .in', scr).textContent = '';
-    if (!$('.ev.new', scr)) $('.col[data-d="4"]', scr).append(h(`<div class="ev new" style="top:${parseFloat(top(15)) + 34}px;height:${ht(15, 16)}">${T('组会', 'Group meeting')}<small>15:00 · ${T('提前 30 分钟提醒', 'reminder 30 min before')}</small></div>`));
-    const t = $('.toast', scr); $('span', t).textContent = T('已保存 · 周五 14:30 提醒你', 'Saved · reminder Fri 14:30'); t.classList.add('on');
-    setTimeout(() => t.classList.remove('on'), 2600);
+  let saved = false;
+  async function save(card) {
+    if (saved) return; saved = true;
+    const btn = $('[data-a=save]', card);
+    btn.textContent = T('保存', 'Save');
+    await sleep(reduced() ? 0 : 500);
+    $('.ah .pill', card).className = 'pill'; $('.ah .pill', card).textContent = T('已保存', 'Saved');
+    $('.acts', card).innerHTML = `<button class="b pri" type="button" data-a="open">${ic('cal')}${T('打开已保存日程', 'Open saved event')}</button>`;
+    $('[data-a=open]', card).addEventListener('click', () => { touched = true; openCal(); });
+  }
+  function openCal() {
+    if (phase === 'cal') return; phase = 'cal';
+    setNav(win, 'agenda'); setTitle(win, T('日程中心', 'Agenda'));
+    $('.pane[data-sub=chat]', scr).classList.remove('on');
+    const cal = $('.pane[data-sub=cal]', scr); cal.classList.add('on');
+    const fri = $('.dcard[data-i="4"]', cal);
+    setTimeout(() => {
+      $$('.dcard', cal).forEach(d => d.classList.remove('pick')); fri.classList.add('pick');
+      fri.append(h(`<span class="chip new">${T('组会', 'Group meeting')}</span>`)); $('.dh small', fri).textContent = '2';
+      $('.dlist', cal).innerHTML = `<div class="dlh"><b>${T('10月30日 周五', 'Fri, Oct 30')}</b><small>${T('2 项安排', '2 items')}</small></div>
+        <div class="drow"><b>10:00<small>${T('任务', 'Task')}</small></b><span>${T('交作业 3', 'Homework 3 due')}<small>${T('机器学习', 'Machine Learning')}</small></span>${ic('chev')}</div>
+        <div class="drow new"><b>15:00<small>${T('会议', 'Meeting')}</small></b><span>${T('组会', 'Group meeting')}<small>${T('日常 · 14:30 提醒', 'Daily · reminder 14:30')}</small></span>${ic('chev')}</div>`;
+    }, reduced() ? 0 : 450);
   }
   render();
-  return {
-    key: 'agenda', nav: 'agenda', title: () => T('日程中心', 'Agenda'), scr,
-    enter() {}, leave() { run.cancel(); },
+  ctrl = {
+    key: 'agenda', get nav() { return phase === 'cal' ? 'agenda' : 'chats'; }, title: () => phase === 'cal' ? T('日程中心', 'Agenda') : T('对话', 'Chat'), scr, active: false,
+    enter() { ctrl.active = true; },
+    leave() { ctrl.active = false; run.cancel(); },
     auto(force) {
       if (touched && !force) return; touched = false;
-      render();
-      run.play(async ({ step, to, click }) => {
-        await click($('.nl', scr), () => fill()); await step(SENT().length * 40 + 300);
-        await click($('.nl .send', scr), () => submit()); await step(900);
-        await click($('[data-act=save]', scr), () => save());
+      sent = false; saved = false; render();
+      run.play(async ({ step, click }) => {
+        await click($('.composer .in', scr), () => fill()); await step(SENT().length * 40 + 300);
+        await click($('.composer .send', scr), () => send()); await step(1700);
+        await click($('.acard [data-a=save]', scr)); await step(900);
+        await click($('.acard [data-a=open]', scr));
       });
     },
-    reset: render, get touched() { return touched; }
+    reset() { sent = false; saved = false; render(); }, get touched() { return touched; }
   };
+  return ctrl;
 }
 
 // ---- reader: select a passage, explain, jump back from the citation ----
@@ -588,12 +624,13 @@ function cmdkChapter(win) {
   const pal = h('<div class="pal" role="dialog"></div>');
   $('.w-main', win).append(pal);
   let touched = false, sel = 0, rows = [], active = false;
+  // [group, icon, [[title, subtitle, shortcut]], isCommand]
   const DATA = () => [
-    [T('对话', 'Chats'), 'chats', [T('梯度下降的学习率怎么选', 'Choosing a learning rate'), T('组会要讲的三件事', 'Three things for group meeting')]],
-    [T('笔记', 'Notes'), 'note', [T('检索增强生成（RAG）', 'Retrieval-augmented generation'), T('组会纪要 · 10月20日', 'Group meeting · Oct 20'), T('稠密检索', 'Dense retrieval')]],
-    [T('日程', 'Agenda'), 'cal', [T('组会 · 周五 15:00', 'Group meeting · Fri 15:00'), T('机器学习 第5讲 · 周一 10:00', 'ML lecture 5 · Mon 10:00')]],
-    [T('资料', 'Files'), 'doc', [T('第3讲-优化.pdf', 'Lecture3-Optimization.pdf'), T('论文B.pdf', 'PaperB.pdf')]],
-    [T('命令', 'Commands'), 'cmd', [T('新建对话', 'New chat'), T('新建日程', 'New event'), T('打开设置', 'Open settings'), T('切换深色', 'Toggle dark mode'), T('打开灵动岛', 'Open the island')], true]
+    [T('对话', 'Chats'), 'chats', [[T('梯度下降的学习率怎么选', 'Choosing a learning rate'), T('机器学习 · 今天', 'Machine Learning · today')], [T('组会要讲的三件事', 'Three things for group meeting'), T('日常 · 昨天', 'Daily · yesterday')]]],
+    [T('笔记', 'Notes'), 'note', [[T('检索增强生成（RAG）', 'Retrieval-augmented generation'), T('科研 · 知识库', 'Research · knowledge base')], [T('组会纪要 · 10月20日', 'Group meeting · Oct 20'), T('随记整理', 'From a quick note')], [T('稠密检索', 'Dense retrieval'), T('科研 · 知识库', 'Research · knowledge base')]]],
+    [T('日程', 'Agenda'), 'cal', [[T('组会 · 周五 15:00', 'Group meeting · Fri 15:00'), T('提前 30 分钟提醒', 'reminder 30 min before')], [T('机器学习 第5讲', 'ML lecture 5'), T('周三 10:00', 'Wed 10:00')]]],
+    [T('资料', 'Files'), 'doc', [[T('第3讲-优化.pdf', 'Lecture3-Optimization.pdf'), T('机器学习 · 28 页', 'Machine Learning · 28 pages')], [T('论文B.pdf', 'PaperB.pdf'), T('科研', 'Research')]]],
+    [T('命令', 'Commands'), 'cmd', [[T('新建对话', 'New chat'), T('开始一个新目标', 'Start a new goal'), '⌘N'], [T('新建项目', 'New project'), T('集中管理相关对话、资料和任务', 'Keep related chats, files and tasks together')], [T('新建任务', 'New task'), T('添加一项待办及截止日期', 'Add a to-do with a due date')], [T('打开当前项目', 'Open current project'), T('机器学习', 'Machine Learning')], [T('打开总览', 'Open overview'), ''], [T('打开日常空间', 'Open Daily space'), ''], [T('打开课程空间', 'Open Courses space'), ''], [T('打开科研空间', 'Open Research space'), '']], true]
   ];
   function renderChat() {
     scr.innerHTML = `<div class="w-wash"></div><div class="chat"><div class="crumb">${T('全部对话', 'All chats')} / <b>${T('梯度下降的学习率怎么选', 'Choosing a learning rate')}</b></div><div class="chat-log"><div class="chat-col">
@@ -621,21 +658,21 @@ function cmdkChapter(win) {
   function list() {
     const q = $('input', pal).value.trim(), cmd = q.startsWith('>'), qq = (cmd ? q.slice(1) : q).trim().toLowerCase();
     const res = $('.res', pal); rows = [];
-    let html = '';
+    let html = q ? '' : `<div class="hint">${T('选择常用命令，或输入关键词查找工作区内容；> 只搜索命令', 'Pick a command, or type to search the workspace; > searches commands only')}</div>`;
     for (const [g, icon, items, isCmd] of DATA()) {
       if (cmd && !isCmd) continue;
-      if (!q && isCmd) continue;
-      const hits = items.filter(t => !qq || t.toLowerCase().includes(qq)).slice(0, q ? 4 : 1);
+      if (!q && !isCmd) continue;
+      const hits = items.filter(([t, sub]) => !qq || (t + ' ' + sub).toLowerCase().includes(qq)).slice(0, q ? 4 : 8);
       if (!hits.length) continue;
-      html += `<div class="g">${esc(q ? g : T('最近', 'Recent') + ' · ' + g)}</div>`;
-      for (const t of hits) {
+      html += `<div class="g">${esc(g)}<span>${hits.length}</span></div>`;
+      for (const [t, sub, key] of hits) {
         const i = t.toLowerCase().indexOf(qq);
         const label = qq && i >= 0 ? esc(t.slice(0, i)) + '<mark>' + esc(t.slice(i, i + qq.length)) + '</mark>' + esc(t.slice(i + qq.length)) : esc(t);
-        html += `<div class="r" data-i="${rows.length}">${ic(icon)}<span>${label}</span><small>${esc(g)}</small></div>`;
+        html += `<div class="r" data-i="${rows.length}"><span class="ptile">${isCmd ? '›' : ic(icon)}</span><span class="tt">${label}${sub ? `<small>${esc(sub)}</small>` : ''}</span>${key ? `<kbd>${key}</kbd>` : ''}</div>`;
         rows.push(t);
       }
     }
-    res.innerHTML = html || `<div class="none">${T('没有找到。试试“组会”或“>”', 'Nothing found. Try “meeting” or “>”')}</div>`;
+    res.innerHTML = rows.length ? html : `<div class="none">${T('没有找到。试试“组会”或“>”', 'Nothing found. Try “meeting” or “>”')}</div>`;
     $$('.r', res).forEach(r => { r.addEventListener('mouseenter', () => { sel = +r.dataset.i; mark(); }); r.addEventListener('click', () => { touched = true; sel = +r.dataset.i; open(); }); });
     mark();
   }
@@ -761,19 +798,20 @@ function modelsChapter(win) {
       : `<label>${T('API 地址', 'API address')}</label><div class="fld">${esc(p.url)}</div><label>${T('密钥', 'Key')}</label><div class="fld">${p.fail ? T('（本机服务不需要）', '(not needed for a local service)') : '••••••••••••••••'}</div>`;
     return `<div class="pd-body"><div class="t"><span class="av">${p.id}</span><b>${esc(p.n)}</b><span class="pill ${p.tag[1]}">${esc(p.tag[0])}</span></div>${fields}
       <label>${T('默认模型', 'Default model')}</label><div class="fld">${esc(p.sub.includes('·') ? (p.models || [''])[0] : p.sub)}</div>
-      <div class="acts"><button class="b pri" type="button" data-a="test">${T('测试可用性', 'Test')}</button><span class="b">${T('重新检测', 'Re-check')}</span><span style="flex:1"></span><span class="b ghost" style="color:var(--red)">${T('从列表移除', 'Remove')}</span></div>
+      <div class="acts"><button class="b pri" type="button" data-a="test">${T('测试可用性', 'Test')}</button><span class="b">${T('重新检测', 'Re-check')}</span>${p.kind === 'acct' ? `<span class="b">${T('登录', 'Sign in')}</span>` : ''}<span style="flex:1"></span><span class="b ghost" style="color:var(--red)">${T('从列表移除', 'Remove')}</span></div>
       <div class="res" role="status"></div></div>`;
   }
   function render() {
     run.cancel(); cur = 0; testing = false;
     const ps = PROV();
     scr.innerHTML = `<div class="set"><div class="ph"><h4>${T('设置', 'Settings')}<small>${T('模型、同步、检索与界面偏好，各自清楚管理。', 'Models, sync, retrieval and interface, each in its place.')}</small></h4><span class="b ghost">${T('新手引导', 'Getting started')}</span></div>
-      <div class="set-nav"><span class="on">${T('模型与权限', 'Models & permissions')}</span><span>${T('服务器同步', 'Server sync')}</span><span>${T('知识库检索', 'Knowledge retrieval')}</span><span>${T('插件', 'Plugins')}</span><span>${T('界面偏好', 'Interface')}</span></div>
+      <div class="set-nav"><span class="on">${T('模型', 'Models')}</span><span>${T('服务器同步', 'Server sync')}</span><span>${T('知识库检索', 'Knowledge retrieval')}</span><span>${T('插件', 'Plugins')}</span><span>${T('界面偏好', 'Interface')}</span></div>
       <div class="card"><h5>${T('模型', 'Models')}</h5><p class="d">${T('选一个默认模型就能用；其余用途需要时再单独指定。密钥只保存在系统钥匙串里。', 'Pick one default model and you are set; assign others per purpose when needed. Keys live only in the system Keychain.')}</p>
-        <div style="display:flex;gap:8px;margin-bottom:12px"><span class="seg"><span class="on">${T('供应商', 'Providers')}</span><span>${T('嵌入', 'Embedding')}</span><span>${T('语音识别', 'Speech')}</span><span>${T('使用统计', 'Usage')}</span></span><span style="flex:1"></span><span class="b ghost">${T('从 CC Switch 导入', 'Import from CC Switch')}</span></div>
+        <div style="display:flex;gap:8px;margin-bottom:12px"><span class="seg"><span class="on">${T('文本生成', 'Text')}</span><span>${T('嵌入', 'Embedding')}</span><span>${T('语音识别', 'Speech')}</span><span>${T('使用统计', 'Usage')}</span></span><span style="flex:1"></span><span class="b ghost">${T('从 CC Switch 导入', 'Import from CC Switch')}</span></div>
         <div class="mrow"><div class="plist"><div class="h">${T('已启用 · 拖拽排序，首位为默认', 'Enabled · drag to reorder, first is default')}</div>
           ${ps.map((p, i) => `<button class="prov${i === 0 ? ' on' : ''}" type="button" data-i="${i}"><span class="av">${p.id}</span><span><b>${esc(p.n)}${p.tag[0] ? `<span class="pill ${p.tag[1]}">${esc(p.tag[0])}</span>` : ''}</b><small>${esc(p.sub)}</small></span></button>`).join('')}
-          <div style="font-size:12px;color:var(--accent);padding:8px">＋ ${T('添加供应商', 'Add provider')}</div></div>
+          <div style="font-size:12px;color:var(--accent);padding:8px">＋ ${T('添加供应商', 'Add provider')}</div>
+          <div class="uses"><div class="h">${T('用途', 'Purposes')}</div>${[[T('默认模型（问答）', 'Default (chat)'), 'gpt-5.6-luna'], [T('翻译', 'Translation'), T('跟随默认', 'Same as default')], [T('视觉', 'Vision'), T('跟随默认', 'Same as default')], [T('内核', 'Kernel'), T('跟随默认', 'Same as default')]].map(([a, b]) => `<div><b>${a}</b><small>${b}</small></div>`).join('')}</div></div>
           <div class="pd">${detail(ps[0])}</div></div></div></div>`;
     $$('.prov[data-i]', scr).forEach(b => b.addEventListener('click', () => { touched = true; pick(+b.dataset.i); }));
     bindTest();
