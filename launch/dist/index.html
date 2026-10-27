@@ -2,281 +2,170 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI Bro | Mac 上的学习与研究助理</title>
-<meta name="description" content="给学生和研究者用的 Mac 应用。读你的 PDF 和笔记，回答标出文件与页码，还能记日程、跑定时任务。资料放在本机，模型自己选。">
-<meta name="theme-color" content="#f6f8f5" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#101312" media="(prefers-color-scheme: dark)">
+<title>AI Bro | 读过你资料的 Mac 助手</title>
+<meta name="description" content="给学生和研究者用的 Mac 应用。读你的课件、论文和笔记，回答写明文件和页码；一句话建日程，按住灵动岛说话，计划任务到点自己跑。资料留在本机，模型自己选。">
+<meta name="theme-color" content="#f6f8f6" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0f1211" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="assets/v095/mark-128.png">
 <link rel="canonical" href="https://zihenghe04.github.io/AIBro/">
-<meta property="og:title" content="AI Bro | Mac 上的学习与研究助理">
-<meta property="og:description" content="打开 PDF，选中一段，直接问。回答带文件名和页码。">
+<meta property="og:title" content="AI Bro | 读过你资料的 Mac 助手">
+<meta property="og:description" content="选中论文里的一段，直接问。回答带文件名和页码。">
 <meta property="og:type" content="website"><meta property="og:image" content="https://zihenghe04.github.io/AIBro/assets/v095/og-overview.jpg">
-<link rel="stylesheet" href="style.css?v=0910-20261027"><script src="script.js?v=0910-20261027" defer></script>
+<link rel="stylesheet" href="style.css?v=v2-20261027"><link rel="stylesheet" href="app.css?v=v2-20261027">
+<script src="script.js?v=v2-20261027" defer></script><script src="demos.js?v=v2-20261027" defer></script>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<symbol id="i-new" viewBox="0 0 16 16"><path d="M8.5 2.5h-4a1.5 1.5 0 0 0-1.5 1.5v8A1.5 1.5 0 0 0 4.5 13.5h7A1.5 1.5 0 0 0 13 12V8M11.5 2l2.5 2.5-5 5H6.5V7z"/></symbol>
-<symbol id="i-grid" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></symbol>
-<symbol id="i-chat" viewBox="0 0 16 16"><path d="M3 3.5h8.5a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5H8L5 13v-2.5H3A1.5 1.5 0 0 1 1.5 9V5A1.5 1.5 0 0 1 3 3.5z"/></symbol>
-<symbol id="i-cal" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="10" rx="1.8"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></symbol>
-<symbol id="i-note" viewBox="0 0 16 16"><rect x="3" y="2.5" width="10" height="11" rx="1.8"/><path d="M5.5 6h5M5.5 8.5h5M5.5 11h3"/></symbol>
-<symbol id="i-folder" viewBox="0 0 16 16"><path d="M2 4.5A1.5 1.5 0 0 1 3.500 3h2.8l1.4 1.5h4.800A1.500 1.500 0 0 1 14 6v5.500a1.500 1.500 0 0 1-1.500 1.500h-9A1.500 1.500 0 0 1 2 11.500z"/></symbol>
-<symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.800v1.600M8 12.600v1.600M1.800 8h1.600M12.600 8h1.600M3.600 3.600l1.100 1.100M11.300 11.300l1.100 1.100M12.400 3.600l-1.100 1.100M4.700 11.300l-1.100 1.100"/></symbol>
-<symbol id="i-doc" viewBox="0 0 16 16"><path d="M4 2h5l3 3v8.500a.5.5 0 0 1-.5.5h-7.500a.5.5 0 0 1-.5-.5v-11A.5.5 0 0 1 4 2zM9 2v3h3"/></symbol>
-<symbol id="i-check" viewBox="0 0 16 16"><path d="M3.500 8.500l3 3 6-7"/></symbol>
-<symbol id="i-send" viewBox="0 0 16 16"><path d="M8 13V3.500M4 7l4-4 4 4"/></symbol>
-<symbol id="i-mic" viewBox="0 0 16 16"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3.500 8a4.500 4.500 0 0 0 9 0M8 12.500V14"/></symbol>
-<symbol id="i-plug" viewBox="0 0 16 16"><path d="M6 2v3M10 2v3M4.500 5h7v2.500a3.500 3.500 0 0 1-7 0zM8 11v3"/></symbol>
-<symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.500"/><path d="M8 5v3.200l2 1.300"/></symbol>
-<symbol id="i-flask" viewBox="0 0 16 16"><path d="M6 2h4M6.500 2v4.500L3 12.500A1 1 0 0 0 3.900 14h8.200a1 1 0 0 0 .9-1.500L9.500 6.500V2"/></symbol>
-<symbol id="i-book" viewBox="0 0 16 16"><path d="M3 3h3.500v10H3zM6.500 3H10v10H6.500zM10.500 4l3 .8-2 8.200-3-.8"/></symbol>
-<symbol id="i-chev" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
-</defs></svg>
-
 <a class="skip-link" href="#main" data-en="Skip to content">跳至内容</a>
-<header class="site-header" id="hdr"><div class="wrap nav">
-  <a class="brand" href="#top"><img src="assets/v095/mark-128.png" width="28" height="28" alt="">AI Bro</a>
-  <nav aria-label="主导航" data-en-aria="Main navigation"><a href="#pdf" data-en="Features">功能</a><a href="#log" data-en="Updates">更新</a><a href="#faq" data-en="FAQ">问答</a><a href="#download" data-en="Download">下载</a></nav>
+<header class="site-header" id="hdr"><div class="nav">
+  <a class="brand" href="#top"><img src="assets/v095/mark-128.png" width="26" height="26" alt="">AI Bro</a>
+  <nav aria-label="主导航" data-en-aria="Main navigation"><a href="#day" data-en="A day">一天</a><a href="#more" data-en="Details">细节</a><a href="#next" data-en="Planned">计划中</a><a href="#faq" data-en="FAQ">问答</a></nav>
   <button class="lang" id="lang" type="button" aria-label="EN，Switch to English">EN</button>
   <a class="btn pri sm" href="#download" data-en="Download">下载</a>
 </div></header>
 
 <main id="main">
-<section class="hero" id="top" style="padding-top:72px">
-  <div class="wrap">
-    <a class="tag" href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.10"><b data-en="0.9.10">0.9.10</b><span data-en="Mac developer preview">Mac 开发预览版</span><span aria-hidden="true">›</span></a>
-    <h1 data-en="Put in your lectures and papers.<br><em>Then just ask.</em>">把课件和论文放进来，<br><em>直接问。</em></h1>
-    <p class="lead" data-en="AI Bro is a Mac app for students and researchers. It reads your PDFs and notes and cites the file and page in every answer. It also keeps your agenda and runs scheduled tasks. Your files stay on your Mac, and you choose the model.">AI Bro 是一个 Mac 应用，给学生和做研究的人用。它读你的 PDF 和笔记，回答时标出文件名和页码，也帮你记日程、跑定时任务。资料放在你自己的电脑上，模型你自己选。</p>
-    <div class="cta-row">
-      <a class="btn pri" href="https://github.com/zihenghe04/AIBro/releases/download/v0.9.10/AI-Bro-0.9.10-macos-arm64-preview.dmg" data-en="Download for Mac (Apple Silicon)">下载 Mac 版（Apple Silicon）</a>
-      <a class="btn sec" href="#pdf" data-en="See how it works">看看怎么用</a>
+<section class="hero" id="top">
+  <div class="wrap hero-copy">
+    <p class="kicker rv"><img src="assets/v095/mark-128.png" width="18" height="18" alt=""><span data-en="Mac app for students and researchers">给学生和研究者的 Mac 应用</span></p>
+    <h1 class="rv" data-en="A Mac assistant<br><em>that has read your files.</em>">一个读过你资料的<br><em>Mac 助手。</em></h1>
+    <p class="lead rv" data-en="Put your lectures, papers and notes in and ask. Every answer names the file and page it came from. Your agenda, scheduled tasks and voice input live in the same app. Files stay on your Mac, and you choose the model.">课件、论文和笔记放进来，直接问。每个回答都写明出自哪个文件第几页。日程、计划任务和语音输入也在同一个应用里。资料留在你的 Mac 上，模型你自己选。</p>
+    <div class="cta-row rv">
+      <a class="btn pri" href="https://github.com/zihenghe04/AIBro/releases/download/v0.9.10/AI-Bro-0.9.10-macos-arm64-preview.dmg" data-dl data-en="Download for Mac">下载 Mac 版</a>
+      <a class="btn sec" href="#day" data-en="Walk through a day">看它怎么陪你过一天</a>
     </div>
-    <p class="fine" data-en="macOS 14 or later · developer preview, not notarized · AGPL-3.0">macOS 14 以上 · 开发预览版，未经 Apple 公证 · AGPL-3.0 开源</p>
+    <p class="fine rv" data-en="Apple Silicon · macOS 14 or later · developer preview · AGPL-3.0">Apple Silicon · macOS 14 以上 · 开发预览版 · AGPL-3.0 开源</p>
   </div>
-
-  <div class="wrap hero-stage">
-  <figure class="win scene" data-loop="16000" role="img" aria-label="AI Bro 对话界面：提问后，AI 先检索项目资料，再读取原件，最后给出带页码引用的回答。" data-en-aria="AI Bro conversation: after a question, AI searches the project, reads the original, then answers with page citations.">
-    <div class="bar"><i></i><i></i><i></i></div>
-    <div class="app">
-      <aside class="sb" aria-hidden="true">
-        <div class="me"><img src="assets/v095/mark-128.png" width="30" height="30" alt=""><div><b>AI Bro</b><small data-en="Knowledge and action, together">知识与行动，在一起</small></div></div>
-        <div class="new"><span style="display:flex;gap:8px;align-items:center"><svg class="i"><use href="#i-new"/></svg><span data-en="New chat">新对话</span></span><small>⌘N</small></div>
-        <a><svg class="i"><use href="#i-grid"/></svg><span data-en="Overview">总览</span></a>
-        <a class="on"><svg class="i"><use href="#i-chat"/></svg><span data-en="Conversations">对话</span></a>
-        <a><svg class="i"><use href="#i-cal"/></svg><span data-en="Agenda">日程</span></a>
-        <a><svg class="i"><use href="#i-note"/></svg><span data-en="Notes">随记</span></a>
-        <h6 data-en="Spaces">空间</h6>
-        <a><svg class="i"><use href="#i-book"/></svg><span data-en="Courses">课程</span></a>
-        <a><svg class="i"><use href="#i-flask"/></svg><span data-en="Research">科研</span></a>
-        <h6 data-en="Projects">项目</h6>
-        <a><svg class="i"><use href="#i-folder"/></svg><span data-en="Interaction Design">交互设计方法</span></a>
-        <a><svg class="i"><use href="#i-folder"/></svg><span data-en="Low-carbon Transport">城市低碳交通</span></a>
-      </aside>
-      <div class="main">
-        <div class="topline"><span data-en="Interaction Design · Lecture 1 review">交互设计方法 · 第一讲复习</span><small data-en="Local · ready">本地已就绪</small></div>
-        <div class="chat">
-          <div class="msg-u st" style="--d:.2s" data-en="Lecture 1 mentions observation. What are the steps, and how is it different from an interview?">第一讲讲到观察法，步骤是什么？它和访谈有什么区别？</div>
-          <div class="tl">
-            <div class="step done st" style="--d:1s"><b data-en="Searched the project">检索项目资料</b><span class="pill"><svg class="i"><use href="#i-doc"/></svg>Lecture 1 · From observation to prototype.pdf</span><span class="pill"><svg class="i"><use href="#i-note"/></svg>class-notes.md</span><span class="t">0.8s</span></div>
-            <div class="step done st" style="--d:2s"><b data-en="Read the original">读取原件</b><span data-en="Lecture 1, pages 3–4">第一讲 第 3–4 页</span><span class="t">1.4s</span></div>
-            <div class="step st" style="--d:3s"><b data-en="Thinking">思考</b><span data-en="Comparing the two methods’ settings and records">对照两种方法的场景与记录方式</span></div>
-          </div>
-          <div class="ans st" style="--d:4.2s">
-            <p data-en="Observation has four steps: set a question, pick a place, record as it happens, then review.<span class='cite'>1</span> An interview asks people to explain; observation watches what they actually do, so it suits behavior they would not think to mention.<span class='cite'>2</span>">观察法分四步：定问题、选场地、现场记录、事后复盘。<span class="cite">1</span>访谈是让人解释，观察是看人实际怎么做，所以更适合发现对方自己没想到要说的行为。<span class="cite">2</span></p>
-          </div>
-          <div class="st" style="--d:5s;display:flex;gap:8px;flex-wrap:wrap;font-size:12px"><span class="pill"><span class="cite" style="margin:0">1</span>Lecture 1 · p.3</span><span class="pill"><span class="cite" style="margin:0">2</span>class-notes.md · <span data-en="interview vs. observation">访谈与观察</span></span></div>
-        </div>
-        <div class="composer"><div class="ph" data-en="Ask about this project…">向这个项目提问…</div><div class="row"><span class="chip"><svg class="i"><use href="#i-folder"/></svg><span data-en="Interaction Design">交互设计方法</span></span><span class="chip" data-en="Demo provider · demo-model">示例供应商 · demo-model</span><span class="send"><svg class="i"><use href="#i-send"/></svg></span></div></div>
-      </div>
+  <div class="hero-stage" id="heroStage">
+    <div class="hero-tilt" id="heroTilt">
+      <div class="win-fit" data-win="hero" role="group" aria-label="可交互的 AI Bro 对话演示" data-en-aria="Interactive AI Bro chat demo"></div>
     </div>
-  </figure>
+    <p class="try rv" id="heroTry"><span class="dot"></span><span data-en="Try it: pick a question in the window, or press send. Answers are scripted, nothing leaves this page.">试试看：在窗口里点一个问题，或者直接按发送。回答是预先写好的，不会发出任何请求。</span></p>
   </div>
-  <p class="wrap note" style="margin-top:10px;text-align:center" data-en="Rebuilt from the app’s own styles. The material is fictional and the answer is a scripted example.">界面按应用自身样式重建，资料为虚构，回答为示例。</p>
 </section>
 
-<!-- PDF -->
-<section id="pdf"><div class="wrap feat">
-  <div class="copy">
-    <p class="eyebrow">PDF</p>
-    <h2 data-en="Open a PDF,<br>select a passage, ask.">打开 PDF，<br>选中一段，直接问。</h2>
-    <p class="sub" data-en="Chat and the document sit side by side. Select text to explain, translate, annotate or ask AI. The quote goes into the composer with its file name and page, so the answer can point back to the same place.">对话和文档并排打开。选中原文可以解释、翻译、批注，或者问 AI，引用会连同文件名和页码一起放进输入框，回答也能指回同一处。</p>
-    <ul>
-      <li data-en="“Ask about this page” in the toolbar, and box-select a chart, table or formula to ask about it">工具栏有「问这一页」，也能框选图表、表格或公式来问</li>
-      <li data-en="Open a citation and the quoted text is marked on the PDF page">打开引用时，被引用的文字会在 PDF 页面上标出来</li>
-      <li data-en="Explanations and translations can be saved as reading notes">解释和翻译可以存成阅读笔记</li>
-      <li data-en="Incognito mode does not send the selection">无痕模式不会发送选中的内容</li>
-    </ul>
-    <span class="ver" data-en="0.9.5 selection · 0.9.6 page and region questions">0.9.5 划词 · 0.9.6 问这一页与框选</span>
+<section class="day" id="day">
+  <div class="wrap day-head">
+    <p class="eyebrow rv" data-en="A day with AI Bro">一天</p>
+    <h2 class="rv" data-en="From the morning agenda<br>to the last paper at night.">从早上排日程，<br>到晚上读完最后一篇。</h2>
+    <p class="sub rv" data-en="Scroll and the window switches to what you would open at that hour. Every screen can be clicked.">往下滚，窗口会切到那个时间你会打开的页面。每一屏都能点。</p>
   </div>
-  <figure class="win scene" data-loop="12000" role="img" aria-label="左侧对话，右侧 PDF。选中一句原文后出现解释、翻译、批注、问 AI，点击问 AI，引用进入输入框。" data-en-aria="Chat on the left, a PDF on the right. A selected sentence shows Explain, Translate, Annotate and Ask AI; Ask AI puts the quote in the composer.">
-    <div class="bar"><i></i><i></i><i></i></div>
-    <div class="split">
-      <div class="main">
-        <div class="chat" style="justify-content:flex-end">
-          <div class="msg-u" data-en="Summarize the key points of Lecture 1.">帮我梳理第一讲的要点。</div>
-          <div class="ans"><p data-en="Lecture 1 covers observation, prototypes and review.<span class='cite'>1</span> Which part do you want to go through?">第一讲讲了观察、原型和复盘三块。<span class="cite">1</span>想先细看哪一块？</p></div>
-        </div>
-        <div class="composer"><div class="quote st" style="--d:3.6s"><small data-en="Lecture 1 · p.3">第一讲 · 第 3 页</small><span data-en="“Record what people do, not what they say they do.”">“记录对方做了什么，而不是对方说自己做了什么。”</span></div><div class="ph" data-en="Ask about this quote…">就这段引用提问…</div><div class="row"><span class="send"><svg class="i"><use href="#i-send"/></svg></span></div></div>
-      </div>
-      <div class="pdf">
-        <div class="tabs"><span class="tab"><svg class="i"><use href="#i-doc"/></svg><span data-en="Lecture 1 · From observation to prototype">第一讲·从观察到原型</span></span></div>
-        <div class="tools"><span class="chip" data-en="Ask about this page">问这一页</span><span class="chip" data-en="Box select">框选</span><span style="margin-left:auto" class="mono">3 / 18</span></div>
-        <div class="page">
-          <h5 data-en="2.3 Recording observations">2.3 记录观察</h5>
-          <span data-en="Notes should stay close to what happened on site. ">现场笔记要贴近发生的事。</span><span class="sel" style="--d:1.2s"><span class="selbar pop-in" style="--d:2.2s"><span data-en="Explain">解释</span><span data-en="Translate">翻译</span><span data-en="Annotate">批注</span><span class="go" data-en="Ask AI">问 AI</span></span><span data-en="Record what people do, not what they say they do.">记录对方做了什么，而不是对方说自己做了什么。</span></span><span data-en=" Interpretation can wait until the review, when you compare across sessions and look for patterns.">解释留到复盘时再做，那时可以跨几次观察对照，找重复出现的模式。</span>
-          <span class="no">3</span>
-        </div>
-      </div>
+  <div class="wrap story">
+    <div class="chs">
+      <article class="ch" data-ch="agenda">
+        <p class="time">08:30 · <span data-en="Agenda">日程</span></p>
+        <h3 data-en="Say it once,<br>it goes on the calendar.">一句话，<br>记进日程。</h3>
+        <p data-en="Type “Group meeting Friday 3pm, remind me 30 minutes before”. It lays out the title, time and reminder first. Nothing is scheduled until you press Save.">输入“周五下午三点组会，提前半小时提醒我”。它先把标题、时间和提醒列给你看，你点了保存才会真的安排。</p>
+        <p class="try"><span class="dot"></span><span data-en="Try it: press the arrow in the input box.">试试看：点输入框右边的箭头。</span></p>
+        <div class="m-win"></div>
+      </article>
+      <article class="ch" data-ch="read">
+        <p class="time">10:00 · <span data-en="Reading">阅读</span></p>
+        <h3 data-en="Select a passage.<br>Ask about it.">选中一段，<br>问它。</h3>
+        <p data-en="Papers and slides open next to the chat. Select text and a toolbar offers Explain, Annotate and Translate. Page numbers in the answer are links back to the exact line.">论文和课件在对话旁边并排打开。拖选一段文字，工具条里有解释、批注和翻译。回答里的页码能点，点了跳回原文那一行。</p>
+        <p class="try"><span class="dot"></span><span data-en="Try it: drag across the outlined sentence in the PDF.">试试看：在 PDF 上拖选虚线框住的那句话。</span></p>
+        <div class="m-win"></div>
+      </article>
+      <article class="ch" data-ch="wiki">
+        <p class="time">13:30 · <span data-en="Knowledge base">知识库</span></p>
+        <h3 data-en="Notes that link<br>to each other.">笔记之间，<br>点得过去。</h3>
+        <p data-en="Research notes are plain Markdown. Link one note to another and the link opens it; the breadcrumb takes you back. When you ask a question, AI Bro reads these notes too.">科研空间里的笔记是普通的 Markdown。链接到另一篇，点一下就打开，看完从面包屑退回来。你提问时，AI Bro 也会去读这些笔记。</p>
+        <p class="try"><span class="dot"></span><span data-en="Try it: click an underlined link in the note.">试试看：点笔记里带下划线的链接。</span></p>
+        <div class="m-win"></div>
+      </article>
+      <article class="ch" data-ch="island">
+        <p class="time">15:00 · <span data-en="Island">灵动岛</span></p>
+        <h3 data-en="Hold and talk,<br>without switching windows.">不切窗口，<br>按住就说。</h3>
+        <p data-en="The island sits at the top of the screen. Hold it and speak; words appear as you talk. Let go and it tidies them into one instruction, which goes to AI Bro only after you confirm. It can also just save a quick note.">灵动岛常驻在屏幕顶部。按住说话，字边说边出来；松开后整理成一条指令，你确认了才交给 AI Bro。也可以只记成一条随记。</p>
+        <p class="try"><span class="dot"></span><span data-en="Try it: press and hold the black island, or hold the space bar.">试试看：按住黑色的灵动岛，或者按住空格键。</span></p>
+        <div class="m-win"></div>
+      </article>
+      <article class="ch" data-ch="cmdk">
+        <p class="time">17:00 · ⌘K</p>
+        <h3 data-en="Looking for something?<br>Press ⌘K.">找东西，<br>按 ⌘K。</h3>
+        <p data-en="Search chats, projects, notes and files from one box. Type &gt; to see only commands. Arrow keys to move, Return to open.">对话、项目、笔记和资料在一个框里搜，输入 &gt; 只看命令。方向键选择，回车打开。</p>
+        <p class="try"><span class="dot"></span><span data-en="Try it: type in the search box, then use ↓ and Return.">试试看：在搜索框里打字，再按 ↓ 和回车。</span></p>
+        <div class="m-win"></div>
+      </article>
+      <article class="ch" data-ch="tasks">
+        <p class="time">21:00 · <span data-en="Scheduled tasks">计划任务</span></p>
+        <h3 data-en="It runs on time,<br>and stops to ask.">到点自己跑，<br>越界先问你。</h3>
+        <p data-en="Write recurring chores as scheduled tasks, like tidying last week’s meeting notes every Monday. Tasks are read-only by default. When one needs to write a file or use an outside tool, it pauses until you approve.">把每周要做的事写成计划任务，比如每周一早上整理上周的组会笔记。默认只读；要写文件或用外部工具时，它会停下来等你批准。</p>
+        <p class="try"><span class="dot"></span><span data-en="Try it: press “Run now”, then approve or reject.">试试看：点“立即运行”，然后批准或拒绝。</span></p>
+        <div class="m-win"></div>
+      </article>
+      <article class="ch" data-ch="models">
+        <p class="time"><span data-en="Any time · Settings">随时 · 设置</span></p>
+        <h3 data-en="You pick<br>the model.">模型，<br>你自己选。</h3>
+        <p data-en="Pick a provider card and paste a key, sign in with a ChatGPT account, or import what you already set up in CC Switch. “Test” only reads the model list and never sends a chat request.">选一张供应商卡片填入密钥，或者用 ChatGPT 账号登录，也能从 CC Switch 导入已有的配置。“测试可用性”只读取模型列表，不会发对话请求。</p>
+        <p class="try"><span class="dot"></span><span data-en="Try it: click a provider on the left, then “Test”.">试试看：点左边的供应商，再点“测试可用性”。</span></p>
+        <div class="m-win"></div>
+      </article>
     </div>
-  </figure>
-</div></section>
-
-<!-- island -->
-<section id="island"><div class="wrap feat rev">
-  <figure class="screen scene" data-loop="13000" role="img" aria-label="菜单栏下方的灵动岛正在录音，转写文字一个词一个词出现。" data-en-aria="The Dynamic Island under the menu bar is recording while the transcript appears word by word.">
-    <div class="menubar" aria-hidden="true"><b></b><span data-en="AI Bro">AI Bro</span><span style="opacity:.7" data-en="File">文件</span><span style="opacity:.7" data-en="Edit">编辑</span></div>
-    <div class="notch" aria-hidden="true">
-      <div class="isl-top"><span class="rec"></span><span data-en="Listening · real-time transcription">正在听 · 实时转写</span><span class="wave"><i style="--n:1"></i><i style="--n:2"></i><i style="--n:3"></i><i style="--n:4"></i><i style="--n:5"></i><i style="--n:6"></i><i style="--n:7"></i></span></div>
-      <div class="isl-text" data-words="帮我把下周三的组会提前到下午两点，再提醒我带上实验记录。" data-words-en="Move next Wednesday’s group meeting to 2 pm, and remind me to bring the lab notes."></div>
-      <div class="isl-foot"><span><span class="k">⏎</span> <span data-en="Confirm">确认</span></span><span><span class="k">esc</span> <span data-en="Cancel">取消</span></span><span style="margin-left:auto" data-en="Stops when you finish talking">说完自动结束</span></div>
-    </div>
-    <div class="desk" aria-hidden="true"><div></div><div></div><div></div></div>
-  </figure>
-  <div class="copy">
-    <p class="eyebrow" data-en="Dynamic Island">灵动岛</p>
-    <h2 data-en="Hold to talk,<br>and watch the words appear.">按住说话，<br>边说边出字。</h2>
-    <p class="sub" data-en="The island sits under the notch for quick captures: a to-do, an event, a note, a recording. Speech now has a single configuration in Settings, with real-time transcription and cloud transcription behind it.">灵动岛挂在刘海下面，用来快速记一件事：待办、日程、随记、录音。语音识别现在只有一份配置，在设置里管理，实时转写和云转写都走它。</p>
-    <ul>
-      <li data-en="Text streams in while you speak and stops after you finish. If real-time fails, it falls back to cloud transcription">边说边出字，说完自动结束；实时失败时回退到云转写</li>
-      <li data-en="Supports ElevenLabs Scribe and your own OpenAI-compatible service, including plain http/ws addresses">支持 ElevenLabs Scribe，也支持自部署的 OpenAI 兼容服务，包括 http/ws 明文地址</li>
-      <li data-en="Holding the key is never cut off by silence. Keys are write-only in Settings">按住说话不会被静音打断；密钥在设置里只写不读</li>
-    </ul>
-    <span class="ver" data-en="0.9.10 unified speech settings">0.9.10 语音识别合并配置</span>
-  </div>
-</div></section>
-
-<!-- models -->
-<section id="models"><div class="wrap feat">
-  <div class="copy">
-    <p class="eyebrow" data-en="Models">模型</p>
-    <h2 data-en="Pick a provider card,<br>paste a key, done.">选一张供应商卡片，<br>填密钥就能用。</h2>
-    <p class="sub" data-en="Settings → Models is split into text generation, embeddings, speech recognition and usage. The preset already has the address, protocol and model list. In a conversation, the model picker is grouped by provider and searchable.">设置里的「模型」分成文本生成、嵌入、语音识别和使用统计。预设卡片已经带好地址、协议和模型清单。对话里的模型选择器按供应商分组，可以搜索。</p>
-    <ul>
-      <li data-en="Import providers from CC Switch. Ones missing a key are marked “Key needed”">能从 CC Switch 导入供应商，缺密钥的会标「待补密钥」</li>
-      <li data-en="Sign in with a ChatGPT account (OAuth). The token lives in the macOS Keychain">可以用 ChatGPT 账号登录，令牌存在 macOS 钥匙串里</li>
-      <li data-en="Translation, vision and the background kernel can each use their own model">翻译、视觉、后台内核可以各指定一个模型</li>
-      <li data-en="A usage page with counts, tokens and estimated cost">使用统计页：次数、用量、估算费用</li>
-    </ul>
-    <span class="ver" data-en="0.9.8 model list · 0.9.10 rebuilt settings">0.9.8 模型列表 · 0.9.10 设置重做</span>
-  </div>
-  <figure class="win" role="img" aria-label="设置里的模型页：顶部分段，左边供应商列表，右边详情。" data-en-aria="The Models page in Settings: segments on top, providers on the left, details on the right.">
-    <div class="bar"><i></i><i></i><i></i><span data-en="Settings">设置</span></div>
-    <div class="set">
-      <nav aria-hidden="true"><span data-en="General">通用</span><span class="on" data-en="Models">模型</span><span data-en="Plugins">插件</span><span data-en="Scheduled tasks">计划任务</span><span data-en="Permissions">自动化权限</span><span data-en="Appearance">外观</span></nav>
-      <div class="pane">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h4 data-en="Models">模型</h4><div class="seg"><span class="on" data-en="Text">文本生成</span><span data-en="Embedding">嵌入</span><span data-en="Speech">语音识别</span><span data-en="Usage">使用统计</span></div></div>
-        <div class="prov">
-          <div class="plist" aria-hidden="true">
-            <div class="on"><span class="lg" style="background:#087f70">D</span><span>DeepSeek<small data-en="3 models">3 个模型</small></span></div>
-            <div><span class="lg" style="background:#5b7fa6">O</span><span data-en="OpenAI-compatible">OpenAI 兼容<small data-en="Key needed">待补密钥</small></span></div>
-            <div><span class="lg" style="background:#8a6fb0">C</span><span data-en="ChatGPT account">ChatGPT 账号<small data-en="Signed in">已登录</small></span></div>
-            <div><span class="lg" style="background:#b0803a">+</span><span data-en="Add provider">添加供应商</span></div>
-          </div>
-          <div class="card detail" aria-hidden="true">
-            <div class="fld"><small data-en="Base URL">接口地址</small><div class="inp">https://api.deepseek.com<span class="badge" data-en="Preset">预设</span></div></div>
-            <div class="fld"><small data-en="API key">密钥</small><div class="inp"><span class="mono">••••••••••••••••</span><span class="badge" data-en="Saved">已保存</span></div></div>
-            <div><div class="mrow"><span class="mono">deepseek-chat</span><span class="badge" data-en="Default">默认</span></div><div class="mrow"><span class="mono">deepseek-reasoner</span><span class="dim" data-en="Thinking: high">思考：高</span></div></div>
-            <div style="display:flex;gap:8px"><span class="mini" data-en="Test connection">测试连接</span><span class="mini p" data-en="Done">完成</span></div>
-          </div>
-        </div>
+    <div class="stage">
+      <div class="stage-in">
+        <div class="win-fit" data-win="stage" role="group" aria-label="随章节切换的 AI Bro 窗口" data-en-aria="AI Bro window that follows the chapters"></div>
+        <div class="stage-rail" aria-hidden="true"></div>
       </div>
     </div>
-  </figure>
-</div>
+  </div>
 </section>
 
-<!-- scheduled -->
-<section id="tasks"><div class="wrap feat rev">
-  <figure class="win scene" data-loop="12000" role="img" aria-label="计划任务列表，其中一个自动任务因超出声明范围而暂停，等待批准。" data-en-aria="A scheduled task list where one automatic task paused for approval because a step went outside its declared scope.">
-    <div class="bar"><i></i><i></i><i></i><span data-en="Scheduled tasks">计划任务</span></div>
-    <div style="padding:14px 16px 0"><div class="seg"><span data-en="Reminders">人工提醒</span><span class="on" data-en="Automatic">自动任务</span></div></div>
-    <div class="list">
-      <div class="item"><span class="ic"><svg class="i"><use href="#i-clock"/></svg></span><div><b data-en="Weekly reading digest">每周文献摘要</b><small data-en="Fri 18:00 · read-only · last run succeeded">周五 18:00 · 只读 · 上次已完成</small></div><span class="badge" data-en="On">已启用</span></div>
-      <div class="item"><span class="ic"><svg class="i"><use href="#i-clock"/></svg></span><div><b data-en="Tidy lecture files">整理本周课件</b><small data-en="Mon 09:00 · after “Weekly reading digest”">周一 09:00 · 排在「每周文献摘要」之后</small></div><span class="badge w st" style="--d:1s" data-en="Waiting for approval">待批准</span></div>
-    </div>
-    <div class="appr st" style="--d:1.6s">
-      <div><b data-en="One step is outside this task’s scope">有一步超出了这个任务的范围</b><div class="dim" style="font-size:12px" data-en="Move 3 files into “Interaction Design / Lecture 2”. The task was created as read-only.">把 3 个文件移到「交互设计方法 / 第二讲」。这个任务创建时声明的是只读。</div></div>
-      <div class="acts"><span class="mini p" data-en="Approve">批准</span><span class="mini" data-en="Reject">拒绝</span></div>
-    </div>
-  </figure>
-  <div class="copy">
-    <p class="eyebrow" data-en="Scheduled tasks">计划任务</p>
-    <h2 data-en="Runs on time.<br>Asks when it goes too far.">到点自己跑，<br>越界就停下来问你。</h2>
-    <p class="sub" data-en="A reminder is just a prompt for you. An automatic task is run unattended by the background kernel. When you create one, you declare what it may touch, and it is read-only by default.">人工提醒只是提醒你。自动任务到点由后台内核无人值守地执行，创建时要声明它能动什么，默认只读。</p>
-    <ul>
-      <li data-en="Steps beyond the scope pause, and a notification plus the “Waiting for approval” entry bring them to you">超出范围的步骤会暂停，通过通知和「待批准」入口交给你处理</li>
-      <li data-en="A task only counts as done once it calls “mark complete”. After a gap, only the latest missed run is made up">任务必须调用「标记完成」才算完成；错过的次数只补最近一次</li>
-      <li data-en="Tasks can depend on each other. The foreground chat always goes first, and one task runs in the background at a time">任务之间可设依赖；前台对话优先，后台同一时间只跑一个</li>
-      <li data-en="The background kernel can use an API or the Codex CLI. If the quota runs out it pauses rather than fails">后台内核可以用 API 或 Codex CLI；额度用尽时是暂停，不是失败</li>
-    </ul>
-    <span class="ver" data-en="0.9.9 background runs · 0.9.10 scheduled tasks">0.9.9 后台运行 · 0.9.10 计划任务</span>
-  </div>
-</div></section>
-
-<!-- plugins + more -->
-<section id="more"><div class="wrap">
-  <p class="eyebrow" data-en="And also">还有这些</p>
-  <h2 data-en="Smaller things you will run into every day.">每天会碰到的几件小事。</h2>
+<section class="more" id="more"><div class="wrap">
+  <p class="eyebrow rv" data-en="Details">细节</p>
+  <h2 class="rv" data-en="Small things you will notice<br>after a week.">用上一周，<br>你会注意到这些。</h2>
   <div class="bento">
-    <article class="tile w3">
-      <h3 data-en="Plugins: every tool asks first">插件：每个工具都先问你</h3>
-      <p data-en="Add local or remote tools (MCP). Each plugin has one permission level, and a disabled tool never shows up in chat or background runs.">可以添加本机或远程的外部工具（MCP）。每个插件有一个整体权限档，停用的工具不会出现在对话和后台运行里。</p>
-      <div class="win" role="img" aria-label="插件列表：每个插件一行，右侧是权限分段。" data-en-aria="A plugin list with a permission segment on the right of each row.">
-        <div class="list">
-          <div class="item"><span class="ic"><svg class="i"><use href="#i-plug"/></svg></span><div><b data-en="Browser">浏览器</b><small data-en="Built in · site allowlist">内置 · 站点许可名单</small></div><div class="seg"><span class="on" data-en="Ask">每次询问</span><span data-en="Read-only">只读免审</span><span data-en="Off">关闭</span></div></div>
-          <div class="item"><span class="ic"><svg class="i"><use href="#i-plug"/></svg></span><div><b data-en="Paper search">文献检索</b><small data-en="External · 4 tools">外部 · 4 个工具</small></div><div class="seg"><span data-en="Ask">每次询问</span><span class="on" data-en="Read-only">只读免审</span><span data-en="Off">关闭</span></div></div>
-        </div>
-      </div>
-      <p class="note" data-en="Import from a pasted mcpServers config, a folder, or another app’s config file. Commands that download packages on the fly are never run; you get an install command to copy.">可以粘贴 mcpServers 配置、选文件夹，或从其他应用的配置导入。npx、uvx 这类会临时下载软件包的命令不会被执行，只给出可复制的安装命令。</p>
+    <article class="tile t-undo rv">
+      <div class="art" id="undoArt"></div>
+      <h3 data-en="Delete, then undo">删了能撤销</h3>
+      <p data-en="Deleting moves things to the Trash and shows one undo, with no confirmation dialog. Permanent deletion still asks.">删除直接移入回收站，提示里给一次撤销，不弹确认框。永久删除仍然要你点头。</p>
     </article>
-    <article class="tile w3">
-      <h3 data-en="Say it once, it lands in the agenda">一句话记日程</h3>
-      <p data-en="“Tomorrow 3 pm, 20 minutes of campus observation.” You can review it before saving, and an expired proposal can be regenerated.">“明天下午三点，安排二十分钟校园观察。”保存前可以审阅，过期的提案可以重新生成。</p>
-      <div class="win" role="img" aria-label="对话里的日程卡片：二十分钟校园观察，已保存 1/1。" data-en-aria="An agenda card in chat: 20-minute campus observation, saved 1/1.">
-        <div class="item"><span class="ic"><svg class="i"><use href="#i-cal"/></svg></span><div><b data-en="Campus observation (20 min)">校园观察（20 分钟）</b><small data-en="Tomorrow 15:00 · Interaction Design">明天 15:00 · 交互设计方法</small></div><span class="badge" data-en="Saved 1/1">已保存 1/1</span></div>
-        <div class="item"><span class="ic"><svg class="i"><use href="#i-cal"/></svg></span><div><b data-en="Observation notes due">提交观察记录</b><small data-en="Thu 23:30 · proposal expired">周四 23:30 · 提案已过期</small></div><span class="mini" data-en="Regenerate">重新生成</span></div>
-      </div>
+    <article class="tile t-theme rv">
+      <div class="art" id="themeArt"></div>
+      <h3 data-en="Three themes, light or dark">三套主题，深浅各一</h3>
+      <p data-en="Blue-grey, neutral and teal, each in light and dark. It opens in the look you saved, no flash.">蓝灰、中性灰和青绿，深浅外观单独选。启动时直接按保存的外观显示，不闪白。</p>
     </article>
-    <article class="tile">
-      <h3 data-en="Three themes, light or dark">三套主题，深浅随意</h3>
-      <p data-en="Blue-grey, neutral and teal, independent of light or dark. Cold start shows your saved look right away.">蓝灰、中性灰、青绿，和深浅外观各自独立。冷启动直接按保存的外观显示。</p>
-      <div class="sw3" aria-hidden="true"><i class="a" data-n="蓝灰"></i><i class="b" data-n="中性"></i><i class="c" data-n="青绿"></i></div>
+    <article class="tile t-plug rv">
+      <div class="art"><div class="plugs"><div><b data-en="Browser">浏览器</b><small data-en="Built in · site allowlist">内置 · 站点许可</small><span class="pseg"><i class="on" data-en="Ask">每次询问</i><i data-en="Read-only">只读免审</i></span></div><div><b data-en="Paper search">文献检索</b><small data-en="MCP · 4 tools">MCP · 4 个工具</small><span class="pseg"><i data-en="Ask">每次询问</i><i class="on" data-en="Read-only">只读免审</i></span></div></div></div>
+      <h3 data-en="Plugins ask first">插件先问再做</h3>
+      <p data-en="Add MCP tools by pasting a config or picking a folder. Each plugin has one permission level. Commands that download packages on the fly are never run for you.">粘贴 mcpServers 配置或选一个文件夹就能加外部工具。每个插件一个权限档；会临时下载软件包的命令不会替你执行。</p>
     </article>
-    <article class="tile">
-      <h3 data-en="Delete without fear">删了能撤销</h3>
-      <p data-en="Deleting chats and content moves them to the Trash with an undo toast, no confirmation dialog. Permanent deletion still asks you.">删除对话和内容会移入回收站并给出撤销提示，不再弹确认框。永久删除仍然要你批准。</p>
-      <div class="win" role="img" aria-label="撤销提示条" data-en-aria="An undo toast"><div class="item" style="grid-template-columns:minmax(0,1fr) auto"><b data-en="Moved 1 conversation to the Trash">已将 1 个对话移入回收站</b><span class="mini p" data-en="Undo">撤销</span></div></div>
+    <article class="tile t-clip rv">
+      <div class="art"><div class="clips"><span>softmax(QKᵀ/√d)V</span><span data-en="Room 302, Thu 2pm">周四下午两点 302</span><span>arxiv.org/abs/…</span></div></div>
+      <h3 data-en="Clipboard history in the island">灵动岛里的剪贴板历史</h3>
+      <p data-en="What you copied stays in a list. Pick one to paste back, or hand it to AI.">复制过的东西留在列表里，点一条贴回去，或者交给 AI 处理。</p>
     </article>
-    <article class="tile">
-      <h3 data-en="Local first">资料放在本机</h3>
-      <p data-en="Files, chats and notes are stored on your Mac, with daily and weekly backups and a database check at launch. A remote model only sees what a request needs.">资料、对话和笔记存在这台 Mac 上，自动按日和按周备份，启动时自检数据库。使用远程模型时，请求需要的内容会发给你选的服务。</p>
-      <div class="chips"><span data-en="Local first">本地优先</span><span data-en="Your model">自选模型</span><span>AGPL-3.0</span></div>
+    <article class="tile t-rec rv">
+      <div class="art"><div class="rec"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      <h3 data-en="Record, then transcribe">录音，再转写</h3>
+      <p data-en="Record a lecture or a meeting from the island. The recording stays on this Mac; add a speech service and it transcribes as you record.">在灵动岛里录一节课或一次讨论。录音存在这台 Mac 上；配了语音识别服务，还能边录边转写。</p>
+    </article>
+    <article class="tile t-hist rv">
+      <div class="art"><div class="hist"><div><i class="ok"></i><span data-en="Weekly meeting digest">每周组会摘要</span><small>4m 12s</small></div><div><i class="ok"></i><span data-en="Lecture 5 review sheet">第 5 讲复习提纲</span><small>1m 48s</small></div><div><i class="wait"></i><span data-en="Tidy the downloads folder">整理下载文件夹</span><small data-en="Needs review">等待审批</small></div></div></div>
+      <h3 data-en="Every run is on record">每次运行都有记录</h3>
+      <p data-en="Run history keeps each step, tool call and approval, so you can see what happened while you were away.">执行历史留下每一步、每次工具调用和每次审批，不在电脑前时发生了什么，回来一看就知道。</p>
+    </article>
+    <article class="tile t-usage rv">
+      <div class="art"><div class="bars"><i style="--h:40%"></i><i style="--h:62%"></i><i style="--h:35%"></i><i style="--h:80%"></i><i style="--h:55%"></i><i style="--h:70%"></i><i style="--h:30%"></i></div></div>
+      <h3 data-en="Usage you can read">用量看得懂</h3>
+      <p data-en="Settings lists tokens and estimated cost per provider and per day, counted from the requests AI Bro actually made.">设置里按供应商、按天列出 token 和估算花费，数据来自 AI Bro 实际发出的请求。</p>
+    </article>
+    <article class="tile t-local rv">
+      <div class="art"><div class="local"><span>~/Library/Application Support</span><small data-en="Daily and weekly backups · database check at launch">按日、按周备份 · 启动时自检数据库</small></div></div>
+      <h3 data-en="Your files stay here">资料留在本机</h3>
+      <p data-en="Files, chats and notes live on your Mac. A remote model only receives what a request needs.">资料、对话和笔记存在这台 Mac 上。用远程模型时，只发出那次请求需要的内容。</p>
     </article>
   </div>
 </div></section>
 
-<!-- changelog -->
-<section id="log"><div class="wrap">
-  <p class="eyebrow" data-en="Updates">更新</p>
-  <h2 data-en="What changed since 0.9.5">0.9.5 之后改了什么</h2>
-  <div class="log">
-    <article><h3>0.9.10<small>2026-10-27</small></h3><p data-en="<b>Models and scheduling.</b> Settings → Models rebuilt, provider-grouped model picker, ChatGPT sign-in, one speech configuration with real-time transcription, plugins, and scheduled tasks.">模型与计划。<b>设置里的模型页重做</b>，对话里按供应商选模型，ChatGPT 账号登录，语音识别合并成一份配置并支持实时转写，新增插件和计划任务。</p></article>
-    <article><h3>0.9.9<small>2026-10-23</small></h3><p data-en="<b>Execution kernel.</b> Every write, delete and command goes through the same approval rules. Long runs compress earlier steps and keep citations. Runs continue in the background after you close the window.">执行内核。<b>所有写入、删除和命令走同一套审批规则</b>，长任务自动压缩早期过程并保留原文引用，关闭窗口后可在后台继续。</p></article>
-    <article><h3>0.9.8<small>2026-10-23</small></h3><p data-en="<b>Themes and model list.</b> Three themes, undoable deletes, ⌘N, and a model list you can fill in from the server.">主题与模型列表。<b>三套主题，删除可撤销</b>，⌘N 新建对话，可以从服务端获取模型列表并勾选保存。</p></article>
-    <article><h3>0.9.7<small>2026-10-22</small></h3><p data-en="<b>Memory and safety.</b> Vector search loads on demand with a much lower peak, automatic backups, and a database check at start.">内存与数据安全。<b>向量检索按需读取，峰值内存大幅降低</b>，新增自动备份，启动时自检数据库。</p></article>
-    <article><h3>0.9.6<small>2026-10-21</small></h3><p data-en="<b>Reading and interface.</b> “Ask about this page”, region questions on charts and formulas, a Spotlight-style command palette, and a redesigned Settings.">阅读与界面。<b>PDF 里「问这一页」和框选提问</b>，命令面板改成 Spotlight 式浮层，设置页重做。</p></article>
-  </div>
-  <p class="note"><a href="https://github.com/zihenghe04/AIBro/blob/main/CHANGELOG.md" data-en="Full changelog on GitHub ↗">完整更新日志 ↗</a></p>
+<section class="next" id="next"><div class="wrap">
+  <p class="eyebrow rv" data-en="Planned">计划中</p>
+  <h2 class="rv" data-en="Not in the app yet.<br>This is what comes next.">还没做完的，<br>接下来做这些。</h2>
+  <ol class="road">
+    <li class="rv"><span class="tag2" data-en="Planned">计划中</span><h3 data-en="iPhone companion">iPhone 上查看</h3><p data-en="See today’s agenda, get reminders, read notes and chats, tick off tasks, and send a voice note to the Mac.">看今日日程、收提醒、查看笔记和对话、勾掉任务，语音记一条发回 Mac。</p></li>
+    <li class="rv"><span class="tag2" data-en="Planned">计划中</span><h3 data-en="End-to-end encrypted sync">端到端加密同步</h3><p data-en="Today’s self-hosted sync works between your own devices but is not end-to-end encrypted yet.">现在的自托管同步能在你自己的设备之间用，但还没有端到端加密。</p></li>
+    <li class="rv"><span class="tag2" data-en="Planned">计划中</span><h3 data-en="Paper library with Zotero import">文献库和 Zotero 导入</h3><p data-en="Titles, authors and years read automatically, tags and groups, and the notes and chats about a paper kept under it.">自动识别标题、作者和年份，可以打标签分组，关于这篇论文的笔记和对话都挂在它下面。</p></li>
+    <li class="rv"><span class="tag2" data-en="Planned">计划中</span><h3 data-en="Course folders sorted for you">课程资料自动归类</h3><p data-en="Drop in a pile of slides and assignments; AI Bro proposes a course with lectures, homework and exams, and changes nothing until you confirm.">把一堆课件和作业拖进来，它提议建一门课，按讲次、作业、考试分好；你确认之前不动任何文件。</p></li>
+  </ol>
 </div></section>
 
 <!-- film -->
@@ -292,24 +181,23 @@
 
 <!-- faq -->
 <section id="faq"><div class="wrap">
-  <h2 data-en="Questions">常见问题</h2>
+  <h2 class="rv" data-en="Questions">常见问题</h2>
   <div class="faq-list">
-    <details><summary data-en="Which Macs does it run on?">什么 Mac 能用？</summary><p data-en="Apple Silicon Macs on macOS 14 or later. The installer bundles Python and the PDF runtime. There is no Intel, Windows or Linux build, and no new mobile package in this release.">Apple Silicon 的 Mac，macOS 14 或以上。安装包自带 Python 和 PDF 运行环境。没有 Intel、Windows 和 Linux 版本，这一版也没有新的手机端安装包。</p></details>
-    <details><summary data-en="Do I need my own model?">要自己准备模型吗？</summary><p data-en="Yes. Connect a compatible API, sign in with a ChatGPT account, or use the local Codex CLI. You supply the subscription or quota. Keys are stored on your Mac and never synced with the workspace.">要。可以连兼容的模型 API，用 ChatGPT 账号登录，或者走本机的 Codex CLI。订阅和额度你自己准备。密钥存在本机，不随工作区同步。</p></details>
+    <details><summary data-en="Which Macs does it run on?">什么 Mac 能用？</summary><p data-en="Apple Silicon Macs on macOS 14 or later. The installer bundles Python and the PDF runtime. There is no Intel, Windows or Linux build.">Apple Silicon 的 Mac，macOS 14 或以上。安装包自带 Python 和 PDF 运行环境。没有 Intel、Windows 和 Linux 版本。</p></details>
+    <details><summary data-en="Do I need my own model?">要自己准备模型吗？</summary><p data-en="Yes. Connect a compatible API, sign in with a ChatGPT account, or use the local Codex CLI. You supply the subscription or quota. Keys are stored in the macOS Keychain and never synced with the workspace.">要。可以连兼容的模型 API，用 ChatGPT 账号登录，或者走本机的 Codex CLI。订阅和额度你自己准备。密钥存在系统钥匙串里，不随工作区同步。</p></details>
     <details><summary data-en="Where is my data?">资料存在哪？</summary><p data-en="On your Mac. If you use a remote model, the content needed for that request is sent to the service you chose. Optional self-hosted sync pushes and pulls between your own devices and is not end-to-end encrypted yet.">在你的 Mac 上。用远程模型时，那次请求需要的内容会发给你选的服务。可选的自托管同步是在你自己的设备之间推送和拉取，目前还没有端到端加密。</p></details>
-    <details><summary data-en="Are the pictures on this page real screenshots?">这页上的画面是真实截图吗？</summary><p data-en="The app windows here are rebuilt with HTML and CSS from the app’s own colors, radii and layout, so they stay sharp and follow your light or dark setting. All material is fictional and the answers are scripted examples, not a measure of speed or quality.">不是截图。页面上的应用窗口是用 HTML 和 CSS 按应用自身的颜色、圆角和布局重建的，所以能保持清晰，也跟随你的深浅设置。所有资料都是虚构的，回答是示例，不代表实际速度或质量。</p></details>
-    <details><summary data-en="What is planned but not here yet?">哪些功能还在计划中？</summary><p data-en="iPhone and Android companions, end-to-end encrypted sync, and a literature library with Zotero import are planned. They are not part of 0.9.10.">iPhone 和 Android 伴侣应用、端到端加密同步、带 Zotero 导入的文献库，都在计划中，0.9.10 里还没有。</p></details>
+    <details><summary data-en="Are the windows on this page real?">页面上的窗口是真的吗？</summary><p data-en="They are rebuilt in HTML and CSS from the app’s own colors, sizes and layout, so you can click them and they follow your light or dark setting. The files, names and answers are made up and scripted. Nothing on this page sends a request.">是用 HTML 和 CSS 按应用自身的颜色、尺寸和布局重建的，所以能点，也跟随你的深浅设置。里面的资料、名字和回答都是编的，是预先写好的脚本，页面不会发出任何请求。</p></details>
     <details><summary data-en="Can I build it myself?">能自己构建吗？</summary><p><span data-en="Yes. It is open source under AGPL-3.0, with build and self-hosted sync guides.">可以。AI Bro 以 AGPL-3.0 开源，有构建和自托管同步的说明。</span> <a href="https://github.com/zihenghe04/AIBro/blob/main/docs/DISTRIBUTION.md" data-en="Read the guide ↗">阅读指南 ↗</a></p></details>
   </div>
 </div></section>
 
-<section class="dl" id="download" style="padding-top:72px"><div class="wrap dl-grid">
+<section class="dl" id="download"><div class="wrap dl-grid">
   <div>
     <p class="eyebrow" data-en="Download">下载</p>
     <h2 data-en="AI Bro 0.9.10 for Mac">AI Bro 0.9.10 for Mac</h2>
     <p class="sub" data-en="A developer preview for Apple Silicon, macOS 14 or later. It is ad-hoc signed and not notarized by Apple, so macOS will ask you to allow it the first time.">开发预览版，面向 Apple Silicon、macOS 14 或以上。采用 ad-hoc 签名，没有经过 Apple 公证，第一次打开时 macOS 会要求你手动允许。</p>
-    <div class="cta-row" style="justify-content:flex-start">
-      <a class="btn pri" href="https://github.com/zihenghe04/AIBro/releases/download/v0.9.10/AI-Bro-0.9.10-macos-arm64-preview.dmg" data-en="Download .dmg">下载 .dmg</a>
+    <div class="cta-row">
+      <a class="btn pri" href="https://github.com/zihenghe04/AIBro/releases/download/v0.9.10/AI-Bro-0.9.10-macos-arm64-preview.dmg" data-dl data-en="Download .dmg">下载 .dmg</a>
       <a class="btn sec" href="https://github.com/zihenghe04/AIBro/releases/tag/v0.9.10" data-en="Release notes ↗">发布说明 ↗</a>
     </div>
     <p class="note" data-en="Check the SHA-256 on the release page before opening. <a href='https://github.com/zihenghe04/AIBro/blob/main/docs/DISTRIBUTION.md'>Build from source ↗</a>">打开前请对照发布页上的 SHA-256 校验值。<a href="https://github.com/zihenghe04/AIBro/blob/main/docs/DISTRIBUTION.md">从源码构建 ↗</a></p>
@@ -325,7 +213,7 @@
 <footer class="wrap">
   <a class="brand" href="#top"><img src="assets/v095/mark-128.png" width="22" height="22" alt="">AI Bro</a>
   <nav aria-label="页脚" data-en-aria="Footer"><a href="https://github.com/zihenghe04/AIBro">GitHub ↗</a><a href="https://github.com/zihenghe04/AIBro/blob/main/CHANGELOG.md" data-en="Changelog">更新日志</a><a href="https://github.com/zihenghe04/AIBro/issues" data-en="Feedback">反馈</a></nav>
-  <small data-en="Fictional demo material · AGPL-3.0">演示资料均为虚构 · AGPL-3.0</small>
+  <small data-en="Demo material is fictional · AGPL-3.0">演示资料均为虚构 · AGPL-3.0</small>
 </footer>
 </body>
 </html>

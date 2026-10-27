@@ -1,36 +1,22 @@
 (() => {
 'use strict';
-// Chinese is the source text in index.html. English lives next to it in data-en / data-en-aria / data-words-en.
+// Page shell: language, header, reveal-on-scroll, hero tilt, film. The app-window demos live in demos.js.
+// Chinese is the source text in index.html. English lives next to it in data-en / data-en-aria.
 const root = document.documentElement;
 root.classList.add('js');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const params = new URLSearchParams(location.search);
 let lang = params.get('lang') === 'en' ? 'en' : 'zh';
 
-// Capture the Chinese originals once so switching back restores them exactly.
 const zhHTML = new Map(), zhAria = new Map();
 document.querySelectorAll('[data-en]').forEach(el => zhHTML.set(el, el.innerHTML));
 document.querySelectorAll('[data-en-aria]').forEach(el => zhAria.set(el, el.getAttribute('aria-label')));
 const zhTitle = document.title, zhDesc = document.querySelector('meta[name=description]').content;
-const enTitle = 'AI Bro | A learning and research assistant for Mac';
-const enDesc = 'A Mac app for students and researchers. Reads your PDFs and notes, cites the file and page, keeps your agenda and runs scheduled tasks. Files stay on your Mac and you pick the model.';
+const enTitle = 'AI Bro | A Mac assistant that has read your files';
+const enDesc = 'A Mac app for students and researchers. It reads your lectures, papers and notes and names the file and page in every answer. One-line agenda entries, hold-to-talk island, scheduled tasks. Files stay on your Mac and you pick the model.';
 
-// Island transcript: split into words that fade in one after another.
-function buildWords() {
-  document.querySelectorAll('[data-words]').forEach(el => {
-    const text = lang === 'en' ? el.dataset.wordsEn : el.dataset.words;
-    const parts = lang === 'en' ? text.split(/(\s+)/) : [...text];
-    el.textContent = '';
-    let n = 0;
-    parts.forEach(p => {
-      const s = document.createElement('span');
-      s.className = 'w';
-      s.textContent = p;
-      if (p.trim()) { s.style.setProperty('--d', (1 + n * (lang === 'en' ? .32 : .17)).toFixed(2) + 's'); n++; }
-      el.append(s);
-    });
-  });
-}
+const listeners = [];
+window.Site = { get lang() { return lang; }, reduced, onLang: fn => listeners.push(fn) };
 
 function localize() {
   root.lang = lang === 'en' ? 'en' : 'zh-CN';
@@ -41,39 +27,46 @@ function localize() {
   const btn = document.getElementById('lang');
   btn.textContent = lang === 'en' ? '中文' : 'EN';
   btn.setAttribute('aria-label', lang === 'en' ? '中文，切换到中文' : 'EN，Switch to English');
-  buildWords();
   const u = new URL(location.href);
   if (lang === 'en') u.searchParams.set('lang', 'en'); else u.searchParams.delete('lang');
   history.replaceState(null, '', u);
+  listeners.forEach(fn => fn(lang));
 }
 document.getElementById('lang').addEventListener('click', () => { lang = lang === 'en' ? 'zh' : 'en'; localize(); });
 localize();
 
-// Header border once the page scrolls.
+// Header turns into a floating capsule once the page moves.
 const hdr = document.getElementById('hdr');
-const onScroll = () => hdr.classList.toggle('stuck', scrollY > 8);
-addEventListener('scroll', onScroll, { passive: true }); onScroll();
+let stuck = null;
+const onHeader = () => { const s = scrollY > 24; if (s !== stuck) { stuck = s; hdr.classList.toggle('stuck', s); } };
 
-// Scenes play when they scroll into view and replay every data-loop ms while visible. Reduced motion shows the end state.
-const scenes = new Map();
-function play(el) {
-  el.classList.remove('play'); void el.offsetWidth; el.classList.add('play');
-}
-if (!reduced.matches) {
+// Reveal once, staggered within the same parent.
+if (!reduced.matches && 'IntersectionObserver' in window) {
   const io = new IntersectionObserver(entries => {
-    for (const e of entries) {
-      const s = scenes.get(e.target) || {};
-      if (e.isIntersecting && !s.timer) {
-        play(e.target);
-        s.timer = setInterval(() => !document.hidden && play(e.target), +e.target.dataset.loop || 12000);
-      } else if (!e.isIntersecting && s.timer) { clearInterval(s.timer); s.timer = 0; }
-      scenes.set(e.target, s);
-    }
-  }, { threshold: .35 });
-  document.querySelectorAll('.scene').forEach(el => io.observe(el));
-} else {
-  document.querySelectorAll('.scene').forEach(el => el.classList.add('play'));
-}
+    entries.filter(e => e.isIntersecting).forEach((e, i) => {
+      e.target.style.setProperty('--d', (i * 0.08).toFixed(2) + 's');
+      e.target.classList.add('in'); io.unobserve(e.target);
+    });
+  }, { rootMargin: '0px 0px -8% 0px' });
+  document.querySelectorAll('.rv,.tile').forEach(el => io.observe(el));
+} else document.querySelectorAll('.rv,.tile').forEach(el => el.classList.add('in'));
+
+// Hero window settles from a slight tilt to flat over the first ~40% of a screen of scrolling.
+const tilt = document.getElementById('heroTilt');
+const onTilt = () => {
+  if (reduced.matches) return;
+  const p = Math.min(1, Math.max(0, scrollY / (innerHeight * 0.4)));
+  const e = 1 - Math.pow(1 - p, 3);
+  tilt.style.setProperty('--rx', (14 * (1 - e)).toFixed(2) + 'deg');
+  tilt.style.setProperty('--sc', (0.92 + 0.08 * e).toFixed(4));
+  tilt.style.setProperty('--ty', (24 * (1 - e)).toFixed(1) + 'px');
+};
+let ticking = false;
+addEventListener('scroll', () => {
+  if (ticking) return; ticking = true;
+  requestAnimationFrame(() => { ticking = false; onHeader(); onTilt(); });
+}, { passive: true });
+onHeader(); onTilt();
 
 // Film: load the file only when asked.
 const film = document.getElementById('film-video'), filmPlay = document.getElementById('film-play');
