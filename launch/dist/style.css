@@ -149,6 +149,13 @@ section{scroll-margin-top:70px}
 .th-prev .m i{height:8px;border-radius:4px;background:var(--tl)}
 .th-prev .m b{justify-self:end;width:46%;height:24px;border-radius:10px;background:var(--ta);transition:background .5s;opacity:.85}
 
+/* real screenshots */
+.real{padding-top:140px}
+.shots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:40px}
+.shots figure{margin:0}
+.shots img{width:100%;height:auto;border-radius:14px;box-shadow:0 0 0 .5px #0000002e,0 24px 60px -18px #10251c40}
+.shots figcaption{font-size:13px;color:var(--mut);margin-top:12px}
+
 /* roadmap */
 .next{padding-top:140px}
 .road{list-style:none;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:44px;counter-reset:r}
@@ -197,6 +204,7 @@ footer a{text-decoration:none}
   .m-win{display:block;margin-top:22px}
   .win-fit{overflow:clip;overflow-clip-margin:12px}
   .bento{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .shots{grid-template-columns:minmax(0,1fr)}
   .road{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width:640px){
@@ -209,7 +217,7 @@ footer a{text-decoration:none}
   .tile.t-undo,.tile.t-theme{grid-column:auto}
   .dl-grid{grid-template-columns:minmax(0,1fr);gap:36px}
   .sub{font-size:16px}
-  .more,.next,#film,#faq{padding-top:100px}
+  .more,.real,.next,#film,#faq{padding-top:100px}
   .day{padding-top:110px}
 }
 @media (prefers-reduced-motion:reduce){

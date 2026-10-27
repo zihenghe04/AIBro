@@ -11,6 +11,8 @@ let lang = params.get('lang') === 'en' ? 'en' : 'zh';
 const zhHTML = new Map(), zhAria = new Map();
 document.querySelectorAll('[data-en]').forEach(el => zhHTML.set(el, el.innerHTML));
 document.querySelectorAll('[data-en-aria]').forEach(el => zhAria.set(el, el.getAttribute('aria-label')));
+const zhAlt = new Map();
+document.querySelectorAll('[data-en-alt]').forEach(el => zhAlt.set(el, el.alt));
 const zhTitle = document.title, zhDesc = document.querySelector('meta[name=description]').content;
 const enTitle = 'AI Bro | A Mac assistant that has read your files';
 const enDesc = 'A Mac app for students and researchers. It reads your lectures, papers and notes and names the file and page in every answer. One-line agenda entries, hold-to-talk island, scheduled tasks. Files stay on your Mac and you pick the model.';
@@ -22,6 +24,7 @@ function localize() {
   root.lang = lang === 'en' ? 'en' : 'zh-CN';
   zhHTML.forEach((zh, el) => { el.innerHTML = lang === 'en' ? el.dataset.en : zh; });
   zhAria.forEach((zh, el) => el.setAttribute('aria-label', lang === 'en' ? el.dataset.enAria : zh));
+  zhAlt.forEach((zh, el) => { el.alt = lang === 'en' ? el.dataset.enAlt : zh; });
   document.title = lang === 'en' ? enTitle : zhTitle;
   document.querySelector('meta[name=description]').content = lang === 'en' ? enDesc : zhDesc;
   const btn = document.getElementById('lang');

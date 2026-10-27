@@ -42,7 +42,7 @@ const P = {
   spark: 'M8 2.5l1.3 3.2 3.2 1.3-3.2 1.3L8 11.5 6.7 8.3 3.5 7l3.2-1.3z', shield: 'M8 2 13 4v4c0 3-2.2 5-5 6-2.8-1-5-3-5-6V4zM5.8 8l1.6 1.6L10.5 6.5',
   dots: 'M4 8h.01M8 8h.01M12 8h.01', mic: 'M6 2.5h4v6.5H6zM3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14', send: 'M8 13V3.5M4 7l4-4 4 4',
   chev: 'M4 6l4 4 4-4', doc: 'M4 2h5l3 3v9H4zM9 2v3h3', link: 'M6.5 9.5l3-3M7 4.8l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.2l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1',
-  check: 'M3.5 8.5l3 3 6-7', x: 'M4 4l8 8M12 4l-8 8', play: 'M5 3.5v9l7.5-4.5z', clock: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM8 5v3.2l2 1.3',
+  check: 'M3.5 8.5l3 3 6-7', copy: 'M5.5 5.5h7v8h-7zM3.5 10.5v-8h7', quote: 'M3.5 10V8a3 3 0 0 1 3-3M9.5 10V8a3 3 0 0 1 3-3M3.5 8.5h3V11h-3zM9.5 8.5h3V11h-3z', up: 'M5 7.5 7.5 2.5c1 0 1.5.7 1.5 1.5V6.5h3.2a1 1 0 0 1 1 1.2l-.9 4.6a1 1 0 0 1-1 .7H5zM2.5 7.5H5v5.5H2.5z', down: 'M11 8.5 8.5 13.5c-1 0-1.5-.7-1.5-1.5V9.5H3.8a1 1 0 0 1-1-1.2l.9-4.6a1 1 0 0 1 1-.7H11zM13.5 8.5H11V3h2.5z', stop: 'M5 5h6v6H5z', x: 'M4 4l8 8M12 4l-8 8', play: 'M5 3.5v9l7.5-4.5z', clock: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM8 5v3.2l2 1.3',
   cmd: 'M5.5 4a1.5 1.5 0 1 0 0 3H7V5.5A1.5 1.5 0 0 0 5.5 4zM10.5 4A1.5 1.5 0 0 0 9 5.5V7h1.5a1.5 1.5 0 1 0 0-3zM5.5 12a1.5 1.5 0 1 1 0-3H7v1.5A1.5 1.5 0 0 1 5.5 12zM10.5 12A1.5 1.5 0 0 1 9 10.5V9h1.5a1.5 1.5 0 1 1 0 3zM7 7h2v2H7z'
 };
 const ic = (n, c = 'i') => `<svg class="${c}" viewBox="0 0 16 16" aria-hidden="true"><path d="${P[n]}"/></svg>`;
@@ -129,54 +129,91 @@ async function typeInto(el, text, step, speed = 45) {
   el.textContent = '';
   for (const ch of text) { el.textContent += ch; await step(speed); }
 }
-// Stream text with inline citation chips. parts: strings, '\n' for a new paragraph, and {cite, go}.
+// Stream text. parts: strings, '\n' for a new paragraph, {cite, go} for a source. Sources get a small number
+// in the text and a row in the source list under the answer (styled like the app's .source-link).
+// Keep the newest output in view, like the app's chat does while streaming.
+const follow = el => { const log = el.closest('.chat-log'); if (log) log.scrollTop = log.scrollHeight; };
 async function stream(box, parts, step, onCite) {
   let p = document.createElement('p'); p.className = 'caret'; box.append(p);
+  const cites = [];
   try {
     for (const part of parts) {
       if (part === '\n') { p.classList.remove('caret'); p = document.createElement('p'); p.className = 'caret'; box.append(p); await step(80); continue; }
       if (typeof part === 'string') {
         const t = document.createTextNode(''); p.append(t);
         const chars = [...part];
-        for (let i = 0; i < chars.length; i += 2) { t.data += chars.slice(i, i + 2).join(''); await step(24); }
+        for (let i = 0; i < chars.length; i += 2) { t.data += chars.slice(i, i + 2).join(''); if (i % 16 === 0) follow(box); await step(24); }
       } else {
-        const c = h(`<span class="cite" role="button" tabindex="0">${ic('doc')}${esc(part.cite)}</span>`);
-        if (onCite) { c.addEventListener('click', () => onCite(part.go)); c.addEventListener('keydown', e => { if (e.key === 'Enter') onCite(part.go); }); }
-        p.append(c); await step(120);
+        cites.push(part);
+        p.append(h(`<sup class="cn">${cites.length}</sup>`)); await step(80);
       }
     }
   } finally { p.classList.remove('caret'); }
+  if (!cites.length) return;
+  const list = h(`<div class="srcs"><div class="sh">${T('来源', 'Sources')}</div></div>`);
+  cites.forEach((c, i) => {
+    const [name, where] = c.cite.split(' · ');
+    const row = h(`<button type="button" class="source-link"><span class="n">${i + 1}</span>${ic('doc')}<span class="nm">${esc(name)}</span><small>${esc(where || '')}</small></button>`);
+    if (onCite) row.addEventListener('click', () => onCite(c.go)); else row.addEventListener('click', () => row.classList.toggle('peek'));
+    list.append(row);
+  });
+  box.append(list); follow(box);
 }
-async function progress(box, steps, step, doneText) {
-  const el = h(`<div class="prog"><div class="prog-h"><span class="spin"></span><span class="t">${T('正在运行', 'Running')}</span><span class="el">0.0s</span></div><ol></ol></div>`);
-  box.append(el);
-  const t0 = performance.now(), elT = $('.el', el);
-  const tick = setInterval(() => { elT.textContent = ((performance.now() - t0) / 1000).toFixed(1) + 's'; }, 100);
+const WHO = live => `<div class="who"><i class="wd${live ? ' live' : ''}"></i>AI${live ? T(' · 生成中', ' · generating') : ''}<span>Project Assistant · ${T('中', 'Med')}</span></div>`;
+const MACTS = (thumbs) => `<div class="macts">${ic('copy')}${ic('quote')}${ic('dots')}${thumbs ? `<span class="sp"></span>${ic('up')}${ic('down')}` : ''}</div>`;
+const MODEL = () => `<span class="model">${ic('spark')}Project Assistant <small>${T('中', 'Med')}</small>${ic('chev')}</span>`;
+// Kernel run block in the style of 0.9.10: "正在回答 3 秒 · <step>", hollow markers while running, then "已完成 8 秒 · 3 项过程".
+async function progress(msg, steps, step, comp, records) {
+  const el = h(`<div class="prog run"><div class="prog-h"><span class="dots3"><i></i><i></i><i></i></span><b class="t">${T('正在回答', 'Answering')}</b><span class="el">0 ${T('秒', 's')}</span><span class="cu"></span>${ic('chev', 'i chev')}</div><ol></ol><div class="slog">› ${T('阶段记录', 'Stage log')}</div><span class="b ghost stop">${T('停止', 'Stop')}</span></div>`);
+  msg.append(el);
+  const who = $('.who', msg); if (who) who.outerHTML = WHO(true);
+  let cstat = null;
+  if (comp) {
+    comp.classList.add('running');
+    cstat = h(`<div class="cstat"><i></i><span>${T('生成结构化规划', 'Planning')}</span><small>0 ${T('秒', 's')}</small><span class="b ghost">${T('停止', 'Stop')}</span></div>`);
+    comp.prepend(cstat);
+  }
+  const t0 = performance.now(), secs = () => Math.max(1, Math.round((performance.now() - t0) / 1000));
+  const tick = setInterval(() => { const s = secs() + ' ' + T('秒', 's'); $('.el', el).textContent = s; if (cstat) $('small', cstat).textContent = s; }, 250);
   try {
-    for (const [b, d, ms] of steps) {
-      $('ol', el).append(h(`<li><span class="mk"><i></i></span><span><b>${esc(b)}</b> · ${esc(d)}</span></li>`));
+    for (const [b, dsc, ms] of steps) {
+      $$('li', el).forEach(li => li.classList.add('done'));
+      const text = dsc ? `${b} · ${dsc}` : b;
+      $('ol', el).append(h(`<li><span class="mk"></span><span>${esc(text)}</span></li>`));
+      $('.cu', el).textContent = '· ' + text;
+      follow(el);
       await step(ms);
     }
-  } finally { clearInterval(tick); }
-  $('.spin', el).outerHTML = `<span class="ok">${ic('check')}</span>`;
-  $('.t', el).textContent = doneText || T(`已完成 · ${steps.length} 步`, `Done · ${steps.length} steps`);
+  } finally {
+    clearInterval(tick);
+    if (comp) { comp.classList.remove('running'); cstat && cstat.remove(); }
+  }
+  const total = Math.max(secs(), steps.length * 2 + 2);
+  el.classList.remove('run'); el.classList.add('done');
+  $$('li', el).forEach(li => li.classList.add('done'));
+  $('.prog-h', el).innerHTML = `<span class="okc">${ic('check')}</span><b class="t">${T('已完成', 'Done')}</b><span class="el">${total} ${T('秒', 's')} · ${T(`${steps.length} 项过程`, `${steps.length} steps`)}</span><span class="cu"></span>${ic('chev', 'i chev')}`;
+  $('.stop', el).remove();
+  const w = $('.who', msg); if (w) w.outerHTML = WHO(false);
+  if (records) el.append(h(`<div class="recs"><div class="rh">${T('项目记录', 'Project records')}</div>${records.map(r => `<span>${esc(r)}</span>`).join('')}</div>`));
+  follow(el);
+  el.append(h(`<div class="pdone"><span class="pill mute"><i class="wd"></i>${T('已完成', 'Done')}</span><span class="sp"></span><span class="lnk">${T('查看执行记录', 'View run record')}</span></div>`));
   return el;
 }
 
 // ---- hero: chat with scripted answers ----
 const QA = () => [
   { q: T('第 3 讲的梯度下降，学习率太大为什么会发散？', 'In lecture 3, why does gradient descent diverge when the learning rate is too big?'),
-    steps: [[T('检索项目资料', 'Searched the project'), T('机器学习 · 找到 3 处', 'Machine Learning · 3 matches'), 900], [T('读取原件', 'Read the original'), T('第3讲-优化.pdf 第 12–13 页', 'Lecture3-Optimization.pdf pp. 12–13'), 1000], [T('整理回答', 'Writing'), T('对照课件和课堂笔记', 'slides against class notes'), 700]],
+    steps: [[T('正在读取已保存的课件原文', 'Reading the saved lecture slides'), '', 900], [T('定位第 12–13 页相关段落', 'Locating the passage on pp. 12–13'), '', 1000], [T('组织回答并标注来源', 'Writing the answer with sources'), '', 800]], rec: [T('机器学习 · 进展日记 10-27', 'Machine Learning · log 10-27')],
     a: [T('课件用一个二次函数来解释：每一步沿负梯度走 η 倍的梯度。η 超过 2/L（L 是曲率的上界）时，每一步都会越过谷底，而且越过得越来越多，损失就一路往上走。', 'The slides use a quadratic: each step moves η times the gradient downhill. Once η is larger than 2/L, where L bounds the curvature, every step overshoots the bottom by more than the last, so the loss keeps climbing.'), { cite: T('第3讲 · 第 12 页', 'Lecture 3 · p.12') }, '\n',
       T('你 10 月 14 日的课堂笔记记了老师的做法：先从 0.1 试，损失开始震荡就每次除以 3。', 'Your class notes from Oct 14 record the rule of thumb: start at 0.1 and divide by 3 whenever the loss starts to oscillate.'), { cite: T('课堂笔记 · 10月14日', 'Class notes · Oct 14') }] },
   { q: T('把这周组会要讲的三件事列出来', 'List three things to bring to this week’s group meeting'),
-    steps: [[T('检索随记和日程', 'Searched notes and agenda'), T('本周 · 找到 5 条', 'this week · 5 items'), 900], [T('读取原件', 'Read the original'), T('组会纪要-10月20日.md', 'Meeting-notes-Oct20.md'), 900], [T('整理回答', 'Writing'), T('按优先级排', 'ordered by priority'), 600]],
+    steps: [[T('检索本周随记和日程', 'Searching this week’s notes and agenda'), '', 900], [T('读取组会纪要-10月20日.md', 'Reading Meeting-notes-Oct20.md'), '', 900], [T('组织回答并标注来源', 'Writing the answer with sources'), '', 700]],
     a: [T('按你这周的随记和上次组会纪要，周五可以讲这三件：', 'From this week’s quick notes and the last meeting’s minutes, bring these on Friday:'), '\n',
       T('1. 两组消融实验补完了，结果在表 2。', '1. Two more ablation runs are done; results are in Table 2.'), { cite: T('随记 · 10月23日', 'Note · Oct 23') }, '\n',
       T('2. 数据集第二版的清洗规则改了，需要大家确认。', '2. The cleaning rules for dataset v2 changed and need sign-off.'), { cite: T('组会纪要 · 10月20日', 'Minutes · Oct 20') }, '\n',
       T('3. 下周想借两张卡跑长训练。', '3. You want to borrow two GPUs next week for a long run.'), { cite: T('随记 · 10月25日', 'Note · Oct 25') }] },
   { q: T('这两篇论文的方法差在哪？', 'How do the methods in these two papers differ?'),
-    steps: [[T('检索知识库', 'Searched the knowledge base'), T('科研 · 2 篇论文笔记', 'Research · 2 paper notes'), 900], [T('读取原件', 'Read the original'), T('论文 A 第 3 节、论文 B 第 4 节', 'Paper A §3, Paper B §4'), 1000], [T('整理回答', 'Writing'), T('逐项对照', 'side by side'), 600]],
+    steps: [[T('检索科研知识库里的论文笔记', 'Searching paper notes in Research'), '', 900], [T('读取论文 A 第 3 节、论文 B 第 4 节', 'Reading Paper A §3 and Paper B §4'), '', 1000], [T('组织回答并标注来源', 'Writing the answer with sources'), '', 700]],
     a: [T('两篇都做检索增强，差别在什么时候检索。A 在生成之前检索一次，把结果拼进输入。', 'Both add retrieval to generation; they differ in when they retrieve. Paper A retrieves once before generating and puts the passages into the prompt.'), { cite: T('论文 A · 第 3 节', 'Paper A · §3') }, '\n',
       T('B 在生成过程中碰到没把握的词才去检索，长回答里的引用更准，代价是更慢。', 'Paper B retrieves mid-generation whenever it is unsure of the next words. Citations in long answers are more accurate, at the cost of speed.'), { cite: T('论文 B · 第 4 节', 'Paper B · §4') }] }
 ];
@@ -197,7 +234,7 @@ function heroChapter(win) {
         <div class="chat-col"></div></div>
       <div class="composer"><div class="in" data-ph="${T('发消息，或添加文件与网页…', 'Message, or add files and pages…')}"></div>
         <div class="bar">${ic('plus')}${ic('at')}<span style="display:flex;gap:5px;align-items:center">${ic('folder')}${T('机器学习', 'Machine Learning')}${ic('chev')}</span><span class="sp"></span>
-        <span class="model">${ic('spark')}gpt-5.6-luna <small>${T('默认推理', 'default effort')}</small>${ic('chev')}</span>${ic('shield')}${ic('dots')}${ic('mic')}
+        ${MODEL()}${ic('shield')}${ic('dots')}${ic('mic')}
         <button class="send" type="button" aria-label="${T('发送', 'Send')}">${ic('send')}</button></div></div></div>`;
     $$('.sug', scr).forEach(b => b.addEventListener('click', () => { touched = true; ask(+b.dataset.q, true); }));
     $('.send', scr).addEventListener('click', () => { touched = true; ask(0, true); });
@@ -216,13 +253,14 @@ function heroChapter(win) {
       inp.textContent = ''; comp.classList.remove('focus');
       empty.classList.add('gone');
       log.innerHTML = '';
-      log.append(h(`<div class="msg-u">${esc(qa.q)}</div>`));
+      log.append(h(`<div class="msg-u">${esc(qa.q)}</div>`), h(MACTS(false)));
       await step(400);
-      const a = h(`<div class="msg-a"><div class="who"><img src="${LOGO}" alt="">AI Bro · gpt-5.6-luna</div></div>`);
+      const a = h(`<div class="msg-a">${WHO(false)}</div>`);
       log.append(a);
-      await progress(a, qa.steps, step);
+      await progress(a, qa.steps, step, comp, qa.rec);
       const ans = h('<div></div>'); a.append(ans);
       await stream(ans, qa.a, step);
+      a.append(h(MACTS(true)));
       const more = h(`<div class="sugs" style="justify-content:flex-start;margin-top:4px">${QA().map((x, j) => j === i ? '' : `<button class="sug" type="button" data-q="${j}">${esc(x.q)}</button>`).join('')}</div>`);
       a.append(more);
       $$('.sug', more).forEach(b => b.addEventListener('click', () => { touched = true; ask(+b.dataset.q, true); }));
@@ -272,7 +310,7 @@ function agendaChapter(win) {
         <div class="crumb">${T('工作区', 'Workspace')} / ${T('日常', 'Daily')} / <b>${T('新对话', 'New chat')}</b></div>
         <div class="chat-log"><div class="chat-col"></div></div>
         <div class="composer"><div class="in" data-ph="${T('发消息，或添加文件与网页…', 'Message, or add files and pages…')}"></div>
-          <div class="bar">${ic('plus')}${ic('at')}<span style="display:flex;gap:5px;align-items:center">${ic('folder')}${T('日常', 'Daily')}${ic('chev')}</span><span class="sp"></span><span class="model">${ic('spark')}gpt-5.6-luna</span>${ic('mic')}<button class="send" type="button" aria-label="${T('发送', 'Send')}">${ic('send')}</button></div></div></div></div>
+          <div class="bar">${ic('plus')}${ic('at')}<span style="display:flex;gap:5px;align-items:center">${ic('folder')}${T('日常', 'Daily')}${ic('chev')}</span><span class="sp"></span>${MODEL()}${ic('mic')}<button class="send" type="button" aria-label="${T('发送', 'Send')}">${ic('send')}</button></div></div></div></div>
       <div class="pane" data-sub="cal">${calHTML()}</div>`;
     $('.send', scr).addEventListener('click', () => { touched = true; send(); });
     $('.composer .in', scr).addEventListener('click', () => { touched = true; fill(); });
@@ -294,7 +332,7 @@ function agendaChapter(win) {
     const log = $('.chat-col', scr);
     log.append(h(`<div class="msg-u">${esc(SENT())}</div>`));
     await sleep(500);
-    const a = h(`<div class="msg-a"><div class="who"><img src="${LOGO}" alt="">AI Bro · gpt-5.6-luna</div><p>${T('我按你的原话生成了一条日程提案，保存前请审阅。', 'I drafted an agenda proposal from your words. Review it before saving.')}</p></div>`);
+    const a = h(`<div class="msg-a">${WHO(false)}<p>${T('我按你的原话生成了一条日程提案，保存前请审阅。', 'I drafted an agenda proposal from your words. Review it before saving.')}</p></div>`);
     log.append(a);
     await sleep(500);
     const card = h(`<div class="acard"><div class="ah">${ic('cal')}<b>${T('组会', 'Group meeting')}</b><span class="pill mute">${T('日程提案', 'Proposal')}</span></div>
@@ -350,31 +388,41 @@ function agendaChapter(win) {
 
 // ---- reader: select a passage, explain, jump back from the citation ----
 function readChapter(win) {
+  // Laid out after the 0.9.10 shots: chat on the left, reader on the right; selecting text pops 解释 / 翻译 / 批注 / 问 AI.
   const run = runner(win);
   const scr = h('<section class="scr" data-s="read"></section>');
   $('.w-body', win).append(scr);
   let touched = false, asked = false;
+  const FILE = () => T('第3讲-优化.pdf', 'Lecture3-Optimization.pdf');
+  const SENT = () => T('当学习率 η 大于 2/L 时，迭代在谷底两侧来回跳动，且振幅逐步增大，算法发散。', 'When the learning rate η exceeds 2/L, the iterates bounce across the valley with growing amplitude and the method diverges.');
+  const ASK = () => T('这句和下一页的图是什么关系？', 'How does this relate to the figure on the next page?');
+  const TABS = () => [T('对话', 'Chats'), T('资料', 'Sources'), T('成果', 'Outputs'), T('任务', 'Tasks'), T('排期', 'Schedule'), T('总览', 'Overview')].map((x, i) => `<span${i ? '' : ' class="on"'}>${x}</span>`).join('');
   function render() {
     run.cancel(); asked = false;
     scr.innerHTML = `<div class="split"><div class="chat">
-        <div class="crumb">${T('课程', 'Courses')} / ${T('机器学习', 'Machine Learning')} / <b>${T('第 3 讲复习', 'Lecture 3 review')}</b></div>
-        <div class="chat-log"><div class="chat-col" style="padding:0 18px"><div class="msg-a" style="color:var(--muted);font-size:12.5px"><div class="who"><img src="${LOGO}" alt="">AI Bro</div>${T('第3讲-优化.pdf 已在右边打开。选中一段文字，用工具条提问。', 'Lecture3-Optimization.pdf is open on the right. Select a passage and use the toolbar.')}</div></div></div>
-        <div class="composer" style="width:calc(100% - 28px)"><div class="in" data-ph="${T('就这份资料提问…', 'Ask about this file…')}"></div><div class="bar">${ic('plus')}${ic('at')}<span class="sp"></span>${ic('mic')}<button class="send" type="button" disabled aria-label="${T('发送', 'Send')}">${ic('send')}</button></div></div>
+        <div class="crumb">${T('工作区', 'Workspace')} / ${T('课程', 'Courses')} / ${T('机器学习', 'Machine Learning')} / <b>${T('第 3 讲复习', 'Lecture 3 review')}</b></div>
+        <div class="ptabs">${TABS()}</div>
+        <div class="chat-log"><div class="chat-col" style="padding:0 16px"></div></div>
+        <div class="composer" style="width:calc(100% - 28px)"><div class="att"></div><div class="in" data-ph="${T('发消息，或添加文件与网页…', 'Message, or add files and pages…')}"></div><div class="bar">${ic('plus')}${ic('at')}${ic('folder')}<span class="sp"></span>${MODEL()}${ic('mic')}<button class="send" type="button" aria-label="${T('发送', 'Send')}">${ic('send')}</button></div></div>
       </div>
-      <div class="reader"><div class="r-tabs"><span class="r-tab on">${ic('doc')}${T('第3讲-优化.pdf', 'Lecture3-Optimization.pdf')}</span><span class="r-tab">${ic('note')}${T('课堂笔记.md', 'class-notes.md')}</span></div>
-        <div class="r-bar"><span>${T('第 12 / 28 页', 'Page 12 / 28')}</span><span class="sp"></span><span>100%</span><span class="b ghost" style="height:24px">${T('问 AI', 'Ask AI')}</span></div>
+      <div class="reader">
+        <div class="r-head"><span class="bk">← ${T('返回资料', 'Back to sources')}</span><span class="r-tab on">${esc(FILE())}<i>×</i></span><span class="sp"></span><span>${T('问 AI', 'Ask AI')}</span><span>${T('引用到对话', 'Quote in chat')}</span><span class="b ghost">${ic('folder')}${T('文件', 'File')}</span></div>
+        <div class="r-info">› ${T('文档信息与来源', 'Document info and source')}</div>
+        <div class="r-bar"><span>‹</span><span class="fld" style="width:34px;height:24px;justify-content:center;font-family:inherit">12</span><span>/ 28 ›</span><span class="seg"><span class="on">${T('宽度', 'Width')}</span><span>${T('整页', 'Page')}</span></span><span>− 100% +</span>${ic('search')}<span>${T('框选', 'Box')}</span><span>${T('问这一页', 'Ask this page')}</span></div>
         <div class="r-doc"><div class="r-pages">
-          <div class="r-page" data-p="12"><strong class="h6">3.2 ${T('步长与收敛', 'Step size and convergence')}</strong>
+          <div class="r-page" data-p="12"><div class="kick">AI BRO / COURSE NOTES</div><div class="h6">3.2 ${T('步长与收敛', 'Step size and convergence')}</div>
             <p>${T('梯度下降每一步沿负梯度方向更新参数：', 'Each step of gradient descent moves the parameters against the gradient:')}</p>
             <p class="eq">θ<sub>t+1</sub> = θ<sub>t</sub> − η ∇f(θ<sub>t</sub>)</p>
-            <p>${T('设 f 的梯度是 L-Lipschitz 的，即曲率不超过 L。', 'Assume the gradient of f is L-Lipschitz, so curvature is at most L.')}<span class="sel hint" tabindex="0" role="button">${T('当学习率 η 大于 2/L 时，迭代在谷底两侧来回跳动，且振幅逐步增大，算法发散。', 'When the learning rate η exceeds 2/L, the iterates bounce across the valley with growing amplitude and the method diverges.')}</span>${T('当 η 不超过 1/L 时，每一步都能保证损失下降。', ' When η is at most 1/L, every step is guaranteed to lower the loss.')}</p>
-            <p>${T('实践中常用的做法是从较大的 η 开始，观察损失曲线，出现震荡后逐步减小。', 'In practice one starts with a large η, watches the loss curve and shrinks η once it oscillates.')}</p><span class="pn">12</span></div>
-          <div class="r-page" data-p="13"><strong class="h6">${T('图 3.2', 'Figure 3.2')}</strong>
-            <svg class="fig" viewBox="0 0 340 120" style="width:100%;height:auto;border-radius:4px"><path d="M10 110 Q170 -60 330 110" fill="none" stroke="#9aa59f" stroke-width="1.2"/><path d="M40 70 L290 64 L70 46 L250 40 L110 30 L190 28" fill="none" stroke="#087f70" stroke-width="1.6"/><path d="M60 52 L280 68 L30 92 L320 100" fill="none" stroke="#c25766" stroke-width="1.6" stroke-dasharray="4 3"/><text x="200" y="24" font-size="10" fill="#087f70">η = 0.9/L</text><text x="230" y="116" font-size="10" fill="#c25766">η = 2.2/L</text></svg>
+            <p>${T('设 f 的梯度是 L-Lipschitz 的，即曲率不超过 L。', 'Assume the gradient of f is L-Lipschitz, so curvature is at most L. ')}<span class="sel hint" tabindex="0" role="button">${esc(SENT())}</span>${T('当 η 不超过 1/L 时，每一步都能保证损失下降。', ' When η is at most 1/L, every step is guaranteed to lower the loss.')}</p>
+            <p>${T('实践中常从较大的 η 开始，观察损失曲线，出现震荡后逐步减小。', 'In practice one starts with a large η, watches the loss and shrinks η once it oscillates.')}</p><span class="pn">12</span></div>
+          <div class="r-page" data-p="13"><div class="h6 cap">${T('图 3.2 两种步长的轨迹', 'Figure 3.2 Trajectories for two step sizes')}</div>
+            <svg class="fig" viewBox="0 0 340 120" style="width:100%;height:auto"><path d="M10 110 Q170 -60 330 110" fill="none" stroke="#9aa59f" stroke-width="1.2"/><path d="M40 70 L290 64 L70 46 L250 40 L110 30 L190 28" fill="none" stroke="#087f70" stroke-width="1.6"/><path d="M60 52 L280 68 L30 92 L320 100" fill="none" stroke="#c25766" stroke-width="1.6" stroke-dasharray="4 3"/><text x="200" y="24" font-size="10" fill="#087f70">η = 0.9/L</text><text x="230" y="116" font-size="10" fill="#c25766">η = 2.2/L</text></svg>
             <p>${T('实线收敛，虚线发散。两者只差在步长。', 'Solid converges, dashed diverges. Only the step size differs.')}</p><span class="pn">13</span></div>
         </div>
-        <div class="selbar" role="toolbar" aria-label="${T('选中内容的操作', 'Selection actions')}"><button type="button" data-m="explain">${T('解释', 'Explain')}</button><button type="button" data-m="annotate">${T('批注', 'Annotate')}</button><button type="button" data-m="translate">${T('翻译', 'Translate')}</button><span class="sep"></span><button type="button" data-m="quote">${T('引用到对话', 'Quote in chat')}</button></div>
-        </div></div></div>
+        <div class="selbar" role="toolbar" aria-label="${T('选中内容的操作', 'Selection actions')}"><button type="button" data-m="explain">${T('解释', 'Explain')}</button><button type="button" data-m="translate">${T('翻译', 'Translate')}</button><button type="button" data-m="annotate">${T('批注', 'Annotate')}</button><button type="button" data-m="ask">${T('问 AI', 'Ask AI')}</button></div>
+        </div>
+        <div class="r-foot"><span class="b ghost" style="color:var(--red)">${T('移入回收站', 'Move to Trash')}</span><span class="sp"></span><span class="b ghost">${T('移动 / 归属', 'Move')}</span><span class="b ghost">${T('下载原文件', 'Download original')}</span></div>
+      </div></div>
       <div class="toast">${ic('check')}<span></span></div>`;
     const sel = $('.sel', scr);
     // Dragging anywhere across the page counts as selecting the outlined sentence.
@@ -384,48 +432,65 @@ function readChapter(win) {
     sel.addEventListener('click', () => { touched = true; select(); });
     sel.addEventListener('keydown', e => { if (e.key === 'Enter') { touched = true; select(); } });
     $$('.selbar button', scr).forEach(b => b.addEventListener('click', () => { touched = true; act(b.dataset.m); }));
+    $('.send', scr).addEventListener('click', () => { touched = true; sendAsk(); });
   }
   function select() {
     const sel = $('.sel', scr), bar = $('.selbar', scr), doc = $('.r-doc', scr);
     sel.classList.remove('hint'); sel.classList.add('on');
     const d = doc.getBoundingClientRect(), r = sel.getBoundingClientRect(), s = parseFloat(getComputedStyle(win).getPropertyValue('--s')) || 1;
     bar.style.left = Math.max(8, (r.left - d.left) / s + 10) + 'px';
-    bar.style.top = Math.max(6, (r.top - d.top) / s - 44) + 'px';
+    bar.style.top = Math.max(6, (r.top - d.top) / s - 42) + 'px';
     bar.classList.add('on');
   }
   function jump(p) {
-    const pages = $('.r-pages', scr), target = p === 13 ? $('.r-page[data-p="13"] .fig', scr) : $('.sel', scr);
+    const pages = $('.r-pages', scr), target = p === 13 ? $('.r-page[data-p="13"] .cap', scr) : $('.sel', scr);
     $('.selbar', scr).classList.remove('on');
-    pages.style.transform = p === 13 ? 'translateY(-380px)' : 'translateY(-40px)';
-    target.classList.remove('flash'); void target.offsetWidth; target.classList.add('flash');
-    setTimeout(() => { pages.style.transform = ''; }, p === 13 ? 2600 : 2000);
+    $$('.hit', scr).forEach(x => x.classList.remove('hit'));
+    pages.style.transform = p === 13 ? 'translateY(-330px)' : 'translateY(-20px)';
+    target.classList.remove('sel-on'); target.classList.add('hit');
+    if (p === 12) $('.sel', scr).classList.remove('on');
   }
+  function toast(t) { const el = $('.toast', scr); $('span', el).textContent = t; el.classList.add('on'); setTimeout(() => el.classList.remove('on'), 2200); }
+  function quoteHTML() { return `<div class="quote">${T(`关于《${FILE()}》第 12 页：`, `On “${FILE()}”, p.12:`)}<br>${esc(SENT())}</div>`; }
   async function act(m) {
     const bar = $('.selbar', scr);
-    if (m === 'annotate' || m === 'quote') {
-      bar.classList.remove('on');
-      const t = $('.toast', scr); $('span', t).textContent = m === 'annotate' ? T('已添加批注 · 第 12 页', 'Annotation added · p.12') : T('已引用到对话', 'Quoted in the chat');
-      t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2200);
-      if (m === 'quote') { const inp = $('.composer .in', scr); inp.textContent = T('> 摘自 第3讲-优化.pdf 第 12 页', '> From Lecture3-Optimization.pdf p.12'); }
+    $$('button', bar).forEach(b => b.classList.toggle('hot', b.dataset.m === m));
+    await sleep(200); bar.classList.remove('on');
+    if (m === 'annotate') { toast(T('已添加批注 · 第 12 页', 'Annotation added · p.12')); return; }
+    if (m === 'ask') {
+      // 问 AI: the passage goes into the composer as an attachment plus quoted lines, like the real app.
+      $('.att', scr).innerHTML = `<span class="achip">${ic('doc')}${esc(FILE())}<i>×</i></span><span class="amode">PDF <b>${T('发送原件', 'Send original')}</b> ⌄</span>`;
+      const inp = $('.composer .in', scr);
+      inp.innerHTML = `<span class="q">&gt; ${T(`关于《${FILE()}》第 12 页：`, `On “${FILE()}”, p.12:`)}</span><span class="q">&gt; ${esc(SENT().slice(0, 26))}…</span>`;
+      $('.composer', scr).classList.add('focus');
       return;
     }
+    ask(m === 'explain' ? T('解释这段', 'Explain this') : T('翻译这段', 'Translate this'), m);
+  }
+  async function sendAsk() {
+    const inp = $('.composer .in', scr);
+    if (!$('.att', scr).innerHTML) { select(); await sleep(400); await act('ask'); await sleep(300); }
+    const tail = document.createElement('div'); inp.append(tail);
+    for (const ch of ASK()) { tail.textContent += ch; await sleep(reduced() ? 0 : 35); }
+    await sleep(250);
+    ask(ASK(), 'ask');
+  }
+  async function ask(text, m) {
     if (asked) return; asked = true;
-    $$('button', bar).forEach(b => b.classList.toggle('hot', b.dataset.m === m));
-    await sleep(250); bar.classList.remove('on');
+    $('.att', scr).innerHTML = ''; $('.composer .in', scr).innerHTML = ''; $('.composer', scr).classList.remove('focus');
     const log = $('.chat-col', scr);
     log.innerHTML = '';
-    const quote = T('当学习率 η 大于 2/L 时，迭代在谷底两侧来回跳动…', 'When the learning rate η exceeds 2/L, the iterates bounce…');
-    log.append(h(`<div class="msg-u" style="max-width:92%"><div class="quote">${T('摘自 第3讲-优化.pdf 第 12 页', 'From Lecture3-Optimization.pdf p.12')}<br>${esc(quote)}</div>${m === 'explain' ? T('解释这段', 'Explain this') : T('翻译这段', 'Translate this')}</div>`));
-    const a = h(`<div class="msg-a" style="font-size:12.5px"><div class="who"><img src="${LOGO}" alt="">AI Bro</div></div>`); log.append(a);
+    log.append(h(`<div class="msg-u" style="max-width:94%">${quoteHTML()}${esc(text)}</div>`));
+    const a = h(`<div class="msg-a" style="font-size:12.5px">${WHO(false)}</div>`); log.append(a);
     const own = runner(win);
     await own.play(async ({ step }) => {
       await step(300);
-      await progress(a, [[T('读取原件', 'Read the original'), T('第 12–13 页', 'pp. 12–13'), 800]], step, T('已完成 · 1 步', 'Done · 1 step'));
+      await progress(a, [[T('正在读取已保存的课件原文', 'Reading the saved slides'), '', 800], [T('定位第 12–13 页相关段落', 'Locating pp. 12–13'), '', 800]], step, $('.composer', scr));
       const ans = h('<div></div>'); a.append(ans);
-      const parts = m === 'explain'
-        ? [T('这句说的是步长的上限。L 衡量损失曲面最弯的地方有多弯；步长超过 2/L，每一步都会跨过最低点、落到更高的地方，所以离最优点越来越远。', 'It sets an upper bound on the step. L measures how sharply the loss curves at its steepest; with a step above 2/L each update jumps past the minimum and lands higher, so you move further away every time.'), { cite: T('第 12 页', 'p.12'), go: 12 }, '\n',
-           T('下一页的图把 η = 0.9/L 和 η = 2.2/L 两条轨迹画在一起，可以对照看。', 'The figure on the next page draws η = 0.9/L and η = 2.2/L side by side.'), { cite: T('第 13 页 · 图 3.2', 'p.13 · Fig. 3.2'), go: 13 }]
-        : [T('When the learning rate η exceeds 2/L, the iterates bounce back and forth across the valley with growing amplitude, and the algorithm diverges.', '当学习率 η 大于 2/L 时，迭代在谷底两侧来回跳动，且振幅逐步增大，算法发散。'), { cite: T('第 12 页', 'p.12'), go: 12 }];
+      const parts = m === 'translate'
+        ? [T('When the learning rate η exceeds 2/L, the iterates bounce back and forth across the valley with growing amplitude, and the algorithm diverges.', '当学习率 η 大于 2/L 时，迭代在谷底两侧来回跳动，且振幅逐步增大，算法发散。'), { cite: FILE() + ' · ' + T('第 12 页', 'p.12'), go: 12 }]
+        : [T('这句说的是步长的上限。步长超过 2/L，每一步都会跨过最低点、落到更高的地方，所以越走越远。', 'It sets an upper bound on the step. Above 2/L every update jumps past the minimum and lands higher, so you drift further away.'), { cite: FILE() + ' · ' + T('第 12 页', 'p.12'), go: 12 }, '\n',
+           T('下一页的图 3.2 把 η = 0.9/L 和 η = 2.2/L 两条轨迹画在一起：实线收敛，虚线就是这句话说的发散。', 'Figure 3.2 on the next page draws η = 0.9/L and η = 2.2/L together: the solid line converges, the dashed one is the divergence this sentence describes.'), { cite: FILE() + ' · ' + T('第 13 页 · 图 3.2', 'p.13 · Fig. 3.2'), go: 13 }];
       await stream(ans, parts, step, go => { touched = true; jump(go); });
     });
   }
@@ -440,9 +505,9 @@ function readChapter(win) {
         const sel = $('.sel', scr);
         await to(sel, 0.02, 0.3); await step(200);
         await to(sel, 0.98, 0.7); select(); await step(700);
-        await click($('.selbar [data-m=explain]', scr), () => act('explain'));
-        await step(4800);
-        const c = $$('.chat-col .cite', scr)[1]; if (c) await click(c, () => jump(13));
+        await click($('.selbar [data-m=ask]', scr), () => act('ask')); await step(600);
+        await click($('.composer .send', scr), () => { sendAsk(); }); await step(ASK().length * 35 + 4600);
+        const c = $$('.scr[data-s=read] .source-link', win)[1]; if (c) await click(c, () => jump(13));
       });
     },
     reset: render, get touched() { return touched; }
@@ -635,9 +700,9 @@ function cmdkChapter(win) {
   function renderChat() {
     scr.innerHTML = `<div class="w-wash"></div><div class="chat"><div class="crumb">${T('全部对话', 'All chats')} / <b>${T('梯度下降的学习率怎么选', 'Choosing a learning rate')}</b></div><div class="chat-log"><div class="chat-col">
       <div class="msg-u">${T('第 3 讲的梯度下降，学习率太大为什么会发散？', 'In lecture 3, why does gradient descent diverge when the learning rate is too big?')}</div>
-      <div class="msg-a"><div class="who"><img src="${LOGO}" alt="">AI Bro · gpt-5.6-luna</div><div class="prog"><div class="prog-h"><span class="ok">${ic('check')}</span>${T('已完成 · 3 步', 'Done · 3 steps')}<span class="el">4.1s</span></div></div>
-      <p>${T('课件用一个二次函数来解释：η 超过 2/L 时，每一步都会越过谷底，而且越过得越来越多。', 'The slides use a quadratic: once η is larger than 2/L, every step overshoots the bottom by more than the last.')}<span class="cite">${ic('doc')}${T('第3讲 · 第 12 页', 'Lecture 3 · p.12')}</span></p></div></div></div>
-      <div class="composer"><div class="in" data-ph="${T('发消息，或添加文件与网页…', 'Message, or add files and pages…')}"></div><div class="bar">${ic('plus')}${ic('at')}<span class="sp"></span><span class="model">${ic('spark')}gpt-5.6-luna</span>${ic('mic')}<button class="send" type="button" disabled aria-label="${T('发送', 'Send')}">${ic('send')}</button></div></div></div>
+      <div class="msg-a">${WHO(false)}<div class="prog done"><div class="prog-h"><span class="okc">${ic('check')}</span><b class="t">${T('已完成', 'Done')}</b><span class="el">8 ${T('秒', 's')} · ${T('3 项过程', '3 steps')}</span><span class="cu"></span>${ic('chev', 'i chev')}</div></div>
+      <p>${T('课件用一个二次函数来解释：η 超过 2/L 时，每一步都会越过谷底，而且越过得越来越多。', 'The slides use a quadratic: once η is larger than 2/L, every step overshoots the bottom by more than the last.')}<sup class="cn">1</sup></p></div></div></div>
+      <div class="composer"><div class="in" data-ph="${T('发消息，或添加文件与网页…', 'Message, or add files and pages…')}"></div><div class="bar">${ic('plus')}${ic('at')}<span class="sp"></span>${MODEL()}${ic('mic')}<button class="send" type="button" disabled aria-label="${T('发送', 'Send')}">${ic('send')}</button></div></div></div>
       <div class="toast">${ic('check')}<span></span></div>`;
   }
   function render() {
