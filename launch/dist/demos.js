@@ -340,9 +340,10 @@ function readChapter(win) {
         </div></div></div>
       <div class="toast">${ic('check')}<span></span></div>`;
     const sel = $('.sel', scr);
-    let down = false;
-    sel.addEventListener('pointerdown', e => { down = true; touched = true; run.cancel(); e.preventDefault(); });
-    scr.addEventListener('pointerup', () => { if (down) { down = false; select(); } });
+    // Dragging anywhere across the page counts as selecting the outlined sentence.
+    let down = null;
+    $('.r-pages', scr).addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; touched = true; run.cancel(); e.preventDefault(); });
+    scr.addEventListener('pointerup', e => { if (down && (Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 12 || e.target.closest('.sel'))) select(); down = null; });
     sel.addEventListener('click', () => { touched = true; select(); });
     sel.addEventListener('keydown', e => { if (e.key === 'Enter') { touched = true; select(); } });
     $$('.selbar button', scr).forEach(b => b.addEventListener('click', () => { touched = true; act(b.dataset.m); }));
@@ -492,7 +493,7 @@ function islandChapter(win, base) {
   const layer = h('<div class="scr ov" data-s="island" style="pointer-events:none"></div>');
   const dim = h('<div class="dim"></div>');
   const isl = h('<div class="island" role="button" tabindex="0"></div>');
-  $('.w-main', win).append(dim); win.append(isl);
+  win.append(dim, isl);
   let touched = false, state = 'idle', words = [], timer = 0, waveT = 0, holdT = 0;
   const RAW = () => L() === 'en'
     ? ['um', 'move', 'tomorrow', 'morning’s', 'group', 'meeting', 'to', '3pm', 'and', 'uh', 'remind', 'me', 'to', 'bring', 'the', 'printed', 'results']
@@ -673,7 +674,7 @@ function tasksChapter(win, base) {
   const run = runner(win);
   const layer = h('<div class="ovl"></div>');
   const dim = h('<div class="dim"></div>');
-  $('.w-main', win).append(dim, layer);
+  win.append(dim); $('.w-main', win).append(layer);
   let touched = false, state = 'idle';
   function render() {
     run.cancel(); state = 'idle';
@@ -758,7 +759,7 @@ function modelsChapter(win) {
     const fields = p.kind === 'acct'
       ? `<label>${T('账号', 'Account')}</label><div class="fld" style="font-family:inherit">${T('已登录 · 复用现有账号', 'Signed in · existing account')}</div><p style="font-size:11px;color:var(--muted);margin-top:6px">${T('经官方登录；AI Bro 不读取也不保存令牌。', 'Signed in officially; AI Bro neither reads nor stores the token.')}</p>`
       : `<label>${T('API 地址', 'API address')}</label><div class="fld">${esc(p.url)}</div><label>${T('密钥', 'Key')}</label><div class="fld">${p.fail ? T('（本机服务不需要）', '(not needed for a local service)') : '••••••••••••••••'}</div>`;
-    return `<div class="pd-body"><div class="t"><span class="prov"><span class="av">${p.id}</span></span><b>${esc(p.n)}</b><span class="pill ${p.tag[1]}">${esc(p.tag[0])}</span></div>${fields}
+    return `<div class="pd-body"><div class="t"><span class="av">${p.id}</span><b>${esc(p.n)}</b><span class="pill ${p.tag[1]}">${esc(p.tag[0])}</span></div>${fields}
       <label>${T('默认模型', 'Default model')}</label><div class="fld">${esc(p.sub.includes('·') ? (p.models || [''])[0] : p.sub)}</div>
       <div class="acts"><button class="b pri" type="button" data-a="test">${T('测试可用性', 'Test')}</button><span class="b">${T('重新检测', 'Re-check')}</span><span style="flex:1"></span><span class="b ghost" style="color:var(--red)">${T('从列表移除', 'Remove')}</span></div>
       <div class="res" role="status"></div></div>`;

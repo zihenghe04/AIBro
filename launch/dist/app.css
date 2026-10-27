@@ -9,7 +9,8 @@
   box-shadow:0 0 0 .5px #0000002e,0 30px 80px -20px #0b2a2040,0 12px 30px -12px #0b2a2026;text-align:left;
 }
 .win *{box-sizing:border-box}
-.win button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.win svg{display:inline-block;vertical-align:-3px}
+:where(.win) button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 .win svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round;flex:none}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]) .win{--accent:#65d7bb;--accent-soft:#65d7bb14;--accent-mid:#65d7bb26;--text:#eef1f0;--muted:#b4bfbb;--faint:#9aaaa3;--bg:#1b1e20;--canvas:#1d2022;--panel:#25292b;--panel-hover:#303937;--glass:#25292bed;--line:#e1e8d812;--line-strong:#e1e8d827;--side:#222527f2;--side-text:#e6eae8;--orange:#e7be59;--red:#f39ca3;--chip:#2b3032;--hl:#e7be5940;--hl-on:#e7be5980;box-shadow:0 0 0 .5px #ffffff26,0 30px 80px -20px #000a,0 12px 30px -12px #0008}}
 :root[data-theme=dark] .win{--accent:#65d7bb;--accent-soft:#65d7bb14;--accent-mid:#65d7bb26;--text:#eef1f0;--muted:#b4bfbb;--faint:#9aaaa3;--bg:#1b1e20;--canvas:#1d2022;--panel:#25292b;--panel-hover:#303937;--glass:#25292bed;--line:#e1e8d812;--line-strong:#e1e8d827;--side:#222527f2;--side-text:#e6eae8;--orange:#e7be59;--red:#f39ca3;--chip:#2b3032;--hl:#e7be5940;--hl-on:#e7be5980;box-shadow:0 0 0 .5px #ffffff26,0 30px 80px -20px #000a,0 12px 30px -12px #0008}
@@ -149,7 +150,7 @@
 .r-bar .sp{flex:1}
 .r-doc{flex:1;overflow:hidden;position:relative;background:var(--bg);padding:16px 0}
 .r-pages{transition:transform .8s cubic-bezier(.22,1,.36,1)}
-.r-page{width:420px;margin:0 auto 14px;background:#fffefb;color:#2a2a28;box-shadow:0 1px 4px #0000001a,0 0 0 .5px #0000000f;padding:34px 40px;font:11.5px/1.75 "Songti SC","Noto Serif SC",Georgia,serif;position:relative}
+.r-page{user-select:none;-webkit-user-select:none;width:min(420px,94%);margin:0 auto 14px;background:#fffefb;color:#2a2a28;box-shadow:0 1px 4px #0000001a,0 0 0 .5px #0000000f;padding:34px 40px;font:11.5px/1.75 "Songti SC","Noto Serif SC",Georgia,serif;position:relative}
 .r-page h6{font:600 14px/1.4 -apple-system,"PingFang SC",sans-serif;margin:0 0 10px;color:#1f2a26}
 .r-page p{margin:0 0 9px;text-align:justify}
 .r-page .pn{position:absolute;bottom:10px;left:0;right:0;text-align:center;font:10px -apple-system,sans-serif;color:#5d5d58}
@@ -193,6 +194,7 @@
 .dim.on{opacity:1}
 .island{position:absolute;left:50%;top:10px;z-index:9;visibility:hidden;width:190px;height:34px;margin-left:-95px;border-radius:18px;background:#000;color:#fff;box-shadow:0 12px 34px #0006;transform:translateY(-70px);transition:transform .5s cubic-bezier(.34,1.3,.64,1),width .45s cubic-bezier(.34,1.2,.64,1),height .45s cubic-bezier(.34,1.2,.64,1),margin .45s cubic-bezier(.34,1.2,.64,1),border-radius .45s;overflow:hidden;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none}
 .island.on{transform:none;visibility:visible}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .island{box-shadow:0 0 0 1px #ffffff24,0 12px 34px #000a}}
 .island.big{width:460px;height:182px;margin-left:-230px;border-radius:30px}
 .island .row{display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;font-size:11px;font-weight:600;white-space:nowrap}
 .island .dot{width:7px;height:7px;border-radius:50%;background:#a8d9b8;box-shadow:0 0 8px #a8d9b8}
@@ -258,7 +260,7 @@
 .plist .h{font-size:10.5px;color:var(--muted);padding:4px 6px 6px}
 .prov{display:flex;align-items:center;gap:9px;width:100%;padding:8px;border-radius:10px;text-align:left;transition:background .25s}
 .prov.on{background:var(--panel-hover);box-shadow:inset 0 0 0 1px var(--accent-mid)}
-.prov .av{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--chip);font-size:11px;font-weight:600;color:var(--text)}
+.av{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--chip);font-size:11px;font-weight:600;color:var(--text)}
 .prov b{display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:500}
 .prov small{display:block;font-size:10.5px;color:var(--muted)}
 .pd{border:1px solid var(--line);border-radius:14px;padding:14px;position:relative;min-height:300px}
@@ -290,3 +292,18 @@
 @keyframes flash{0%,100%{box-shadow:none}25%,60%{box-shadow:0 0 0 4px #f2c94c66}}
 @keyframes ripple{0%{opacity:.5;transform:scale(.3)}100%{opacity:0;transform:scale(1.8)}}
 @media (prefers-reduced-motion:reduce){.win *,.win{transition:none!important;animation:none!important}}
+/* narrow screens: no sidebar, 760x640 design size */
+.win.compact{width:760px;height:640px;grid-template-columns:1fr}
+.win.compact .w-side{display:none}
+.win.compact .split{grid-template-columns:1fr 1.15fr}
+.win.compact .wiki{grid-template-columns:150px 1fr}
+.win.compact .wnote{padding:18px 24px}
+.win.compact .set{grid-template-columns:1fr;padding:18px 20px}
+.win.compact .set-nav{display:none}
+.win.compact .mrow{grid-template-columns:180px 1fr}
+.win.compact .dlg{width:600px;margin-left:-300px;top:24px;bottom:24px}
+.win.compact .pal{width:520px;margin-left:-260px}
+.win.compact .wk{height:420px}
+.win.compact .prop{right:16px}
+.win.compact .page{padding:18px 20px}
+.win.compact .r-page{padding:26px 26px}
