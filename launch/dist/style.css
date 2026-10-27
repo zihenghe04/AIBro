@@ -195,6 +195,7 @@ footer a{text-decoration:none}
   .ch,.ch:first-child{min-height:0;opacity:1;padding:36px 0 52px}
   .ch .try{opacity:1;transform:none}
   .m-win{display:block;margin-top:22px}
+  .win-fit{overflow:clip;overflow-clip-margin:12px}
   .bento{grid-template-columns:repeat(2,minmax(0,1fr))}
   .road{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
