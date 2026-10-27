@@ -25,6 +25,8 @@ button{font:inherit;color:inherit}
 /* header: full-width bar that turns into a floating capsule once the page scrolls */
 .site-header{position:fixed;left:0;right:0;top:0;z-index:30;display:flex;justify-content:center;pointer-events:none}
 .nav{pointer-events:auto;display:flex;align-items:center;gap:22px;height:60px;width:min(var(--w),100% - 40px);padding:0 4px;border-radius:999px;border:1px solid transparent;transition:width .6s var(--ease),height .5s var(--ease),margin .5s var(--ease),background .4s,border-color .4s,box-shadow .4s,padding .5s var(--ease)}
+.site-header:before{content:"";position:absolute;left:0;right:0;top:0;height:84px;background:linear-gradient(var(--bg) 0,var(--bg) 52%,color-mix(in srgb,var(--bg) 0%,transparent));opacity:0;transition:opacity .35s;pointer-events:none}
+.site-header.stuck:before{opacity:1}
 .site-header.stuck .nav{width:min(760px,100% - 24px);height:50px;margin-top:10px;padding:0 8px 0 16px;background:color-mix(in srgb,var(--card) 78%,transparent);backdrop-filter:saturate(1.5) blur(20px);-webkit-backdrop-filter:saturate(1.5) blur(20px);border-color:var(--line);box-shadow:0 10px 30px -12px #10251c33}
 .brand{display:flex;align-items:center;gap:9px;font-weight:650;letter-spacing:-.01em;text-decoration:none}
 .brand img{border-radius:7px}
@@ -87,7 +89,7 @@ section{scroll-margin-top:70px}
 .ch.on .try{opacity:1;transform:none}
 .m-win{display:none}
 .stage{position:relative}
-.stage-in{position:sticky;top:max(76px,calc(50vh - 300px));padding-bottom:40px}
+.stage-in{position:sticky;top:max(88px,calc(50vh - 300px));padding-bottom:40px}
 .stage-rail{display:flex;gap:6px;justify-content:center;margin-top:22px}
 .stage-rail i{width:22px;height:4px;border-radius:2px;background:var(--line2);transition:background .4s,width .5s var(--ease)}
 .stage-rail i.on{width:44px;background:var(--acc)}

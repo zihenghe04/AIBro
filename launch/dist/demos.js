@@ -516,10 +516,11 @@ function readChapter(win) {
 
 // ---- wiki: linked notes ----
 function wikiChapter(win) {
+  // Laid out after the 0.9.10 project Sources page with the reading pane on the right (project-sources / wiki-note-reader shots).
   const run = runner(win);
   const scr = h('<section class="scr" data-s="wiki"></section>');
   $('.w-body', win).append(scr);
-  let touched = false, cur = 'rag', trail = ['rag'];
+  let touched = false, cur = 'rag', tabs = ['rag'];
   const L2 = (k, t) => `<span class="wl" role="link" tabindex="0" data-go="${k}">${t}</span>`;
   const NOTES = () => ({
     rag: { t: T('检索增强生成（RAG）', 'Retrieval-augmented generation'), meta: T('更新于 10月26日 · 3 篇笔记链接到这里', 'Updated Oct 26 · 3 notes link here'),
@@ -539,40 +540,75 @@ function wikiChapter(win) {
       b: `<ul><li>${T('检索错了怎么办：先看引用对不对，再看检索器召回。', 'If retrieval is wrong: check the citation first, then the retriever’s recall.')}</li><li>${T('数据集第二版的清洗规则下周定。', 'Cleaning rules for dataset v2 to be settled next week.')}</li><li>${T('相关：', 'Related: ')}${L2('rag', T('检索增强生成', 'retrieval-augmented generation'))}</li></ul>`,
       bl: [T('检索增强生成（RAG）', 'Retrieval-augmented generation')] }
   });
-  const TREE = [['rag'], ['dense'], ['paperb'], ['meet']];
+  // list rows: [key or null, title, sub, status]
+  const ROWS = () => [
+    ['rag', NOTES().rag.t, T('文献/主题笔记', 'Literature/topic notes'), T('主题笔记', 'Topic note')],
+    ['paperb', NOTES().paperb.t, T('文献/论文笔记', 'Literature/paper notes'), T('论文主笔记', 'Paper note')],
+    ['dense', NOTES().dense.t, T('概念', 'Concepts'), T('笔记', 'Note')],
+    ['meet', NOTES().meet.t, T('研究日志', 'Research log'), T('笔记', 'Note')],
+    [null, T('论文B.pdf', 'PaperB.pdf'), T('文献/来源', 'Literature/sources'), T('待 AI 分析', 'Awaiting AI'), 'warn'],
+    [null, T('研究日志 · 第11天', 'Research log · day 11'), T('研究日志', 'Research log'), T('笔记', 'Note')]
+  ];
   function noteHTML(k, cls) {
-    const n = NOTES()[k], names = NOTES();
-    const crumbs = trail.map((x, i) => i < trail.length - 1 ? `<b data-back="${i}">${esc(names[x].t)}</b> ›` : esc(names[x].t)).join(' ');
-    return `<article class="wnote ${cls || ''}" data-k="${k}"><div class="back">${T('科研 · 知识库', 'Research · Knowledge base')} › ${crumbs}</div><strong class="h4">${esc(n.t)}</strong><div class="meta">${esc(n.meta)}</div>${n.b}<div class="bl">${T('链接到这里', 'Linked from')}<br>${n.bl.map(x => `<span>${esc(x)}</span>`).join('')}</div></article>`;
+    const n = NOTES()[k];
+    return `<article class="wnote ${cls || ''}" data-k="${k}"><div class="h4">${esc(n.t)}</div><div class="meta">${esc(n.meta)}</div>${n.b}<div class="bl">${T('链接到这里', 'Linked from')}<br>${n.bl.map(x => `<span>${esc(x)}</span>`).join('')}</div><div class="mdhint">${T('Markdown 笔记 · 修改后按 ⌘S 保存', 'Markdown note · ⌘S to save changes')}</div></article>`;
   }
+  const tabsHTML = () => tabs.map(k => `<span class="r-tab${k === cur ? ' on' : ''}" data-k="${k}"><small>${T('笔记', 'Note')}</small>${esc(NOTES()[k].t)}<i>×</i></span>`).join('');
   function render() {
-    run.cancel(); cur = 'rag'; trail = ['rag'];
-    const names = NOTES();
-    scr.innerHTML = `<div class="wiki"><div class="w-tree"><div class="h">${T('知识库', 'KNOWLEDGE BASE')}</div>${TREE.map(([k]) => `<div class="n${k === cur ? ' on' : ''}" data-k="${k}">${ic('note')}${esc(names[k].t)}</div>`).join('')}<div class="n">${ic('folder')}${T('实验记录', 'Lab log')}</div><div class="n">${ic('folder')}${T('论文PDF', 'Paper PDFs')}</div></div><div class="note-v">${noteHTML('rag')}</div></div>`;
+    run.cancel(); cur = 'rag'; tabs = ['rag'];
+    scr.innerHTML = `<div class="split src"><div class="srcs-pane">
+        <div class="crumb">${T('工作区', 'Workspace')} / ${T('科研', 'Research')} / ${T('毕业论文', 'Thesis')} / <b>${T('资料', 'Sources')}</b></div>
+        <div class="ptabs">${[T('对话', 'Chats'), T('资料', 'Sources'), T('成果', 'Outputs'), T('任务', 'Tasks'), T('排期', 'Schedule'), T('总览', 'Overview')].map((x, i) => `<span${i === 1 ? ' class="on"' : ''}>${x}</span>`).join('')}</div>
+        <div class="sp-head"><div><div class="h4">${T('资料', 'Sources')}</div><small>${T('5 篇笔记 · 2 份原始资料 · 2 篇论文', '5 notes · 2 originals · 2 papers')}</small></div><span class="b pri dark">${T('添加资料', 'Add')}</span><span class="b ghost">${T('连接本机目录', 'Link a folder')}</span></div>
+        <div class="seg wide"><span class="on">${T('资料', 'Sources')} 9</span><span>${T('记录', 'Records')} 0</span><span>${T('全部', 'All')} 9</span></div>
+        <div class="dirs"><div class="on">${ic('doc')}${T('全部资料', 'All sources')}<small>9</small></div><div>${ic('folder')}${T('未分类', 'Unsorted')}<small>1</small></div><div>${ic('folder')}${T('文献', 'Literature')}<small>5</small></div><div>${ic('folder')}${T('研究日志', 'Research log')}<small>3</small></div></div>
+        <div class="fld" style="font-family:inherit;color:var(--muted);margin-top:10px;margin-bottom:6px">${ic('search')}&nbsp;${T('搜索名称、标签和状态', 'Search names, tags and status')}</div>
+        <div class="rows">${ROWS().map(([k, t, sub, st, w]) => `<div class="row${k === cur ? ' on' : ''}"${k ? ` data-k="${k}" role="button" tabindex="0"` : ''}><i class="cb"></i>${ic('note')}<span class="nm">${esc(t)}<small>${esc(sub)}</small></span><span class="st${w ? ' warn' : ''}">${esc(st)}</span></div>`).join('')}</div>
+      </div>
+      <div class="reader nr">
+        <div class="r-head"><span class="bk">← ${T('返回资料', 'Back to sources')}</span><small class="pth">${T('科研空间 / 毕业论文', 'Research / Thesis')}</small><span class="sp"></span><span>${T('问 AI', 'Ask AI')}</span><span>${T('引用到对话', 'Quote in chat')}</span><span class="b ghost">${ic('folder')}${T('文件', 'File')}</span></div>
+        <div class="ntabs">${tabsHTML()}</div>
+        <div class="r-info">› ${T('文档信息与来源', 'Document info and source')}</div>
+        <div class="modes"><span class="seg"><span class="on">${T('阅读', 'Read')}</span><span>${T('编辑', 'Edit')}</span><span>${T('源码', 'Source')}</span></span><span>${T('大纲', 'Outline')}</span><span class="sp"></span><small>${T('已保存', 'Saved')}</small><span>${T('AI 改写', 'AI rewrite')}</span></div>
+        <div class="note-v">${noteHTML('rag')}</div>
+        <div class="r-foot"><span class="b ghost" style="color:var(--red)">${T('移入回收站', 'Move to Trash')}</span><span class="sp"></span><span class="b ghost">${T('编辑 Markdown', 'Edit Markdown')}</span><span class="b ghost">${T('导出 Markdown', 'Export Markdown')}</span></div>
+      </div></div>`;
+    $$('.rows .row[data-k]', scr).forEach(r => {
+      r.addEventListener('click', () => { touched = true; go(r.dataset.k); });
+      r.addEventListener('keydown', e => { if (e.key === 'Enter') { touched = true; go(r.dataset.k); } });
+    });
     bind();
   }
   function bind() {
-    $$('.wnote:not(.left) .wl', scr).forEach(a => {
+    $$('.wnote:not(.left):not(.right) .wl', scr).forEach(a => {
       a.onclick = () => { touched = true; go(a.dataset.go); };
       a.onkeydown = e => { if (e.key === 'Enter') { touched = true; go(a.dataset.go); } };
     });
-    $$('.wnote:not(.left) [data-back]', scr).forEach(b => { b.onclick = () => { touched = true; const i = +b.dataset.back; const k = trail[i]; trail = trail.slice(0, i); go(k, true); }; });
+    $$('.ntabs .r-tab', scr).forEach(t => { t.onclick = e => { touched = true; if (e.target.tagName === 'I' && tabs.length > 1) { close(t.dataset.k); return; } go(t.dataset.k, true); }; });
   }
+  function close(k) {
+    tabs = tabs.filter(x => x !== k);
+    if (k === cur) go(tabs[tabs.length - 1], true); else { $('.ntabs', scr).innerHTML = tabsHTML(); bind(); }
+  }
+  // A link opens the note in a new reading tab; picking an earlier tab slides back.
   function go(k, back) {
     if (k === cur) return;
+    if (!tabs.includes(k)) tabs.push(k);
+    const idxOld = tabs.indexOf(cur), idxNew = tabs.indexOf(k);
+    back = back && idxNew < idxOld;
     const v = $('.note-v', scr), old = $('.wnote', v);
-    trail.push(k);
     cur = k;
     const n = h(noteHTML(k, back ? 'left' : 'right')); v.append(n);
     old.classList.add(back ? 'right' : 'left');
     requestAnimationFrame(() => requestAnimationFrame(() => n.classList.remove('left', 'right')));
     setTimeout(() => old.remove(), 650);
-    $$('.w-tree .n', scr).forEach(x => x.classList.toggle('on', x.dataset.k === k));
+    $$('.rows .row', scr).forEach(x => x.classList.toggle('on', x.dataset.k === k));
+    $('.ntabs', scr).innerHTML = tabsHTML();
     bind();
   }
   render();
   return {
-    key: 'wiki', nav: 'research', title: () => T('科研 · 知识库', 'Research · Knowledge base'), scr,
+    key: 'wiki', nav: 'p-thesis', title: () => T('科研 · 毕业论文', 'Research · Thesis'), scr,
     enter() {}, leave() { run.cancel(); },
     auto(force) {
       if (touched && !force) return; touched = false;
@@ -580,9 +616,9 @@ function wikiChapter(win) {
       run.play(async ({ step, click }) => {
         await step(300);
         await click($('.wnote .wl[data-go=dense]', scr), () => go('dense')); await step(1800);
-        await click($('.wnote:not(.left):not(.right) [data-back="0"]', scr) || $('.wnote .wl', scr), () => { const k = trail[0]; trail = []; go(k, true); });
-        await step(1200);
-        await click($('.wnote:not(.left):not(.right) .wl[data-go=paperb]', scr), () => go('paperb'));
+        await click($('.ntabs .r-tab[data-k=rag]', scr), () => go('rag', true)); await step(1400);
+        await click($('.wnote:not(.left):not(.right) .wl[data-go=paperb]', scr), () => go('paperb')); await step(1600);
+        await click($('.rows .row[data-k=meet]', scr), () => go('meet'));
       });
     },
     reset: render, get touched() { return touched; }
