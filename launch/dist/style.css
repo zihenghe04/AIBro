@@ -2,7 +2,7 @@
    Page tokens below; the app window has its own tokens in app.css, copied from the native app. */
 :root{
   --bg:#f6f8f6;--bg2:#eef3f0;--ink:#16241e;--mut:#4f645a;--faint:#5e7268;--line:#1d3a2b1a;--line2:#1d3a2b2e;
-  --acc:#087f70;--acc-soft:#087f7014;--on-acc:#fff;--card:#fff;--shadow:0 1px 2px #10251c0d,0 24px 60px -12px #10251c33;
+  --acc:#087f70;--acc-ink:#06675b;--acc-soft:#087f7014;--on-acc:#fff;--card:#fff;--shadow:0 1px 2px #10251c0d,0 24px 60px -12px #10251c33;
   --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
   --ease:cubic-bezier(.22,1,.36,1);--spring:cubic-bezier(.2,1.45,.35,1);
@@ -10,7 +10,7 @@
 }
 @media(prefers-color-scheme:dark){:root{
   --bg:#0f1211;--bg2:#151918;--ink:#eceeed;--mut:#a9b6b0;--faint:#93a49c;--line:#e1e8d81a;--line2:#e1e8d830;
-  --acc:#65d7bb;--acc-soft:#65d7bb1a;--on-acc:#0c1d18;--card:#191d1c;--shadow:0 1px 2px #0006,0 28px 70px -14px #000a;color-scheme:dark}}
+  --acc:#65d7bb;--acc-ink:#65d7bb;--acc-soft:#65d7bb1a;--on-acc:#0c1d18;--card:#191d1c;--shadow:0 1px 2px #0006,0 28px 70px -14px #000a;color-scheme:dark}}
 *{box-sizing:border-box;margin:0}
 html{-webkit-text-size-adjust:100%}
 body{font:16px/1.7 var(--sans);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;overflow-x:clip}
@@ -45,10 +45,10 @@ h1{font-size:clamp(40px,6.4vw,84px);line-height:1.06}
 h1 em,h2 em{font-style:normal;color:var(--acc)}
 h2{font-size:clamp(32px,4.4vw,56px);line-height:1.12}
 h3{font-size:clamp(26px,2.6vw,36px);line-height:1.18}
-.eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--acc);margin-bottom:14px;text-transform:uppercase}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--acc-ink);margin-bottom:14px;text-transform:uppercase}
 .sub{color:var(--mut);font-size:18px;max-width:36em;margin-top:16px}
 .note{color:var(--faint);font-size:13px;margin-top:14px}
-.note a{color:var(--acc)}
+.note a{color:var(--acc-ink)}
 section{scroll-margin-top:70px}
 
 /* reveal: opacity + lift + a little blur, played once */
@@ -74,10 +74,13 @@ section{scroll-margin-top:70px}
 .day{padding-top:150px}
 .day-head{margin-bottom:40px}
 .story{--w:1340px;display:grid;grid-template-columns:300px minmax(0,1fr);gap:48px;position:relative}
-.ch{min-height:92vh;display:flex;flex-direction:column;justify-content:center;padding:40px 0;opacity:.28;transition:opacity .6s var(--ease)}
-.ch.on{opacity:1}
+.ch{min-height:92vh;display:flex;flex-direction:column;justify-content:center;padding:40px 0}
+/* inactive chapters are quieter by colour, not opacity, so text keeps its contrast */
+.ch h3,.ch>p{transition:color .6s var(--ease)}
+.ch:not(.on) h3{color:var(--mut)}
+.ch:not(.on)>p:not(.time):not(.try){color:var(--faint)}
 .ch:first-child{min-height:70vh}
-.ch .time{font:600 13px/1 var(--mono);color:var(--acc);margin-bottom:16px;letter-spacing:.02em}
+.ch .time{font:600 13px/1 var(--mono);color:var(--acc-ink);margin-bottom:16px;letter-spacing:.02em}
 .ch h3{margin-bottom:16px}
 .ch>p:not(.time):not(.try){color:var(--mut);font-size:16px}
 .ch .try{justify-content:flex-start;font-size:13.5px;margin-top:18px;opacity:0;transform:translateY(6px);transition:opacity .5s .2s,transform .5s .2s var(--ease)}
@@ -171,7 +174,7 @@ summary::-webkit-details-marker{display:none}
 summary:after{content:"+";color:var(--faint);font-weight:400;font-size:22px;line-height:1;transition:transform .3s var(--ease)}
 details[open] summary:after{transform:rotate(45deg)}
 details p{margin-top:10px;color:var(--mut);max-width:46em;font-size:15px}
-details a{color:var(--acc)}
+details a{color:var(--acc-ink)}
 .dl{margin-top:120px;padding:80px 0;background:var(--bg2);border-block:1px solid var(--line)}
 .dl-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;align-items:start}
 .dl .cta-row{justify-content:flex-start}

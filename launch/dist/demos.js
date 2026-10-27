@@ -192,7 +192,7 @@ function heroChapter(win) {
     scr.innerHTML = `<div class="w-wash"></div><div class="chat">
       <div class="crumb">${T('工作区', 'Workspace')} / ${T('课程', 'Courses')} / ${T('机器学习', 'Machine Learning')} / <b>${T('新对话', 'New chat')}</b></div>
       <div class="ptabs">${[T('对话', 'Chats'), T('资料', 'Sources'), T('成果', 'Outputs'), T('任务', 'Tasks'), T('日程', 'Schedule'), T('概览', 'Overview')].map((x, i) => `<span${i ? '' : ' class="on"'}>${x}</span>`).join('')}</div>
-      <div class="chat-log"><div class="empty"><img src="${LOGO}" alt=""><small>AI Bro · ${T('你的知识伙伴', 'your knowledge partner')}</small><h4>${T('从一个想法开始。', 'Start from an idea.')}</h4><p>${T('把文件、网页或想法交给 AI，整理成有迹可循的下一步。', 'Hand AI a file, a page or a thought and get a next step you can trace.')}</p>
+      <div class="chat-log"><div class="empty"><img src="${LOGO}" alt=""><small>AI Bro · ${T('你的知识伙伴', 'your knowledge partner')}</small><strong class="h4">${T('从一个想法开始。', 'Start from an idea.')}</strong><p>${T('把文件、网页或想法交给 AI，整理成有迹可循的下一步。', 'Hand AI a file, a page or a thought and get a next step you can trace.')}</p>
         <div class="sugs">${qa.map((x, i) => `<button class="sug" type="button" data-q="${i}">${esc(x.q)}</button>`).join('')}</div></div>
         <div class="chat-col"></div></div>
       <div class="composer"><div class="in" data-ph="${T('发消息，或添加文件与网页…', 'Message, or add files and pages…')}"></div>
@@ -258,7 +258,7 @@ function agendaChapter(win) {
   ];
   function calHTML() {
     return `<div class="page cal">
-      <div class="ph"><h4>${T('日程', 'Agenda')}<small>${T('日程已与本机工作区对齐', 'In sync with this Mac’s workspace')}</small></h4><span class="b ghost">${ic('bell')}${T('提醒', 'Reminders')}</span><span class="b ghost">${T('导入', 'Import')}</span><span class="b">${ic('plus')}${T('新建日程', 'New event')}</span></div>
+      <div class="ph"><strong class="h4">${T('日程', 'Agenda')}<small>${T('日程已与本机工作区对齐', 'In sync with this Mac’s workspace')}</small></strong><span class="b ghost">${ic('bell')}${T('提醒', 'Reminders')}</span><span class="b ghost">${T('导入', 'Import')}</span><span class="b">${ic('plus')}${T('新建日程', 'New event')}</span></div>
       <div class="cal-bar"><span class="seg"><span>${T('今日', 'Today')}</span><span class="on">${T('周', 'Week')}</span><span>${T('月', 'Month')}</span></span><span class="sp"></span><b>‹ ${T('2026年10月27日', 'Oct 27, 2026')} ›</b><span>${T('今天', 'Today')}</span></div>
       <div class="cal-bar"><span class="fld" style="font-family:inherit;width:150px">${T('全部安排', 'All items')}</span><span class="fld" style="font-family:inherit;flex:1;color:var(--muted)">${T('搜索日程', 'Search agenda')}</span></div>
       <div class="wk7">${WEEK().map(([d, n, items], i) => `<div class="dcol"><span class="dn">${d}</span><div class="dcard${i === 1 ? ' pick' : ''}" data-i="${i}"><div class="dh"><b>${n}${T('日', '')}</b><small>${items.length || ''}</small></div>${items.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div></div>`).join('')}</div>
@@ -364,12 +364,12 @@ function readChapter(win) {
       <div class="reader"><div class="r-tabs"><span class="r-tab on">${ic('doc')}${T('第3讲-优化.pdf', 'Lecture3-Optimization.pdf')}</span><span class="r-tab">${ic('note')}${T('课堂笔记.md', 'class-notes.md')}</span></div>
         <div class="r-bar"><span>${T('第 12 / 28 页', 'Page 12 / 28')}</span><span class="sp"></span><span>100%</span><span class="b ghost" style="height:24px">${T('问 AI', 'Ask AI')}</span></div>
         <div class="r-doc"><div class="r-pages">
-          <div class="r-page" data-p="12"><h6>3.2 ${T('步长与收敛', 'Step size and convergence')}</h6>
+          <div class="r-page" data-p="12"><strong class="h6">3.2 ${T('步长与收敛', 'Step size and convergence')}</strong>
             <p>${T('梯度下降每一步沿负梯度方向更新参数：', 'Each step of gradient descent moves the parameters against the gradient:')}</p>
             <p class="eq">θ<sub>t+1</sub> = θ<sub>t</sub> − η ∇f(θ<sub>t</sub>)</p>
-            <p>${T('设 f 的梯度是 L-Lipschitz 的，即曲率不超过 L。', 'Assume the gradient of f is L-Lipschitz, so curvature is at most L.')}<span class="sel hint" tabindex="0" role="button" aria-label="${T('可选中的句子', 'Selectable sentence')}">${T('当学习率 η 大于 2/L 时，迭代在谷底两侧来回跳动，且振幅逐步增大，算法发散。', 'When the learning rate η exceeds 2/L, the iterates bounce across the valley with growing amplitude and the method diverges.')}</span>${T('当 η 不超过 1/L 时，每一步都能保证损失下降。', ' When η is at most 1/L, every step is guaranteed to lower the loss.')}</p>
+            <p>${T('设 f 的梯度是 L-Lipschitz 的，即曲率不超过 L。', 'Assume the gradient of f is L-Lipschitz, so curvature is at most L.')}<span class="sel hint" tabindex="0" role="button">${T('当学习率 η 大于 2/L 时，迭代在谷底两侧来回跳动，且振幅逐步增大，算法发散。', 'When the learning rate η exceeds 2/L, the iterates bounce across the valley with growing amplitude and the method diverges.')}</span>${T('当 η 不超过 1/L 时，每一步都能保证损失下降。', ' When η is at most 1/L, every step is guaranteed to lower the loss.')}</p>
             <p>${T('实践中常用的做法是从较大的 η 开始，观察损失曲线，出现震荡后逐步减小。', 'In practice one starts with a large η, watches the loss curve and shrinks η once it oscillates.')}</p><span class="pn">12</span></div>
-          <div class="r-page" data-p="13"><h6>${T('图 3.2', 'Figure 3.2')}</h6>
+          <div class="r-page" data-p="13"><strong class="h6">${T('图 3.2', 'Figure 3.2')}</strong>
             <svg class="fig" viewBox="0 0 340 120" style="width:100%;height:auto;border-radius:4px"><path d="M10 110 Q170 -60 330 110" fill="none" stroke="#9aa59f" stroke-width="1.2"/><path d="M40 70 L290 64 L70 46 L250 40 L110 30 L190 28" fill="none" stroke="#087f70" stroke-width="1.6"/><path d="M60 52 L280 68 L30 92 L320 100" fill="none" stroke="#c25766" stroke-width="1.6" stroke-dasharray="4 3"/><text x="200" y="24" font-size="10" fill="#087f70">η = 0.9/L</text><text x="230" y="116" font-size="10" fill="#c25766">η = 2.2/L</text></svg>
             <p>${T('实线收敛，虚线发散。两者只差在步长。', 'Solid converges, dashed diverges. Only the step size differs.')}</p><span class="pn">13</span></div>
         </div>
@@ -478,7 +478,7 @@ function wikiChapter(win) {
   function noteHTML(k, cls) {
     const n = NOTES()[k], names = NOTES();
     const crumbs = trail.map((x, i) => i < trail.length - 1 ? `<b data-back="${i}">${esc(names[x].t)}</b> ›` : esc(names[x].t)).join(' ');
-    return `<article class="wnote ${cls || ''}" data-k="${k}"><div class="back">${T('科研 · 知识库', 'Research · Knowledge base')} › ${crumbs}</div><h4>${esc(n.t)}</h4><div class="meta">${esc(n.meta)}</div>${n.b}<div class="bl">${T('链接到这里', 'Linked from')}<br>${n.bl.map(x => `<span>${esc(x)}</span>`).join('')}</div></article>`;
+    return `<article class="wnote ${cls || ''}" data-k="${k}"><div class="back">${T('科研 · 知识库', 'Research · Knowledge base')} › ${crumbs}</div><strong class="h4">${esc(n.t)}</strong><div class="meta">${esc(n.meta)}</div>${n.b}<div class="bl">${T('链接到这里', 'Linked from')}<br>${n.bl.map(x => `<span>${esc(x)}</span>`).join('')}</div></article>`;
   }
   function render() {
     run.cancel(); cur = 'rag'; trail = ['rag'];
@@ -539,7 +539,6 @@ function islandChapter(win, base) {
   const TIDY = () => T('把明天上午的组会改到下午三点，并提醒我带上实验结果的打印稿。', 'Move tomorrow morning’s group meeting to 3pm and remind me to bring the printed results.');
   function idle() {
     state = 'idle'; clearInterval(timer); clearInterval(waveT); isl.classList.remove('big');
-    isl.setAttribute('aria-label', T('灵动岛：按住说话', 'Island: hold to talk'));
     isl.innerHTML = `<div class="row"><span class="dot"></span>${T('按住说话', 'Hold to talk')}<span class="r">${T('空格', 'Space')}</span></div>`;
   }
   function wave() {
@@ -716,7 +715,7 @@ function tasksChapter(win, base) {
   let touched = false, state = 'idle';
   function render() {
     run.cancel(); state = 'idle';
-    layer.innerHTML = `<div class="dlg" role="dialog" aria-label="${T('计划任务', 'Scheduled tasks')}"><div class="dh"><h5>${T('计划任务', 'Scheduled tasks')}</h5><span class="b">${T('关闭', 'Close')}</span></div>
+    layer.innerHTML = `<div class="dlg" role="dialog" aria-label="${T('计划任务', 'Scheduled tasks')}"><div class="dh"><strong class="h5">${T('计划任务', 'Scheduled tasks')}</strong><span class="b">${T('关闭', 'Close')}</span></div>
       <p class="lead">${T('人工提醒到点由系统通知（App 关闭也会送达），2 小时未处理标为过期。自动任务到点由 AI 在后台无人值守执行，只做声明范围内的事；App 关闭期间错过的，下次打开只补最近一次。', 'Manual reminders arrive as system notifications, even with the app closed, and expire after 2 hours. Automatic tasks run unattended in the background and only do what they declared. If the app was closed, only the latest missed run is made up.')}</p>
       <div class="task"><b>${T('每周组会摘要', 'Weekly meeting digest')}</b><div class="m">${T('自动任务 · 等待到点 · 下次 11月2日 周一 08:00', 'Automatic · waiting · next Mon Nov 2, 08:00')}<br>${T('范围：只读（默认）· 外部工具 0 · 电脑操作关', 'Scope: read-only (default) · external tools 0 · computer use off')}<br>▸ ${T('执行历史 · 6', 'Run history · 6')}</div><div class="acts"><span class="b">${T('编辑', 'Edit')}</span><span class="b">${T('暂停', 'Pause')}</span><span class="b">${T('立即运行', 'Run now')}</span><span class="b">${T('归档', 'Archive')}</span></div></div>
       <div class="task" data-t="dl"><b>${T('整理下载文件夹', 'Tidy the downloads folder')}</b><div class="m"><span class="st">${T('自动任务 · 等待到点 · 每天 21:00', 'Automatic · waiting · daily 21:00')}</span><br>${T('范围：可写，每次写入先问我 · 外部工具 0 · 电脑操作关', 'Scope: may write, ask before each write · external tools 0 · computer use off')}</div>
@@ -805,9 +804,9 @@ function modelsChapter(win) {
   function render() {
     run.cancel(); cur = 0; testing = false;
     const ps = PROV();
-    scr.innerHTML = `<div class="set"><div class="ph"><h4>${T('设置', 'Settings')}<small>${T('模型、同步、检索与界面偏好，各自清楚管理。', 'Models, sync, retrieval and interface, each in its place.')}</small></h4><span class="b ghost">${T('新手引导', 'Getting started')}</span></div>
+    scr.innerHTML = `<div class="set"><div class="ph"><strong class="h4">${T('设置', 'Settings')}<small>${T('模型、同步、检索与界面偏好，各自清楚管理。', 'Models, sync, retrieval and interface, each in its place.')}</small></strong><span class="b ghost">${T('新手引导', 'Getting started')}</span></div>
       <div class="set-nav"><span class="on">${T('模型', 'Models')}</span><span>${T('服务器同步', 'Server sync')}</span><span>${T('知识库检索', 'Knowledge retrieval')}</span><span>${T('插件', 'Plugins')}</span><span>${T('界面偏好', 'Interface')}</span></div>
-      <div class="card"><h5>${T('模型', 'Models')}</h5><p class="d">${T('选一个默认模型就能用；其余用途需要时再单独指定。密钥只保存在系统钥匙串里。', 'Pick one default model and you are set; assign others per purpose when needed. Keys live only in the system Keychain.')}</p>
+      <div class="card"><strong class="h5">${T('模型', 'Models')}</strong><p class="d">${T('选一个默认模型就能用；其余用途需要时再单独指定。密钥只保存在系统钥匙串里。', 'Pick one default model and you are set; assign others per purpose when needed. Keys live only in the system Keychain.')}</p>
         <div style="display:flex;gap:8px;margin-bottom:12px"><span class="seg"><span class="on">${T('文本生成', 'Text')}</span><span>${T('嵌入', 'Embedding')}</span><span>${T('语音识别', 'Speech')}</span><span>${T('使用统计', 'Usage')}</span></span><span style="flex:1"></span><span class="b ghost">${T('从 CC Switch 导入', 'Import from CC Switch')}</span></div>
         <div class="mrow"><div class="plist"><div class="h">${T('已启用 · 拖拽排序，首位为默认', 'Enabled · drag to reorder, first is default')}</div>
           ${ps.map((p, i) => `<button class="prov${i === 0 ? ' on' : ''}" type="button" data-i="${i}"><span class="av">${p.id}</span><span><b>${esc(p.n)}${p.tag[0] ? `<span class="pill ${p.tag[1]}">${esc(p.tag[0])}</span>` : ''}</b><small>${esc(p.sub)}</small></span></button>`).join('')}
