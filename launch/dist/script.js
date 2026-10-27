@@ -40,7 +40,7 @@ function localize() {
   document.querySelector('meta[name=description]').content = lang === 'en' ? enDesc : zhDesc;
   const btn = document.getElementById('lang');
   btn.textContent = lang === 'en' ? '中文' : 'EN';
-  btn.setAttribute('aria-label', lang === 'en' ? '切换到中文' : 'Switch to English');
+  btn.setAttribute('aria-label', lang === 'en' ? '中文，切换到中文' : 'EN，Switch to English');
   buildWords();
   const u = new URL(location.href);
   if (lang === 'en') u.searchParams.set('lang', 'en'); else u.searchParams.delete('lang');
