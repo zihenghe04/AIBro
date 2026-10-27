@@ -67,6 +67,9 @@
 .chat{position:absolute;inset:0;display:flex;flex-direction:column}
 .crumb{display:flex;gap:6px;align-items:center;padding:12px 18px 0;font-size:11px;color:var(--muted)}
 .crumb b{font-weight:500;color:var(--text)}
+.ptabs{display:flex;gap:4px;padding:8px 18px 0;font-size:11.5px;color:var(--muted)}
+.ptabs span{padding:3px 10px;border-radius:8px}
+.ptabs span.on{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line-strong);font-weight:500}
 .chat-log{flex:1;overflow:hidden;padding:18px 0 0;display:flex;flex-direction:column}
 .chat-col{width:100%;max-width:720px;margin:0 auto;padding:0 24px;display:flex;flex-direction:column;gap:14px}
 .empty{margin:auto;text-align:center;transition:opacity .35s,transform .45s cubic-bezier(.22,1,.36,1)}

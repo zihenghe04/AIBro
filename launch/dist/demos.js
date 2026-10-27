@@ -191,6 +191,7 @@ function heroChapter(win) {
     const qa = QA();
     scr.innerHTML = `<div class="w-wash"></div><div class="chat">
       <div class="crumb">${T('工作区', 'Workspace')} / ${T('课程', 'Courses')} / ${T('机器学习', 'Machine Learning')} / <b>${T('新对话', 'New chat')}</b></div>
+      <div class="ptabs">${[T('对话', 'Chats'), T('资料', 'Sources'), T('成果', 'Outputs'), T('任务', 'Tasks'), T('日程', 'Schedule'), T('概览', 'Overview')].map((x, i) => `<span${i ? '' : ' class="on"'}>${x}</span>`).join('')}</div>
       <div class="chat-log"><div class="empty"><img src="${LOGO}" alt=""><small>AI Bro · ${T('你的知识伙伴', 'your knowledge partner')}</small><h4>${T('从一个想法开始。', 'Start from an idea.')}</h4><p>${T('把文件、网页或想法交给 AI，整理成有迹可循的下一步。', 'Hand AI a file, a page or a thought and get a next step you can trace.')}</p>
         <div class="sugs">${qa.map((x, i) => `<button class="sug" type="button" data-q="${i}">${esc(x.q)}</button>`).join('')}</div></div>
         <div class="chat-col"></div></div>
@@ -908,20 +909,24 @@ function build() {
     // overlays belonging to other chapters stay hidden until their chapter is active
     ctrls.tasks.layer.style.display = 'none';
     const rail = $('.stage-rail'); rail.innerHTML = CHAPTERS.map(() => '<i></i>').join('');
-    let current = null, t = 0;
+    let current = null, t = 0, seen = false;
     const activate = key => {
       const c = ctrls[key]; if (!c || c === current) return;
       clearTimeout(t);
       show(sw, ctrls, c, current); current = c;
       $$('.ch').forEach(a => a.classList.toggle('on', a.dataset.ch === key));
       $$('i', rail).forEach((i, n) => i.classList.toggle('on', CHAPTERS[n] === key));
-      t = autoplay(c, 1400);
+      if (seen) t = autoplay(c, 1400);
     };
     activate('agenda');
     const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) activate(e.target.dataset.ch); }), { rootMargin: '-48% 0px -48% 0px' });
     $$('.ch').forEach(a => io.observe(a));
     // stop autoplay once the stage leaves the screen
-    const vis = new IntersectionObserver(([e]) => { if (!e.isIntersecting && current) { clearTimeout(t); } }, { threshold: 0 });
+    // Autoplay only while the stage is on screen; the first time it shows up, play the current chapter.
+    const vis = new IntersectionObserver(([e]) => {
+      seen = e.isIntersecting; clearTimeout(t);
+      if (seen && current) t = autoplay(current, 1400);
+    }, { threshold: 0.5 });
     vis.observe(sf);
     built.push({ dispose: () => { io.disconnect(); vis.disconnect(); clearTimeout(t); } });
   } else {
