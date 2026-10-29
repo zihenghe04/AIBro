@@ -7,8 +7,9 @@ devices. Changes apply to the next agent run (each run freezes its toolset).
 """
 import json, os, re, tempfile, threading, time
 from pathlib import Path
+from web_search import settings_entry as _websearch_entry
 
-BUILTIN_PLUGINS = ('browser',)
+BUILTIN_PLUGINS = ('browser', 'websearch')
 VERSION = 1
 # A site permission is per origin: scheme, host and an optional port, nothing else.
 ORIGIN = re.compile(r'^https?://(?:[a-z0-9-]+\.)*[a-z0-9-]+(?::[0-9]{1,5})?$|^https?://\[[0-9a-f:]+\](?::[0-9]{1,5})?$')
@@ -60,7 +61,7 @@ class PluginStore:
             builtin = value.get('builtin') if isinstance(value.get('builtin'), dict) else {}
             mcp = value.get('mcp') if isinstance(value.get('mcp'), list) else []
             return {'version': VERSION,
-                    'builtin': {k: _browser_entry(v) if k == 'browser' else {'enabled': v.get('enabled') is not False} for k, v in builtin.items() if k in BUILTIN_PLUGINS and isinstance(v, dict)},
+                    'builtin': {k: _browser_entry(v) if k == 'browser' else _websearch_entry(v) if k == 'websearch' else {'enabled': v.get('enabled') is not False} for k, v in builtin.items() if k in BUILTIN_PLUGINS and isinstance(v, dict)},
                     'mcp': [entry for entry in mcp if isinstance(entry, dict) and isinstance(entry.get('id'), str)]}
 
     def write(self, value):
