@@ -68,6 +68,7 @@ SERVER_TESTS = (
     'tests/event-log.test.py',
     'tests/kernel-runs.test.py',
     'tests/plugins.test.py',
+    'tests/web-search.test.py',
     'tests/mcp-plugins.test.py',
     'tests/plugin-import.test.py',
 )

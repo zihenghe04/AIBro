@@ -182,6 +182,32 @@
       box.append(el('div',{className:'plugin-add-row plugin-site-add'},origin,button(t('允许','Allow'),{className:'secondary',id:'browserSiteAllow',disabled:busy},add('allow')),button(t('禁止','Block'),{className:'secondary',id:'browserSiteDeny',disabled:busy},add('deny'))));
       return box;
     }
+    // Web search: the service and, where it needs them, its address or key. A key goes to
+    // the keychain (web_search.py) and never comes back; this page only learns that one is saved.
+    function webSearchService(){
+      const state=config().builtin?.websearch||{},services=root.AIBroWebSearchPlugin?.BACKENDS||[];
+      const current=services.find(s=>s.id===state.backend)||services[0];
+      if(!current)return null;
+      const save=body=>act(()=>request('/__plugins/websearch/settings',{backend:current.id,...body}));
+      const box=el('div',{className:'plugin-block',id:'webSearchService'},el('h3',{textContent:t('搜索服务','Search service')}),
+        el('p',{className:'muted',textContent:t('只有检索词会发给所选的服务，不发送对话或资料。','Only the search terms go to the chosen service, never the conversation or your files.')}));
+      box.append(el('div',{className:'plugin-field'},el('span',{textContent:t('服务','Service')}),
+        seg(services.map(s=>[s.id,s.name,s.name]),current.id,value=>act(()=>request('/__plugins/websearch/settings',{backend:value})),{id:'webSearchBackend'})),
+        el('p',{className:'muted',textContent:t(current.note.zh,current.note.en)}));
+      if(current.endpoint){
+        const address=el('input',{id:'webSearchEndpoint',type:'text',spellcheck:false,value:state.endpoints?.[current.id]||'',placeholder:'http://127.0.0.1:8888',disabled:busy,'aria-label':t('服务地址','Service address')});
+        box.append(el('div',{className:'plugin-add-row plugin-site-add'},address,button(t('保存','Save'),{className:'secondary',id:'webSearchEndpointSave',disabled:busy},()=>save({endpoint:address.value.trim()}))));
+      }
+      if(current.key&&current.key!=='none'){
+        const saved=(state.keys||[]).includes(current.id);
+        const key=el('input',{id:'webSearchKey',type:'password',autocomplete:'off',spellcheck:false,disabled:busy,'aria-label':'Key',
+          placeholder:saved?t('Key 已保存在钥匙串','Key saved in the keychain'):current.key==='optional'?t('Key（可选）','Key (optional)'):'Key'});
+        box.append(el('div',{className:'plugin-add-row plugin-site-add'},key,
+          button(t('保存 Key','Save key'),{className:'secondary',id:'webSearchKeySave',disabled:busy},()=>{const value=key.value.trim();if(value)save({key:value});}),
+          saved?button(t('清除','Clear'),{className:'secondary',id:'webSearchKeyClear',disabled:busy},()=>save({key:''})):null));
+      }
+      return box;
+    }
     function renderDetail(){
       const back=backButton(()=>go({name:'list'}));
       if(view.builtin){
@@ -191,7 +217,7 @@
         const toggle=el('input',{type:'checkbox',checked:plugin.enabled,disabled:busy,'aria-label':t('启用 ','Enable ')+name});
         toggle.addEventListener('change',()=>act(()=>host.setEnabled(plugin.id,toggle.checked)));
         return [back,el('div',{className:'plugin-head'},el('div',{},el('h2',{textContent:name}),el('p',{className:'muted',textContent:plugin.summary.zh})),el('label',{className:'sound-toggle'},toggle)),
-          plugin.id==='browser'?browserSites():null].filter(Boolean);
+          plugin.id==='browser'?browserSites():plugin.id==='websearch'?webSearchService():null].filter(Boolean);
       }
       const entry=mcpEntries().find(e=>e.id===view.id);
       if(!entry)return [back,el('p',{className:'muted',textContent:t('没有这个插件。','No such plugin.')})];

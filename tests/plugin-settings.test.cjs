@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {parseHTML}=require('linkedom');
 const Plugins=require('../app/plugin-host'),Tools=require('../app/tool-specs'),Mcp=require('../app/plugin-mcp'),BrowserPlugin=require('../app/plugin-browser');
+const WebSearchPlugin=require('../app/plugin-websearch');
 const Settings=require('../app/plugin-settings');
 
 // A fake local service with the same answers as server.py /__plugins/*.
@@ -37,6 +38,9 @@ function service(){
     if(path==='/__plugins/browser/sites'){const b=state.builtin.browser=state.builtin.browser||{enabled:true};const s=b.sites=b.sites||{allow:[],deny:[]};
       for(const k of ['allow','deny'])s[k]=s[k].filter(o=>o!==body.origin);if(body.decision!=='remove')s[body.decision].push(body.origin);return {};}
     if(path==='/__plugins/browser/settings'){const b=state.builtin.browser=state.builtin.browser||{enabled:true};if(body.unknownSites==='ask')b.unknownSites='ask';else delete b.unknownSites;return {};}
+    if(path==='/__plugins/websearch/settings'){const w=state.builtin.websearch=state.builtin.websearch||{enabled:false};w.backend=body.backend;
+      if(body.endpoint!==undefined)w.endpoints={...w.endpoints,[body.backend]:body.endpoint};
+      if(body.key!==undefined){w.keys=(w.keys||[]).filter(k=>k!==body.backend);if(body.key)w.keys.push(body.backend);}return {};}
     throw Error('unexpected '+path);};
   const transport={load:async()=>JSON.parse(JSON.stringify(state)),setEnabled:async(id,on)=>{state.builtin[id]={...state.builtin[id],enabled:on};return JSON.parse(JSON.stringify(state));}};
   return {state,posts,request,transport,tierOf};
@@ -220,6 +224,31 @@ test('browser detail: site lists and the default for unlisted sites',async()=>{
   assert.equal(h.s.state.builtin.browser.unknownSites,'ask');
   h.q('[data-list="allow"] button').click();await settle();
   assert.equal(h.q('[data-list="allow"] [data-origin]'),null);
+});
+
+test('web search detail: the service, its address and an optional key that never comes back',async()=>{
+  globalThis.AIBroWebSearchPlugin=WebSearchPlugin;
+  try{
+    const h=setup();h.host.install(WebSearchPlugin.plugin);
+    assert.match(h.q('div[data-plugin="websearch"]').textContent,/已关闭/,'off by default');
+    h.q('[data-plugin="websearch"]').click();
+    assert.equal(h.q('#webSearchBackend [aria-pressed="true"]').dataset.value,'keenable');
+    assert.equal(h.q('#webSearchEndpoint'),null,'Keenable needs no address');
+    input(h.q('#webSearchKey'),' kn-ui-key ');h.q('#webSearchKeySave').click();await settle();
+    assert.deepEqual(h.s.posts.at(-1),['/__plugins/websearch/settings',{backend:'keenable',key:'kn-ui-key'}]);
+    assert.equal(h.q('#webSearchKey').value,'','the key is not shown again');
+    assert.match(h.q('#webSearchKey').placeholder,/钥匙串/);
+    h.q('#webSearchKeyClear').click();await settle();
+    assert.deepEqual(h.s.posts.at(-1),['/__plugins/websearch/settings',{backend:'keenable',key:''}]);
+    assert.equal(h.q('#webSearchKeyClear'),null);
+    h.q('#webSearchBackend [data-value="searxng"]').click();await settle();
+    assert.deepEqual(h.s.posts.at(-1),['/__plugins/websearch/settings',{backend:'searxng'}]);
+    assert.equal(h.q('#webSearchKey'),null,'SearXNG takes no key');
+    input(h.q('#webSearchEndpoint'),' http://127.0.0.1:8888 ');h.q('#webSearchEndpointSave').click();await settle();
+    assert.deepEqual(h.s.posts.at(-1),['/__plugins/websearch/settings',{backend:'searxng',endpoint:'http://127.0.0.1:8888'}]);
+    assert.equal(h.q('#webSearchEndpoint').value,'http://127.0.0.1:8888');
+    assert.equal(h.s.state.builtin.websearch.enabled,false,'configuring does not switch it on');
+  }finally{delete globalThis.AIBroWebSearchPlugin;}
 });
 
 test('an unrecognized paste shows a notice, not an empty list',async()=>{

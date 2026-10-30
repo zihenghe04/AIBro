@@ -45,6 +45,7 @@ from external_notifications import ExternalNotifications, handle_request as hand
 from event_log import EventLog, EventLogError
 from plugin_store import PluginStore, PluginStoreError
 from mcp_plugins import McpPlugins
+from web_search import WebSearch, WebSearchError
 
 ASSET_DIR = Path(os.environ.get('AI_WORKSTATION_ASSET_DIR', Path(__file__).resolve().parent)).resolve()
 ASSET_MANIFEST = json.loads((ASSET_DIR / 'asset-manifest.json').read_text())
@@ -1145,6 +1146,7 @@ LOCAL_PROJECTS = LocalProjects(DATA_DIR)
 EVENT_LOG = EventLog(DATA_DIR)
 PLUGIN_STORE = PluginStore(DATA_DIR)
 MCP_PLUGINS = McpPlugins(PLUGIN_STORE)
+WEB_SEARCH = WebSearch(PLUGIN_STORE)
 def plugin_snapshot():
     value = PLUGIN_STORE.read()
     return {'version': value['version'], 'builtin': value['builtin'], 'mcp': [MCP_PLUGINS.public(entry) for entry in value['mcp']]}
@@ -1227,6 +1229,9 @@ class Handler(SimpleHTTPRequestHandler):
                 PLUGIN_STORE.browser_site(payload.get('origin'), payload.get('decision')); self.send_json(plugin_snapshot())
             elif path == '/__plugins/browser/settings':
                 PLUGIN_STORE.browser_settings(payload.get('unknownSites')); self.send_json(plugin_snapshot())
+            # Built-in web search (web_search.py): off until the user turns it on; only the query leaves the device.
+            elif path == '/__plugins/websearch/settings': WEB_SEARCH.configure(payload); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/websearch/search': self.send_json(WEB_SEARCH.search(payload.get('query'), payload.get('limit')))
             # External MCP plugins (mcp_plugins.py). Calls: propose → the user's decision on the card → run once.
             elif path == '/__plugins/mcp/probe': self.send_json(MCP_PLUGINS.probe(payload.get('transport')))
             elif path == '/__plugins/mcp/add': MCP_PLUGINS.add(payload); self.send_json(plugin_snapshot())
@@ -1242,7 +1247,7 @@ class Handler(SimpleHTTPRequestHandler):
             elif path == '/__plugins/mcp/calls/decide': self.send_json(MCP_PLUGINS.decide(str(payload.get('callId') or ''), payload.get('approve')))
             elif path == '/__plugins/mcp/calls/run': self.send_json(MCP_PLUGINS.run(str(payload.get('callId') or '')))
             else: self.send_json({'error': '找不到插件接口。', 'code': 'plugin_not_found'}, 404)
-        except PluginStoreError as error: self.send_json(error.payload, error.status)
+        except (PluginStoreError, WebSearchError) as error: self.send_json(error.payload, error.status)
         except ValueError: self.send_json({'error': '插件请求格式无效。', 'code': 'plugin_invalid'}, 400)
     def do_events(self, path):
         # Run event log (written alongside the snapshot). Same-origin only.

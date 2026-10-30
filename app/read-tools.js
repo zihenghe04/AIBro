@@ -37,6 +37,8 @@
   register('terminal',(request,ctx,{entry})=>need(ctx,'TerminalTools').execute(request,ctx.getState(),ctx.run,{signal:ctx.signal,save:ctx.save,refresh:ctx.refresh,toolCallId:entry?.id}));
   // The browser plugin (plugin-browser.js) adds site permissions and the sign-in/CAPTCHA pause around BrowserTools.
   register('browser_*',(request,ctx,{approval})=>{const plugin=ctx.lookup('AIBroBrowserPlugin');return plugin?.execute?plugin.execute(request,ctx,{approval}):ctx.lookup('BrowserTools').execute(request,ctx.getState(),ctx.run,{signal:ctx.signal,save:ctx.save,refresh:ctx.refresh,approval});},{available:has('BrowserTools')});
+  // The opt-in web search plugin (plugin-websearch.js); only the search terms leave the device.
+  register('websearch_query',(request,ctx)=>need(ctx,'AIBroWebSearchPlugin').execute(request,ctx));
   // External MCP plugin tools are named <pluginId>__<tool> (plugin-mcp.js); core names never contain '__'.
   register(type=>type.includes('__'),(request,ctx,{approval})=>need(ctx,'AIBroMcpPlugins').execute(request,ctx,{approval}));
   // Hybrid retrieval answers only when semantic search is enabled; otherwise
