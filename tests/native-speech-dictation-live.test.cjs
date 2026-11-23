@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..');
 test('live dictation: partial text, auto stop on silence, cloud fallback (fake microphone and sockets)',{skip:process.platform!=='darwin',timeout:240000},()=>{
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'aibro-dictation-live-'));
  try{
-  const names=['NativeCredentials','NativeSpeechService','NativePlainHTTPPolicy','NativeSpeechCredentials','NativeSpeechDictationRecorder','NativeQuickRealtimeASRProtocol','NativeQuickRealtimeASRSession','NativeQuickRealtimeASRHandoff','NativeQuickRealtimeASRAudio','NativeSpeechDictation'];
+  const names=['NativeCredentials','NativeSpeechService','NativePlainHTTPPolicy','NativeSpeechCredentials','NativeSpeechDictationRecorder','NativeDictateLog','NativeQuickRealtimeASRProtocol','NativeQuickRealtimeASRSession','NativeQuickRealtimeASRHandoff','NativeQuickRealtimeASRAudio','NativeSpeechDictation'];
   const binary=path.join(tmp,'checks');
   const built=spawnSync('xcrun',['swiftc','-parse-as-library','-swift-version','5',...names.map(x=>path.join(root,'native/Sources/AIBro',x+'.swift')),path.join(__dirname,'native-speech-dictation-live.swift'),'-o',binary],{encoding:'utf8',timeout:150000});
   assert.equal(built.status,0,built.stdout+built.stderr);

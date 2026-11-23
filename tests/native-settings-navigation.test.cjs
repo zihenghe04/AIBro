@@ -16,8 +16,10 @@ const scripts=[...settings.matchAll(/callAsyncJavaScript\("""\n([^]*?)\n\s*"""/g
 const run=(script,env)=>vm.runInNewContext(`(async()=>{${script}})()`,env);
 
 test('sidebar, toolbar, Command-comma and quick entry share one workspace destination and preserve Appearance',()=>{
- // sidebar, toolbar, Command-comma, quick entry, plus the speech-settings entry (openMainSpeechSettings) all go through the same destination.
- assert.equal((swift.match(/model\.openWorkspaceSettings\(\)/g)||[]).length,5);
+ // sidebar, toolbar and Command-comma call it directly; island and speech entries pass a whitelisted category.
+ assert.equal((swift.match(/model\.openWorkspaceSettings\(\)/g)||[]).length,3);
+ // Island and speech entries pass a whitelisted category through the same destination.
+ assert.equal((swift.match(/model\.openWorkspaceSettings\(category:/g)||[]).length,2);
  assert.match(swift,/CommandGroup\(replacing:\.appSettings\)[^\n]+keyboardShortcut\(",",modifiers:\.command\)/);
  assert.doesNotMatch(swift,/\\\.openSettings|struct Preferences:View|Settings\s*\{Preferences|NSApp\.keyWindow\?\.close/);
  assert.match(swift,/ToolbarItem \{ AppearanceControl\(model:model\) \}/);
@@ -124,7 +126,8 @@ test('actual Swift navigation methods handle ACK, cancel, reentry, newer intents
  try{
   const names=['focusWebContent','command','documentOpenOrigin','openWorkspaceSettings','cancelSettingsNavigation','settingsBrowserVisibilityChanged','consumeSettingsSelection','dismissTransientModelPicker','navigate','openProject','rememberNavigationOrigin','cancelPendingWorkspaceNavigation','adoptReportedWorkspaceDestination','openWorkspace','navigateWorkspace'];
   const schema=fs.readFileSync(path.join(root,'native/Sources/AIBro/WorkspaceNavigation.swift'),'utf8').split('struct NativeWorkspaceLocation:')[1].split('\nstruct SpaceNavigation:')[0];
-  const template=fs.readFileSync(path.join(__dirname,'native-settings.swift'),'utf8').replace('// LOCATION_SCHEMA','struct NativeWorkspaceLocation:'+schema).replace('    // PRODUCTION_METHODS',names.map(method).join('\n'));
+  const categoryEnum=fs.readFileSync(path.join(root,'native/Sources/AIBro/NativeQuickEntry.swift'),'utf8').match(/enum NativeSettingsCategory \{[^]*?\n\}/)[0];
+  const template=fs.readFileSync(path.join(__dirname,'native-settings.swift'),'utf8').replace('// LOCATION_SCHEMA',categoryEnum+'\nstruct NativeWorkspaceLocation:'+schema).replace('    // PRODUCTION_METHODS',names.map(method).join('\n'));
   const source=path.join(directory,'Settings.swift'),binary=path.join(directory,'settings-tests');fs.writeFileSync(source,template);
   const compiled=spawnSync('xcrun',['swiftc','-swift-version','5','-parse-as-library',source,'-o',binary],{encoding:'utf8',timeout:90000});
   assert.equal(compiled.status,0,compiled.stdout+compiled.stderr);

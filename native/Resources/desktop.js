@@ -41,6 +41,18 @@
   setMode:(mode,event)=>['island','edge','menuBar'].includes(mode)?quickEntryChange(event,{action:'mode',mode}):Promise.resolve({status:'error',reason:'invalid_request'}),
   openSettings:event=>quickEntryChange(event,{action:'open'})
  });
+ // Unified Settings page: stable setting ids only. Changes need a trusted gesture inside #nativeSettingsRoot; replies carry the effective value.
+ const nativeSettingsGesture=event=>{
+  const nativeEvent=event?.nativeEvent||event;
+  return typeof window.Event==='function'&&nativeEvent instanceof window.Event&&nativeEvent.isTrusted===true
+   &&event.currentTarget?.isConnected===true&&!!event.currentTarget.closest('#nativeSettingsRoot');
+ };
+ window.workstationDesktop.nativeSettings=Object.freeze({
+  state:()=>rpc({command:'native-settings',action:'state'}),
+  set:(id,value,event)=>typeof id!=='string'||!id||id.length>80||!(typeof value==='boolean'||typeof value==='string'||(typeof value==='number'&&Number.isFinite(value)))
+   ?Promise.resolve({status:'error',reason:'invalid_request'})
+   :nativeSettingsGesture(event)?rpc({command:'native-settings',action:'set',id,value}):Promise.resolve({status:'error',reason:'user_gesture_required'})
+ });
  // Speech-to-text settings live in the native shell (schemes and keys stay there). The Models page reads public state and asks
  // for switch / test / open; changes need a user gesture, the reply never contains a key.
  const speechChange=body=>(window.navigator?.userActivation?.isActive!==false)

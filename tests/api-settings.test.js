@@ -406,7 +406,7 @@ test('timeout while parsing the response body reports a timeout instead of an in
 });
 
 test('manual model settings entries reveal the model section after routing, without reinitializing its form', () => {
-  const seen=[],env={window:{ConversationModels:{init:hooks=>{env.modelHooks=hooks;}},WorkstationOnboarding:{init:hooks=>{env.tourHooks=hooks;}},SettingsWorkspace:{reveal:section=>seen.push(section)}},get state(){return {};},currentConversation(){},defaultModelConfiguration(){},resolveRunModel(){},toast(){},viewLabels:{settings:'设置'},save(){},showView:view=>seen.push(view)};
+  const seen=[],env={window:{ConversationModels:{init:hooks=>{env.modelHooks=hooks;}},WorkstationOnboarding:{init:hooks=>{env.tourHooks=hooks;}},SettingsShell:{open:category=>seen.push(category)}},get state(){return {};},currentConversation(){},defaultModelConfiguration(){},resolveRunModel(){},toast(){},viewLabels:{settings:'设置'},save(){},showView:view=>seen.push(view)};
   vm.createContext(env);
   for (const name of ['ConversationModels','WorkstationOnboarding']) {
     const line=source.split('\n').find(line=>line.startsWith('window.'+name+'?.init('));assert.ok(line);vm.runInContext(line,env);

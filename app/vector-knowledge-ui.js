@@ -20,6 +20,7 @@
     else text='已开启混合检索，服务连接尚未验证。已存向量数量不代表当前服务可用。';
     if(readinessIsland)readinessIsland.update({children:t(text)});else if($('embeddingReadiness'))$('embeddingReadiness').textContent=t(text);
   }
+  root.document?.addEventListener?.('workstation-language-change',()=>{try{paintReadiness();}catch(_){}});
   async function inspectCredentials(){
     const generation=++credentialGeneration,captured=config;
     if(!captured)return;

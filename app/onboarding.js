@@ -111,7 +111,7 @@
       const own = ++generation, step = steps[index]; navigating = true; back.disabled = next.disabled = action.disabled = true; notice.textContent = '';
       title.textContent = step.title; body.textContent = step.body; hint.textContent = step.hint; stepLabel.textContent = `${index + 1} / ${steps.length} · ${step.kicker}`;
       count.textContent = `${index + 1} / ${steps.length}`; next.textContent = index === steps.length - 1 ? '完成引导' : '下一步'; action.textContent = step.action; path.replaceChildren(...step.path.map(value => create('li', '', value)));
-      try { if (hooks.showView) await hooks.showView(step.view); if (step.id === 'connection') env.SettingsWorkspace?.reveal('models'); }
+      try { if (hooks.showView) await hooks.showView(step.view); if (step.id === 'connection') env.SettingsShell?.open('models'); }
       catch (_) { if (own === generation) notice.textContent = '当前界面暂不能切换，可以先阅读说明，或稍后从设置重开引导。'; }
       if (!opened || own !== generation) return;
       navigating = false; back.disabled = index === 0; next.disabled = false; action.disabled = !hooks.showView; layout(); card.focus({ preventScroll: true });
@@ -152,7 +152,7 @@
     async function useStep() {
       if (!opened || navigating || !hooks.showView) return;
       const step = steps[index]; close(index === steps.length - 1 ? 'completed' : 'skipped', { restoreFocus: false, returnToOrigin: false });
-      try { await hooks.showView(step.view); if (step.id === 'connection') env.SettingsWorkspace?.reveal('models'); const target = document.querySelector(step.focus); if (visible(target)) target.focus({ preventScroll: true }); }
+      try { await hooks.showView(step.view); if (step.id === 'connection') env.SettingsShell?.open('models'); const target = document.querySelector(step.focus); if (visible(target)) target.focus({ preventScroll: true }); }
       catch (_) { hooks.toast?.('暂时无法打开入口，请通过侧栏打开对应页面。'); }
     }
     function keydown(event) {

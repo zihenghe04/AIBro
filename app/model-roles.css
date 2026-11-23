@@ -71,11 +71,6 @@
 .mr-feedback progress { width: 100%; }
 .mr-readiness { margin: 0; }
 .mr-bin[hidden] { display: none; }
-/* Settings → Done: a bar outside the scrolling page (sibling inside the flex column .main), so the page's height is reduced by the bar and nothing is ever covered. */
-.settings-done-bar { display: none; flex: none; justify-content: flex-end; padding: var(--space-12, 12px) 36px; border-top: 1px solid var(--line); background: var(--canvas, var(--bg)); }
-body[data-view="settings"] .settings-done-bar { display: flex; }
-.settings-done-bar > button { min-width: 96px; border-radius: 999px; }
-
 /* Speech recognition: inline scheme editor */
 .mr-add-group { display: grid; gap: var(--space-8, 8px); }
 .mr-add-group > .mr-add, .mr-add-group > button { text-align: left; }

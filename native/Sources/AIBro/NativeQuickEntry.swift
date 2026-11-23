@@ -42,9 +42,10 @@ struct NativeQuickPanelModule {
     var onActivityChange: ((Bool) -> Void)? = nil
 }
 
-struct NativeQuickSettingsSection: Identifiable {
-    let id: String
-    let content: () -> AnyView
+/// Categories of the main-window settings shell. Island jumps carry only one of these ids.
+enum NativeSettingsCategory {
+    static let ids = ["general", "quick-entry", "voice", "models", "notifications", "sync", "privacy", "plugins"]
+    static func resolve(_ id: String?) -> String? { ids.contains(id ?? "") ? id : nil }
 }
 
 struct NativeQuickHomeModule: Identifiable {
@@ -61,8 +62,10 @@ struct NativeQuickVoiceStatus: Equatable {
     let title: String
     let symbol: String
     let isProcessing: Bool
-    init(title: String, symbol: String = "waveform", isProcessing: Bool = false) {
-        self.title = title; self.symbol = symbol; self.isProcessing = isProcessing
+    /// Secondary line such as the text heard so far.
+    let detail: String?
+    init(title: String, symbol: String = "waveform", isProcessing: Bool = false, detail: String? = nil) {
+        self.title = title; self.symbol = symbol; self.isProcessing = isProcessing; self.detail = detail
     }
 }
 
@@ -105,7 +108,6 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
     let panelPreferences: NativeQuickPanelPreferences
     @Published private(set) var extensionModules: [Section: NativeQuickPanelModule] = [:]
     @Published private(set) var extensionHomeModules: [String: NativeQuickHomeModule] = [:]
-    @Published private(set) var settingsSections: [NativeQuickSettingsSection] = []
     // User-owned drops only. Agent navigation conveys no clipboard/file access.
     var canReceiveFiles: () -> Bool = { false }
     var receiveFiles: ([NSItemProvider]) -> Bool = { _ in false }
@@ -114,7 +116,13 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
     @Published private(set) var section: Section = .home
     @Published var taskDraft = ""
     @Published private(set) var presentation = NativeQuickPresentation()
-    @Published private(set) var geometry = NativeQuickGeometry.resolve(screen: CGRect(x: 0, y: 0, width: 1440, height: 900), visible: CGRect(x: 0, y: 0, width: 1440, height: 876), safeTop: 0, placement: .island)
+    @Published private(set) var geometry = NativeQuickGeometry.resolve(screen: CGRect(x: 0, y: 0, width: 1440, height: 900), visible: CGRect(x: 0, y: 0, width: 1440, height: 876), safeTop: 0, placement: .island) {
+        didSet {
+            guard geometry != oldValue else { return }
+            NativeIslandTrace.shared.log("geometry collapsed=\(geometry.collapsed.width) expanded=\(geometry.expanded.width) phase=\(presentation.phase)")
+            syncCanvas()
+        }
+    }
     private var motionTask: Task<Void, Never>?
     /// One derived collapsed state; see NativeQuickIslandStatus for priority.
     @Published private(set) var islandStatus = NativeQuickIslandStatus.derive(.init())
@@ -193,11 +201,14 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         extensionModules[section] = .init(content: content, onVisibilityChange: onVisibilityChange)
         reconcilePanelPreferences()
     }
-    func registerSettingsSection(id: String, content: @escaping () -> AnyView) {
-        let section = NativeQuickSettingsSection(id: id, content: content)
-        if let index = settingsSections.firstIndex(where: { $0.id == id }) { settingsSections[index] = section }
-        else { settingsSections.append(section) }
+    private var pendingSettingsCategory: String?
+    /// Island entry into the main-window settings. Dismisses the island, then the host raises the window and selects the category.
+    func openSettings(category: String) {
+        pendingSettingsCategory = NativeSettingsCategory.resolve(category)
+        perform(.settings)
     }
+    /// Consumed by the host's `.settings` action; unknown ids never leave this type.
+    func takeSettingsCategory() -> String? { defer { pendingSettingsCategory = nil }; return pendingSettingsCategory }
     func configureVoice(content: @escaping () -> AnyView, onEscape: @escaping () -> Void,
                         onHide: @escaping () -> Void) {
         voiceContent = content; voiceOnEscape = onEscape; voiceOnHide = onHide
@@ -206,7 +217,7 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         guard voiceStatus != status else { return }
         voiceStatus = status
         if status == nil, voicePresented { dismissVoice(returnFocus: false) }
-        islandInputs.voice = status.map { .init(title: $0.title, symbol: $0.symbol, isProcessing: $0.isProcessing) }
+        islandInputs.voice = status.map { .init(title: $0.title, symbol: $0.symbol, isProcessing: $0.isProcessing, detail: $0.detail) }
         refreshIsland()
         updateStatusItem()
     }
@@ -270,6 +281,24 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         languageSubscription = NativeL10n.shared.$language.receive(on: RunLoop.main).sink { [weak self] _ in
             MainActor.assumeIsolated { self?.updateStatusItem() }
         }
+        if NativeIslandTrace.shared.enabled {
+            // Debug-only trigger for the island trace; same calls as the voice shortcut minus the microphone.
+            observers.append(DistributedNotificationCenter.default().addObserver(
+                forName: .init("app.aibro.debug.island"), object: nil, queue: .main
+            ) { [weak self] note in
+                let command = note.object as? String ?? ""
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    NativeIslandTrace.shared.log("debug.trigger \(command)")
+                    switch command {
+                    case "voice": self.updateVoiceStatus(.init(title: nativeUI("正在聆听", "Listening"))); self.showVoice()
+                    case "panel": self.showPanel(screenIntent: .pointerSummon)
+                    case "collapse": self.dismiss(returnFocus: false); self.updateVoiceStatus(nil)
+                    default: break
+                    }
+                }
+            })
+        }
         reconcileEntry()
     }
 
@@ -298,11 +327,17 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         refreshIsland()
     }
 
+    private func endIslandPeek() {
+        islandPeekTask?.cancel(); islandPeekTask = nil
+        guard islandPeeking else { return }
+        islandPeeking = false
+        if let screen = screenForEntry() { updateGeometry(on: screen) }
+    }
+
     /// Clear-on-read: opening the panel or a run acknowledges its outcome.
     func markIslandOutcomesSeen(runID: String? = nil) {
         // Opening the panel ends a peek; the panel now shows the details.
-        islandPeekTask?.cancel(); islandPeekTask = nil
-        if islandPeeking { islandPeeking = false; if let screen = screenForEntry() { updateGeometry(on: screen) } }
+        endIslandPeek()
         let outcomes = NativeQuickIslandStatus.unseenOutcomes(islandInputs).filter { runID == nil || $0.id == runID }
         guard !outcomes.isEmpty else { return }
         outcomes.forEach { islandInputs.seen.insert(NativeQuickIslandStatus.outcomeKey($0)) }
@@ -583,6 +618,7 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
 
     private func transition(expanded: Bool) {
         guard presentation.wantsExpanded != expanded else { return }
+        NativeIslandTrace.shared.sample(for: 0.9); NativeIslandTrace.shared.log("transition expanded=\(expanded)")
         motionTask?.cancel(); motionTask = nil
         let reduced = reduceMotion
         let token = presentation.generation &+ 1
@@ -605,6 +641,7 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
             panel?.contentView?.layoutSubtreeIfNeeded()
             panel?.displayIfNeeded()
             CATransaction.flush()
+            NativeIslandTrace.shared.log("transition.flushed")
             DispatchQueue.main.async { [weak self] in self?.animateShell(token) }
         }
         guard presentation.phase == .opening || presentation.phase == .closing else { return }
@@ -631,6 +668,7 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         let animation: Animation = presentation.wantsExpanded
             ? .timingCurve(0.22, 0.72, 0.18, 1, duration: NativeQuickPresentation.openingDuration)
             : .timingCurve(0.32, 0, 0.36, 1, duration: NativeQuickPresentation.closingDuration)
+        NativeIslandTrace.shared.log("animateShell expanded=\(presentation.wantsExpanded)")
         withAnimation(animation, completionCriteria: .removed) {
             _ = presentation.animateShell(token)
         } completion: { [weak self] in
@@ -677,10 +715,18 @@ final class NativeQuickEntryCoordinator: NSObject, ObservableObject {
         // GeometryReader consumes the canvas size; it must not publish an
         // intrinsic/minimum/maximum size back into this explicitly sized panel.
         hosting.sizingOptions = []
-        hosting.frame = NSRect(origin: .zero, size: window.contentLayoutRect.size)
-        hosting.autoresizingMask = [.width, .height]
-        window.contentView = hosting
+        let canvas = NativeQuickCanvasView(hosting: hosting)
+        canvas.frame = NSRect(origin: .zero, size: window.contentLayoutRect.size)
+        canvas.autoresizingMask = [.width, .height]
+        window.contentView = canvas
         panel = window
+        syncCanvas()
+        NativeIslandTrace.shared.window = window
+        NativeIslandTrace.shared.canvas = hosting
+    }
+
+    private func syncCanvas() {
+        (panel?.contentView as? NativeQuickCanvasView)?.update(size: geometry.canvasSize, placement: geometry.placement)
     }
 
     func select(_ section: Section, focusContent: Bool = true) {
@@ -995,6 +1041,52 @@ private final class NativeQuickEntryPanel: NSPanel {
     }
 }
 
+/// Holds the island's SwiftUI canvas at one fixed size. A window resize only
+/// moves it, synchronously inside setFrame, so the first frame after opening
+/// already shows the collapsed shell at its own screen position. Sizing the
+/// canvas to the window instead left the old layout pinned to the new window's
+/// left edge until SwiftUI relaid it out, inside the opening animation.
+private final class NativeQuickCanvasView: NSView {
+    private let hosting: NSView
+    private var canvasSize: CGSize = .zero
+    private var placement: NativeQuickGeometry.Placement = .island
+
+    init(hosting: NSView) {
+        self.hosting = hosting
+        super.init(frame: .zero)
+        hosting.autoresizingMask = []
+        addSubview(hosting)
+    }
+    required init?(coder: NSCoder) { nil }
+
+    func update(size: CGSize, placement: NativeQuickGeometry.Placement) {
+        guard size != canvasSize || placement != self.placement else { return }
+        canvasSize = size; self.placement = placement
+        place()
+    }
+    override func resizeSubviews(withOldSize oldSize: NSSize) { place() }
+    private func place() {
+        let frame = NativeQuickGeometry.canvasFrame(window: bounds.size, canvas: canvasSize, placement: placement)
+        hosting.frame = backingAlignedRect(frame, options: .alignAllEdgesNearest)
+    }
+}
+
+/// Reports the shell's laid-out frame to the debug trace; inert when off.
+private struct NativeIslandTraceShell: ViewModifier {
+    func body(content: Content) -> some View {
+        if NativeIslandTrace.shared.enabled {
+            content.background(GeometryReader { proxy in
+                let frame = proxy.frame(in: .global)
+                Color.clear.onAppear { report(frame) }.onChange(of: frame) { _, next in report(next) }
+            })
+        } else { content }
+    }
+    @MainActor private func report(_ frame: CGRect) {
+        NativeIslandTrace.shared.shellLocal = frame
+        NativeIslandTrace.shared.log("shell.layout")
+    }
+}
+
 private struct NativeQuickEntryView: View {
     @ObservedObject var coordinator: NativeQuickEntryCoordinator
     @ObservedObject private var preferences: NativeQuickPanelPreferences
@@ -1018,6 +1110,7 @@ private struct NativeQuickEntryView: View {
                 shell.fill(island ? Color.black : Color(nsColor: .windowBackgroundColor))
                     .overlay(shell.strokeBorder(collapsedEdge, lineWidth: 0.5))
                     .frame(width: shellWidth, height: shellHeight)
+                    .modifier(NativeIslandTraceShell())
                 expandedContent
                     .frame(width: coordinator.geometry.expanded.width, height: coordinator.geometry.expanded.height)
                     .opacity(coordinator.presentation.visualContentVisible ? 1 : 0)
@@ -1099,7 +1192,7 @@ private struct NativeQuickEntryView: View {
                 Button { coordinator.perform(.resume) } label: { Image(systemName: "arrow.up.right.square").frame(width: 26, height: 26) }
                     .help(nativeUI("打开完整工作区", "Open full workspace"))
                     .accessibilityLabel(nativeUI("打开完整工作区", "Open full workspace"))
-                Button { coordinator.select(.settings) } label: { Image(systemName: "slider.horizontal.3").frame(width: 26, height: 26) }
+                Button { coordinator.openSettings(category: "quick-entry") } label: { Image(systemName: "slider.horizontal.3").frame(width: 26, height: 26) }
                     .help(nativeUI("工作台设置", "Panel settings")).accessibilityLabel(nativeUI("工作台设置", "Panel settings"))
                 Menu {
                     Button(nativeUI("新对话", "New chat")) { coordinator.perform(.newChat) }.disabled(!coordinator.ready)
@@ -1114,7 +1207,7 @@ private struct NativeQuickEntryView: View {
                     Picker(nativeUI("入口位置", "Entry location"), selection: $coordinator.mode) {
                         ForEach(NativeQuickEntryCoordinator.Mode.allCases) { mode in Text(mode.title).tag(mode) }
                     }
-                    Button(nativeUI("工作区设置…", "Workspace settings…")) { coordinator.perform(.settings) }
+                    Button(nativeUI("工作区设置…", "Workspace settings…")) { coordinator.openSettings(category: "general") }
                     Divider()
                     Button(nativeUI("退出 AI Bro", "Quit AI Bro")) { coordinator.quit() }
                 } label: { Image(systemName: "ellipsis").frame(width: 24, height: 26) }
@@ -1140,7 +1233,7 @@ private struct NativeQuickEntryView: View {
                         content().padding(.horizontal, 20).padding(.bottom, 18)
                     }
                 case .runs: NativeQuickRunsView(coordinator: coordinator, workbench: coordinator.workbench)
-                case .settings: NativeQuickPanelSettingsView(coordinator: coordinator)
+                case .settings: EmptyView()
                 case .agenda, .links, .recordings, .vault, .clipboard, .shelf:
                     if let module = coordinator.extensionModules[coordinator.section] {
                         NativeQuickModuleHost(module: module, visible: coordinator.presentation.contentVisible)

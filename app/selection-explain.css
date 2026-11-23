@@ -1,10 +1,10 @@
-.selection-bar{position:fixed;z-index:230;display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--line-strong);border-radius:var(--radius-10);background:var(--surface-wash),color-mix(in srgb,var(--canvas) 94%,transparent);box-shadow:inset 0 1px 0 var(--rim),var(--shadow-float);backdrop-filter:blur(20px) saturate(1.15);-webkit-backdrop-filter:blur(20px) saturate(1.15);animation:selection-reveal var(--duration-120) ease-out}
+.selection-bar{position:fixed;z-index:230;display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--line-strong);border-radius:var(--radius-10);background:var(--surface-wash),color-mix(in srgb,var(--canvas) 94%,transparent);box-shadow:inset 0 1px 0 var(--rim),var(--shadow-float);backdrop-filter:blur(20px) saturate(1.15);-webkit-backdrop-filter:blur(20px) saturate(1.15);animation:selection-fade var(--duration-200) var(--motion-emphasis),selection-reveal 350ms var(--motion-overshoot)}
 .selection-bar[hidden]{display:none!important}
 .selection-bar button{display:inline-flex;align-items:center;min-height:28px;padding:var(--space-4) var(--space-10);border:0;border-radius:var(--radius-7);background:transparent;color:var(--text);font-size:var(--font-size-12);white-space:nowrap}
 .selection-bar button:hover{background:var(--panel-hover)}
 .selection-bar button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
-.selection-panel{position:fixed;z-index:225;top:52px;right:0;bottom:0;width:min(400px,36vw);display:flex;flex-direction:column;border-left:1px solid var(--line-strong);background:var(--surface-wash),color-mix(in srgb,var(--canvas) 96%,transparent);backdrop-filter:blur(24px) saturate(1.15);-webkit-backdrop-filter:blur(24px) saturate(1.15);box-shadow:inset 1px 0 0 var(--rim),var(--shadow-float);animation:selection-slide var(--duration-160) ease-out}
+.selection-panel{position:fixed;z-index:225;top:52px;right:0;bottom:0;width:min(400px,36vw);display:flex;flex-direction:column;border-left:1px solid var(--line-strong);background:var(--surface-wash),color-mix(in srgb,var(--canvas) 96%,transparent);backdrop-filter:blur(24px) saturate(1.15);-webkit-backdrop-filter:blur(24px) saturate(1.15);box-shadow:inset 1px 0 0 var(--rim),var(--shadow-float);animation:selection-slide var(--motion-enter-short) var(--motion-emphasis)}
 .selection-panel[hidden]{display:none!important}
 .selection-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--space-10);padding:var(--space-15) var(--space-16) var(--space-12);border-bottom:1px solid var(--line)}
 .selection-heading h2{margin:0;font-size:var(--font-size-13);font-weight:var(--font-weight-600);letter-spacing:var(--tracking-tight);overflow-wrap:anywhere;min-width:0}
@@ -22,8 +22,10 @@
 .selection-actions [hidden]{display:none!important}
 .selection-panel :focus-visible,.selection-bar :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-@keyframes selection-reveal{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
-@keyframes selection-slide{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+/* Like the promo bar: opacity settles quickly, the lift overshoots slightly */
+@keyframes selection-fade{from{opacity:0}to{opacity:1}}
+@keyframes selection-reveal{from{transform:translateY(var(--motion-shift-sm)) scale(.96)}to{transform:none}}
+@keyframes selection-slide{from{opacity:0;transform:translateX(var(--motion-shift-md))}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.selection-bar,.selection-panel{animation:none}}
 @media(prefers-reduced-transparency:reduce){.selection-bar,.selection-panel{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--canvas)}}
 @media(max-width:760px){.selection-panel{width:100%;top:44px}}

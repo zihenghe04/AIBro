@@ -32,6 +32,7 @@ actor Backend {
   check(NativeSpeechDictation.Lease(composer:malformed)==nil,"RPC refuses Boolean revision")
   check(NativeSpeechDictation.Lease(composer:["nonce":UUID().uuidString,"conversationId":"chat","revision":1,"mode":"quickConversation"])==nil,"composer RPC cannot request automatic-send mode")
   check(lease(.quickConversation).valid && !NativeSpeechDictation.Lease(nonce:UUID().uuidString,conversationId:"existing-chat",revision:0,mode:.quickConversation).valid,"global mode never carries an existing conversation")
+  check(lease(.inject).valid && !NativeSpeechDictation.Lease(nonce:UUID().uuidString,conversationId:"existing-chat",revision:0,mode:.inject).valid && NativeSpeechDictation.Lease(composer:["nonce":UUID().uuidString,"conversationId":"chat","revision":1,"mode":"inject"])==nil,"inject mode is global and not web-requestable")
   let s=await settings(),backend=Backend();var micCalls=0;let recorder=FakeRecorder()
   let d=NativeSpeechDictation(settings:s,directory:root.appendingPathComponent("dictation"),canCapture:{_ in true},permission:{micCalls+=1;return true},makeRecorder:{recorder},transcribe:{url,_,_ in try await backend.run(url)})
   d.setAvailable(true);_ = d.status
@@ -74,6 +75,8 @@ actor Backend {
   let afterLimit=await backend.calls
   check(d.phase == .recorded && afterLimit==callCount,"duration limit stops audio without submitting or transcribing")
   check(status(await d.finish(i),"completed"),"global mode still requires explicit finish before returning command text")
+  let inj=lease(.inject);_ = await d.start(inj,verify:{true})
+  check(d.lease==inj && d.composerStatus["status"] as? String=="busy" && d.composerStatus["nonce"]==nil,"composer sees busy while dictating to another app");d.cancel(inj)
   let j=lease();_ = await d.start(j,verify:{true});let failedURL=recorder.url!;recorder.onFailure?()
   check(d.phase == .error && !d.retryAvailable && !FileManager.default.fileExists(atPath:failedURL.path),"partial recording failure is not offered as complete audio")
   let auth2=Gate<Bool>(),s4=await settings(),r4=FakeRecorder();var otherRecording=false

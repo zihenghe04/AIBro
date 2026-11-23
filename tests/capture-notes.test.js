@@ -64,3 +64,15 @@ test('legacy automatic titles continue following the first line and attachment-o
  C.write(s,{id:attachment.id,version:attachment.updatedAt,text:'',hasFiles:true,title:'Source scan'},{uid,now:4});
  assert.equal(attachment.title,'Source scan');assert.equal(attachment.revisionHistory[0].content,'');assert.deepEqual(attachment.sourceAttachmentIds,['file']);
 });
+test('blank or unchanged capture draft never marks the workspace dirty, a real edit does',()=>{
+ const src=require('node:fs').readFileSync(require('node:path').join(__dirname,'../app/capture-notes.js'),'utf8');
+ const fn=src.slice(src.indexOf('function stash(){'),src.indexOf('function clear()')).trim();
+ let saves=0;const ui={};
+ const run=new Function('hooks','input','tagInput','editing','version','files','removed',fn+';return stash;');
+ const make=(text,tags='')=>run({getState:()=>({ui}),save:()=>{saves++;}},{value:text},{value:tags},null,null,[],[]);
+ make('')();make('  ','')();assert.equal(saves,0,'blank draft with no stored draft must not save');
+ make('想法')();assert.equal(saves,1);assert.equal(ui.captureDraft.text,'想法');
+ make('想法')();assert.equal(saves,1,'unchanged draft must not save again');
+ make('')();assert.equal(saves,2,'clearing a real draft is saved once');
+ make('')();assert.equal(saves,2,'repeated blank draft is not saved');
+});

@@ -9,15 +9,16 @@ function fixture({ visible = false, hidden = false, following = false, request, 
   const observers = [], calls = [], mounts = [];
   const events = new EventTarget(), documentEvents = new EventTarget();
   const classes = new Set(visible ? ['view', 'active-view'] : ['view']);
-  const settings = { classList: { contains: name => classes.has(name) } };
-  const panel = { hidden, children: [], append(node) { this.children.push(node); } };
+  const settings = { classList: { contains: name => classes.has(name) }, children: [], append(node) { this.children.push(node); } };
+  // The card only counts as on screen once the Sync page has moved it into .st-shell.
+  const panel = { hidden, children: settings.children };
   class Observer {
     constructor(callback) { this.callback = callback; this.targets = new Map(); observers.push(this); }
     observe(target, options) { assert.ok(target); this.targets.set(target, options); }
     disconnect() { this.targets.clear(); }
   }
-  const doc = { getElementById: id => ({ settings, 'settings-panel-sync': panel })[id],
-    createElement: () => ({}), addEventListener: documentEvents.addEventListener.bind(documentEvents) };
+  const doc = { getElementById: id => ({ settings })[id],
+    createElement: () => ({ closest: selector => selector === '.st-shell' && !panel.hidden ? {} : null }), addEventListener: documentEvents.addEventListener.bind(documentEvents) };
   const context = vm.createContext({ document: doc, workstationDesktop: { connections: {} },
     localStorage: storage || { getItem: () => following ? JSON.stringify(typeof following === 'object' ? following : {serverOrigin:'https://sync.example.test',accountId:'fixture',apiFormat:'chat-completions'}) : null }, structuredClone, queueMicrotask, MutationObserver: Observer,
     addEventListener: events.addEventListener.bind(events),
@@ -29,7 +30,7 @@ function fixture({ visible = false, hidden = false, following = false, request, 
   return { calls, mounts, panel, observers,
     init: () => context.ConnectionSyncSettings.init({ connect, request: async (path, payload) => { calls.push({ path, payload }); return request ? request(calls.length) : { supported: false }; } }),
     route(active, className = 'active-view') { if (active) classes.add(className); else classes.delete(className); notify(settings, 'class'); },
-    hidden(value) { panel.hidden = value; notify(panel, 'hidden'); },
+    hidden(value) { panel.hidden = value; notify(settings, 'class'); },
     ready() { documentEvents.dispatchEvent(new Event('aibro-agenda-changed')); },
     event(name) { events.dispatchEvent(new Event(name)); },
     pagehide() { events.dispatchEvent(new Event('pagehide')); },

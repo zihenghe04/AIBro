@@ -96,6 +96,23 @@ struct NativeQuickGeometry: Equatable {
         .init(collapsed: frame, expanded: expanded, safeTop: safeTop, hardwareWidth: hardwareWidth, placement: placement)
     }
 
+    /// The SwiftUI canvas keeps one size for every window frame of this
+    /// geometry. Resizing the window then only moves the canvas, so the shell
+    /// is already drawn where it belongs and never waits for a SwiftUI layout.
+    var canvasSize: CGSize {
+        CGSize(width: max(collapsed.width, expanded.width), height: max(collapsed.height, expanded.height))
+    }
+
+    /// Where the canvas sits in a window's content (AppKit, bottom-left
+    /// origin). It mirrors the view's alignment: top-centre, or trailing and
+    /// vertically centred for the edge tab.
+    static func canvasFrame(window: CGSize, canvas: CGSize, placement: Placement) -> CGRect {
+        let size = CGSize(width: max(canvas.width, window.width), height: max(canvas.height, window.height))
+        let x = placement == .edge ? window.width - size.width : (window.width - size.width) / 2
+        let y = placement == .edge ? (window.height - size.height) / 2 : window.height - size.height
+        return CGRect(origin: CGPoint(x: x, y: y), size: size)
+    }
+
     static func resolve(screen: CGRect, visible: CGRect, safeTop: CGFloat,
                         leftArea: CGRect? = nil, rightArea: CGRect? = nil,
                         placement: Placement, menuAnchor: CGRect? = nil) -> Self {

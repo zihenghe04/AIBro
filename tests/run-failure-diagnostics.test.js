@@ -188,7 +188,7 @@ test('production recovery route accepts verified historical protocol failures wi
   const message = { id: 'm', role: 'agent', runId: run.id, text: '<｜DSML｜calls>' };
   const state = { currentConversationId: 'c', agentRuns: [run], conversations: [{ id: 'c', messages: [message] }] }, routes = [];
   const control = { getClientRects: () => [1], scrollIntoView() { routes.push('scroll'); }, focus() { routes.push('focus'); } };
-  const env = { state, document: { getElementById: () => control }, showView: view => routes.push(view), openConversation: () => assert.fail('same conversation'), window: { SettingsWorkspace: { reveal: section => routes.push(section) }, RunFailureDiagnostics: D, WorkstationCore: require('../app/workstation-core'), AgentTransport: h.AgentTransport } };
+  const env = { state, document: { getElementById: () => control }, showView: view => routes.push(view), openConversation: () => assert.fail('same conversation'), window: { SettingsShell: { open: category => routes.push(category) }, RunFailureDiagnostics: D, WorkstationCore: require('../app/workstation-core'), AgentTransport: h.AgentTransport } };
   vm.createContext(env); vm.runInContext(app.slice(begin, end), env);
   assert.equal(env.openRunFailureRecovery(run.id, 'settings'), true); assert.deepEqual(routes, ['settings', 'models', 'scroll', 'focus']); assert.equal(run.status, 'completed');
   message.text = '真实回答。'; assert.equal(env.openRunFailureRecovery(run.id, 'settings'), false);

@@ -46,7 +46,7 @@ struct NativeSpeechShortcutView: View {
     }
 }
 
-private struct NativeSpeechShortcutRecorder: NSViewRepresentable {
+struct NativeSpeechShortcutRecorder: NSViewRepresentable {
     @ObservedObject var store: NativeSpeechShortcutStore
     func makeNSView(context: Context) -> Recorder {
         let view = Recorder()

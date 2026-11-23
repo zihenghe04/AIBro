@@ -366,8 +366,9 @@
     if (ctx.moreOpen?.()) more.setAttribute('open', '');
     more.addEventListener('toggle', () => ctx.onMoreToggle?.(more.open));
 
-    const tabItems = [['providers', ctx.roles ? t('文本生成', 'Text') : t('供应商', 'Providers')], ...(ctx.roles ? [['embedding', t('嵌入', 'Embedding')], ['transcription', t('语音识别', 'Speech')]] : []), ['stats', t('使用统计', 'Usage')]];
-    ctx.park?.();
+    const hiddenTabs = ctx.hiddenTabs?.() || [];
+    const tabItems = [['providers', ctx.roles ? t('文本生成', 'Text') : t('供应商', 'Providers')], ...(ctx.roles ? [['embedding', t('嵌入', 'Embedding')], ['transcription', t('语音识别', 'Speech')]] : []), ['stats', t('使用统计', 'Usage')]].filter(item => !hiddenTabs.includes(item[0]));
+    if (!hiddenTabs.length) ctx.park?.(); // in the settings shell the roles panes belong to other pages, so a connections repaint must not park them
     const tabs = root.UIKit
       ? (() => {
         const seg = root.UIKit.segmented({ options: tabItems.map(([value, label]) => ({ value, label })), value: view.tab, label: t('模型页面', 'Models sections'), className: 'pv-tabs-seg', onChange: id => ctx.onTab?.(id) });
@@ -394,6 +395,11 @@
       tabs,
       ...(view.notice ? [el('p', { class: 'pv-note', id: 'providerNotice', role: 'status', text: view.notice })] : []),
       el('div', { class: 'pv-split' }, el('div', { class: 'pv-leftcol' }, list, purposeEntries), (sel && purposePane()) || detail), more);
+    // Switching provider or purpose slides the new detail in, as the promo does; plain re-renders stay still.
+    const shown = sel ? `purpose:${sel}` : `provider:${d?.id || ''}`;
+    const previous = hostEl.dataset.pvShown;
+    hostEl.dataset.pvShown = shown;
+    if (previous && previous !== shown) root.ActivityMotion?.animate(hostEl.querySelector('.pv-split > .pv-detail'), [{ opacity: 0, transform: 'translateX(10px)' }, { opacity: 1, transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.22,1,.36,1)' });
   }
 
   // 滚动容器：宿主往上最近的可滚动祖先（设置页的内容区），找不到就用文档本身。
@@ -441,6 +447,7 @@
     const view = () => buildView(settings(), { codex: state.codex, client: state.client, selected: state.selected, fetched: state.fetched[state.selected] || [], checking: !!state.checking, checkMessage: state.checkMessage[state.selected] || '', notice: state.notice, tab: state.tab, balances: state.balance, balancing: state.balancing, codexTest: state.codexTest, codexTesting: state.codexTesting, suggest: state.suggest[state.selected] || '', usage: state.usage, usageBusy: !!state.usageBusy });
     const paint = () => {
       if (!state.hostEl || state.page !== 'list') return;
+      if ((options.hiddenTabs?.() || []).includes(state.tab)) state.tab = 'providers';
       if (state.tab === 'stats' && state.hostEl.querySelector('#providerStatsHost')) return;
       if ((state.tab === 'embedding' || state.tab === 'transcription') && state.hostEl.querySelector(`#providerRolesHost[data-tab="${state.tab}"]`)) { options.roles?.refresh?.(); return; }
       try { P().reconcile(settings(), options.reconcileOptions?.()); } catch (_) { /* a failed reconcile must not blank the page */ }
@@ -504,7 +511,8 @@
         commit(() => P().remove(settings(), id));
       },
       onModelCaps: (id, model, key, on) => commit(() => { const current = P().get(settings(), id)?.models.find(entry => entry.model === model); return current ? P().setModelCaps(settings(), id, model, { ...current.caps, [key]: on }) : false; }),
-      onTab: id => { state.tab = id; paint(); },
+      onTab: id => { if ((options.hiddenTabs?.() || []).includes(id)) return; state.tab = id; paint(); },
+      hiddenTabs: () => options.hiddenTabs?.() || [],
       roles: options.roles || null,
       park: () => options.roles?.park?.(),
       mountRoles: (node, which) => options.roles?.mount(node, which),

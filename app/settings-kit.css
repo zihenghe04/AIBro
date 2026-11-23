@@ -33,15 +33,6 @@
 .connections-card .pa-search { border-width: 1px; border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) { .connections-card .pa-tile, .connections-card .pv-row, .connections-card .pv-model { transition: none; } .connections-card .pa-tile:hover:not(:disabled) { transform: none; } }
 
-/* Settings section tabs (React Kit tabs with inline styles): a soft segmented pill row instead of an underline. */
-.settings-navigation-kit .kit-tabs > div { border-bottom: 0 !important; gap: 2px !important; padding: 4px; width: fit-content; border-radius: 14px; background: color-mix(in srgb, var(--text) 5.5%, transparent); }
-.settings-navigation-kit .kit-tabs > div > :not(button) { display: none !important; }
-.settings-navigation-kit .kit-tabs button[role="tab"] { border-radius: 10px !important; padding: 7px 16px !important; font-size: 13px !important; font-weight: 500 !important; color: var(--muted) !important; background: transparent !important; transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease !important; }
-.settings-navigation-kit .kit-tabs button[role="tab"]:hover { color: var(--text) !important; }
-.settings-navigation-kit .kit-tabs button[role="tab"][aria-selected="true"] { color: var(--text) !important; background: var(--panel-raised) !important; box-shadow: 0 1px 2px #0002, 0 0 0 1px var(--line) !important; }
-.settings-navigation-kit .kit-tabs button[role="tab"]:focus-visible { box-shadow: 0 0 0 2px var(--accent) !important; }
-.settings-tabs-scroll { padding: 4px 2px 6px; }
-
 /* Plugins page */
 .plugin-settings-card .plugin-list, .plugin-settings-card .plugin-cands { border-radius: 16px; background: transparent; }
 .plugin-settings-card .plugin-row, .plugin-settings-card .plugin-cand { padding: 14px; transition: background 140ms; }
@@ -55,8 +46,6 @@
 .task-field[data-carrier] { display: none !important; }
 .scheduler-model-picker { margin-top: 6px; }
 
-/* The save bar only covers permissions and prices now: keep it at the end of the section. */
-#settings-panel-models > .settings-save-bar { order: 99; }
 
 /* CC Switch import window: same rows, badges and info banner as the rest of the provider pages. */
 .connections-card .pv-cc-list { gap: 6px; }
@@ -69,9 +58,5 @@
 .connections-card .pv-cc-info { padding: 10px 12px; border-radius: 12px; font-size: 12.5px; color: var(--muted); background: color-mix(in srgb, var(--text) 5%, transparent); }
 .connections-card .pv-cc-footer { gap: 8px; }
 
-/* The tab transition above is !important, so it must opt out of reduced motion itself. */
-body.reduce-motion .settings-navigation-kit .kit-tabs button[role="tab"] { transition: none !important; }
 
-/* The section intro already titles the page: keep the card heading for assistive tech only, and let a hint-less intro use the full width. */
 #settings .connections-card > h2:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.settings-section-intro > div:only-child { max-width: none; text-align: left; flex: 1 1 auto; padding-top: 0; }

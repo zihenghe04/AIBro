@@ -203,10 +203,11 @@
   let mounted;
   function init(options = {}) {
     if (mounted || !root.workstationDesktop?.connections || !root.HalaskaUI) return;
-    const doc = root.document, panel = doc.getElementById('settings-panel-sync'); if (!panel) return;
-    const host = doc.createElement('article'); host.id = 'connectionSyncSettings'; host.className = 'card'; panel.append(host);
+    const doc = root.document, page = doc.getElementById('settings'); if (!page) return;
+    // The card lives in #settings until the Sync page adopts it; only inside the shell is it on screen.
+    const host = doc.createElement('article'); host.id = 'connectionSyncSettings'; host.className = 'card'; page.append(host);
     let island, controller, latest, readyPending = false, readyQueued = false, stopped = false;
-    const isVisible = () => !panel.hidden && doc.getElementById('settings')?.classList.contains('active-view');
+    const isVisible = () => !!host.closest('.st-shell') && page.classList.contains('active-view');
     const followsSavedAPI = purpose => { try { const config = parseFollow((root.workstationDesktop.connectionFollowing || root.localStorage).getItem(FOLLOW)); return !!config && (!purpose || (purpose === 'chat' ? !!config.apiFormat : config.speech === true)); } catch (_) { return false; } };
     // Readiness is one extra check, not a retained adapter or retry loop. It may
     // arrive while the first native call is still rejecting its pre-ready lease.
@@ -232,8 +233,7 @@
       const next = isVisible();
       if (next && !visible) controller.refresh(); visible = next;
     };
-    const observer = new MutationObserver(refreshVisible); observer.observe(panel, { attributes: true, attributeFilter: ['hidden'] });
-    observer.observe(doc.getElementById('settings'), { attributes: true, attributeFilter: ['class'] });
+    const observer = new MutationObserver(refreshVisible); observer.observe(page, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
     root.addEventListener('focus', () => { if (followsSavedAPI() || latest?.busy) controller.sourceChanged(); else if (visible) controller.refresh(); });
     // The controller also recognizes an explicit first publish in flight;
     // gating here on persisted FOLLOW would discard those save notifications.

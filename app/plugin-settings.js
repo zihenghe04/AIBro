@@ -119,7 +119,7 @@
       const list=el('div',{className:'plugin-list'});
       for(const plugin of (host?.list?.()||[]).filter(p=>p.kind==='builtin')){
         const name=t(plugin.name.zh,plugin.name.en||plugin.name.zh);
-        list.append(listRow({id:plugin.id,name,badge:t('内置','Built-in'),summary:plugin.summary.zh,enabled:plugin.enabled,
+        list.append(listRow({id:plugin.id,name,badge:t('内置','Built-in'),summary:t(plugin.summary.zh,plugin.summary.en||plugin.summary.zh),enabled:plugin.enabled,
           status:plugin.enabled?(plugin.available?t('就绪','Ready'):t('不可用','Unavailable')):t('已关闭','Off'),statusKind:plugin.enabled&&plugin.available?'ok':'',
           onToggle:on=>act(()=>host.setEnabled(plugin.id,on)),onOpen:()=>go({name:'detail',id:plugin.id,builtin:true})}));
       }
@@ -190,7 +190,7 @@
         const name=t(plugin.name.zh,plugin.name.en||plugin.name.zh);
         const toggle=el('input',{type:'checkbox',checked:plugin.enabled,disabled:busy,'aria-label':t('启用 ','Enable ')+name});
         toggle.addEventListener('change',()=>act(()=>host.setEnabled(plugin.id,toggle.checked)));
-        return [back,el('div',{className:'plugin-head'},el('div',{},el('h2',{textContent:name}),el('p',{className:'muted',textContent:plugin.summary.zh})),el('label',{className:'sound-toggle'},toggle)),
+        return [back,el('div',{className:'plugin-head'},el('div',{},el('h2',{textContent:name}),el('p',{className:'muted',textContent:t(plugin.summary.zh,plugin.summary.en||plugin.summary.zh)})),el('label',{className:'sound-toggle'},toggle)),
           plugin.id==='browser'?browserSites():null].filter(Boolean);
       }
       const entry=mcpEntries().find(e=>e.id===view.id);

@@ -515,7 +515,10 @@
   const doc=container.ownerDocument,walker=doc.createTreeWalker(container,root.NodeFilter?.SHOW_TEXT||4),parts=[];let node,text='';while((node=walker.nextNode())){if(node.parentElement.closest('button,script,style,[hidden]'))continue;parts.push({node,start:text.length});text+=node.data;}
   const candidates=source.excerpt.replace(/^\[第 \d+ 页\]\n/,'').split('\n').map(s=>s.trim().replace(/^#{1,6}\s+|^[-*]\s+/,'')).filter(s=>s.length>=8).sort((a,b)=>b.length-a.length);let at=-1,quote='';for(const candidate of candidates){quote=candidate.slice(0,180);at=text.indexOf(quote);if(at>=0&&text.indexOf(quote,at+1)===-1)break;at=-1;}if(at<0)return false;
   const first=parts.find(p=>p.start<=at&&p.start+p.node.data.length>at),last=parts.find(p=>p.start<at+quote.length&&p.start+p.node.data.length>=at+quote.length);if(!first||!last)return false;
-  const range=doc.createRange();range.setStart(first.node,at-first.start);range.setEnd(last.node,at+quote.length-last.start);if(root.CSS?.highlights&&root.Highlight)root.CSS.highlights.set('citation-location',new root.Highlight(range));first.node.parentElement.scrollIntoView({block:'center',behavior:'instant'});return true;
+  const range=doc.createRange();range.setStart(first.node,at-first.start);range.setEnd(last.node,at+quote.length-last.start);if(root.CSS?.highlights&&root.Highlight)root.CSS.highlights.set('citation-location',new root.Highlight(range));
+  // Glide to the cited passage and fade it up once so the eye lands on it; reduced motion jumps.
+  const target=first.node.parentElement,still=doc.body?.classList?.contains('reduce-motion')||!!root.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  target.scrollIntoView({block:'center',behavior:still?'instant':'smooth'});if(!still)target.animate?.([{opacity:.3},{opacity:1}],{duration:640,delay:120,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'});return true;
  }
  return {LIMITS,instructions,safeURL,access,createAccessContext,redact,capture,captureInitial,captureRetained,validateRetained,runForCitations,originForBranch,sourcesFor,status,location,markers,documentText,documentSource,exportText,recordFor,body,decorate,evidenceModel,evidenceOutline,section,patchSection,discard,materializeForSearch,bind,resolveTarget,reveal};
 });

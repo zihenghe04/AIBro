@@ -9,4 +9,6 @@ const c=require('crypto'),fs=require('fs');const key=c.pbkdf2Sync('synthetic-pas
 JS
 xcrun swiftc native/Sources/AIBro/AgendaCore.swift native/Sources/AIBro/NativeCredentials.swift tests/native-credentials.swift -o "$TEST_DIR/credentials"
 "$TEST_DIR/credentials" "$TEST_DIR/legacy.txt"
-node --test tests/native-desktop.test.cjs
+xcrun swiftc native/Sources/AIBro/NativeSettingsRegistry.swift tests/native-settings-registry.swift -o "$TEST_DIR/settings-registry"
+"$TEST_DIR/settings-registry"
+node --test tests/native-desktop.test.cjs tests/native-settings-bridge.test.cjs

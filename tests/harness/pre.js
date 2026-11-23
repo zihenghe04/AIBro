@@ -1,0 +1,2 @@
+window.__errs=[];window.addEventListener('error',e=>__errs.push(String(e.message)+' @'+(e.filename||'').split('/').pop()+':'+e.lineno));window.addEventListener('unhandledrejection',e=>__errs.push('rej '+String(e.reason)));
+document.addEventListener('DOMContentLoaded',()=>{const s=document.createElement('style');s.textContent='.st-page,.st-saved{animation:none!important}';document.head.appendChild(s)});

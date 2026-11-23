@@ -2,6 +2,8 @@ import SwiftUI
 import AppKit
 import WebKit
 import Combine
+import AVFoundation
+import ApplicationServices
 
 // The page reports its theme after every preference refresh (sidebar,
 // inspector, startup). Only a visible change made after the first native
@@ -98,10 +100,14 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     private var startupContentTerminated=false
     private var startupNavigation:WKNavigation?
     private var quickNavigationEvents:[[String:Any]]=[]
+    /// Test builds carry their own bundle id (AIBroDevIdentity) and therefore their own
+    /// data folder, Keychain service and privacy grants, apart from the released app.
+    let devIdentity:Bool
     override init() {
+        devIdentity=Bundle.main.object(forInfoDictionaryKey:"AIBroDevIdentity") as? Bool == true
         production=Bundle.main.object(forInfoDictionaryKey:"AIBroProduction") as? Bool == true
         root = ProcessInfo.processInfo.environment["AIBRO_SOURCE_ROOT"].map{URL(fileURLWithPath:$0)} ?? (production ? Bundle.main.resourceURL! : URL(fileURLWithPath:FileManager.default.currentDirectoryPath))
-        defaultDataDirectory=production ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ai-workstation"):root.deletingLastPathComponent().appendingPathComponent(".aibro-native-preview.noindex/workspace")
+        defaultDataDirectory=production ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(devIdentity ? "Library/Application Support/ai-workstation-dev":"Library/Application Support/ai-workstation"):root.deletingLastPathComponent().appendingPathComponent(".aibro-native-preview.noindex/workspace")
         if let isolated=ProcessInfo.processInfo.environment["AIBRO_NATIVE_DATA_DIR"], isolated.hasPrefix("/") {
             // Manual GUI checks on disposable data that must survive a relaunch.
             dataDirectory=URL(fileURLWithPath:isolated,isDirectory:true)
@@ -138,7 +144,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         })
         // Synthetic QA deliberately uses the browser fallback and never touches saved secrets.
         if ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] == nil || ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA_DESKTOP"] == "1" {
-            let bridge=NativeDesktop(data:dataDirectory,production:production && ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] == nil);desktop=bridge;bridge.workspace=self;bridge.install(config,root:root)
+            let bridge=NativeDesktop(data:dataDirectory,production:production && ProcessInfo.processInfo.environment["AIBRO_NATIVE_QA"] == nil,dev:devIdentity);desktop=bridge;bridge.workspace=self;bridge.install(config,root:root)
         }
         if let css = try? String(contentsOf:root.appendingPathComponent("native/Resources/workspace.css"),encoding:.utf8),
            let data=try? JSONSerialization.data(withJSONObject:css,options:.fragmentsAllowed) {
@@ -404,7 +410,9 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
     }
     // Settings is a workspace destination, not a second preferences window.
     // The persistent WebView identifies its owner even while a popover is key.
-    func openWorkspaceSettings() {
+    /// `category` is a new category id or a legacy section id; the web side maps and validates it.
+    func openWorkspaceSettings(category:String?=nil) {
+        let category=category.flatMap{NativeSettingsCategory.resolve($0)}
         guard let mainWindow=web.window ?? glassHost?.window else{return}
         guard mainWindow.attachedSheet == nil else{return}
         if mainWindow.isMiniaturized {mainWindow.deminiaturize(nil)}
@@ -439,11 +447,15 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
                             if (!(await beforePreviewLeave())) return 'cancelled';
                         }
                         if (window.__aibroSettingsRequest !== requestID || document.querySelector('dialog:modal')) return 'cancelled';
-                        return window.NativeShell?.perform({type:'view',id:'settings'}) === true ? 'opened' : 'unavailable';
+                        const opened = window.NativeShell?.perform({type:'view',id:'settings'}) === true;
+                        if (opened && typeof category === 'string' && category) {
+                            try { window.SettingsShell?.open(category); } catch (_) {}
+                        }
+                        return opened ? 'opened' : 'unavailable';
                     } finally {
                         if (window.__aibroSettingsRequest === requestID) delete window.__aibroSettingsRequest;
                     }
-                    """,arguments:["requestID":request.uuidString],in:nil,contentWorld:.page)
+                    """,arguments:["requestID":request.uuidString,"category":category ?? ""],in:nil,contentWorld:.page)
                 guard settingsNavigationRequest == request else{return}
                 if result as? String == "cancelled" {return}
                 guard result as? String == "opened" else {throw CocoaError(.featureUnsupported)}
@@ -1198,7 +1210,7 @@ struct MainView: View {
             .background(GeometryReader{geometry in Color.clear.preference(key:SidebarBounds.self,value:[tag:geometry.frame(in:.named("native-sidebar"))])})
     }
     func nav(_ name:String,_ icon:String,_ tag:String)->some View {sidebarButton(name,icon,tag,StudioPalette.space(name))}
-    var title: String { if let value=model.selection,value.hasPrefix("project:") {return model.snapshot?.projects.first{$0.id==String(value.dropFirst(8))}?.title ?? nativeUI("项目", "Projects")};return ["wiki":nativeUI("科研 · 知识库", "Research · Knowledge base"),"research-projects":nativeUI("科研 · 研究项目", "Research · Projects"),"conversations":nativeUI("全部对话", "All chats"),"captures":nativeUI("随记", "Quick notes"),"agenda":nativeUI("日程中心", "Agenda"),"overview":nativeUI("总览", "Overview"),"dashboard":nativeUI("详细仪表板", "Detailed dashboard"),"agent":nativeUI("对话", "Chats"),"daily":nativeUI("日常", "Daily"),"courses":nativeUI("课程", "Courses"),"research":nativeUI("科研", "Research"),"history":nativeUI("执行历史", "Run history"),"trash":nativeUI("回收站", "Trash"),"settings":nativeUI("模型与知识库设置", "Models & knowledge settings")][model.selection ?? ""] ?? nativeUI("对话", "Chats") }
+    var title: String { if let value=model.selection,value.hasPrefix("project:") {return model.snapshot?.projects.first{$0.id==String(value.dropFirst(8))}?.title ?? nativeUI("项目", "Projects")};return ["wiki":nativeUI("科研 · 知识库", "Research · Knowledge base"),"research-projects":nativeUI("科研 · 研究项目", "Research · Projects"),"conversations":nativeUI("全部对话", "All chats"),"captures":nativeUI("随记", "Quick notes"),"agenda":nativeUI("日程中心", "Agenda"),"overview":nativeUI("总览", "Overview"),"dashboard":nativeUI("详细仪表板", "Detailed dashboard"),"agent":nativeUI("对话", "Chats"),"daily":nativeUI("日常", "Daily"),"courses":nativeUI("课程", "Courses"),"research":nativeUI("科研", "Research"),"history":nativeUI("执行历史", "Run history"),"trash":nativeUI("回收站", "Trash"),"settings":nativeUI("设置", "Settings")][model.selection ?? ""] ?? nativeUI("对话", "Chats") }
 }
 struct Overview: View {
     @ObservedObject private var nativeLanguage = NativeL10n.shared
@@ -1577,6 +1589,8 @@ struct NativeDraftQuitGate {
 
 @MainActor final class Delegate:NSObject,NSApplicationDelegate {
     var model:Workspace? { didSet { if oldValue !== model { configureQuickEntry() } } }
+    /// Runs before the shortcut stores below read UserDefaults (declaration order).
+    private let devPreferencesImported=NativeDevPreferenceImport.runAtLaunch()
     let quickEntry=NativeQuickEntryCoordinator()
     private let quickMedia=NativeQuickMediaStore()
     private let speechShortcut=NativeSpeechShortcutStore()
@@ -1586,9 +1600,15 @@ struct NativeDraftQuitGate {
     private var speechSeq=0
     private func recordSpeech(_ value:[String:Any]){speechSeq+=1;var next=value;next["seq"]=speechSeq;speechResult=next}
     private var voiceCommand:NativeVoiceCommandCoordinator?
+    private let dictateTrigger=NativeDictateTriggerStore()
+    private let dictateInjector=NativeDictationInjector()
+    private var dictateInject:NativeDictationInjectCoordinator?
+    private let dictateHUD=NativeDictationHUD()
+    private var dictateHUDDemo:Timer?
     private let quickUtilities=NativeQuickUtilitiesStore()
     private let quickAgenda=NativeQuickAgendaStore()
     private let quickLoginItem=NativeQuickLoginItemStore()
+    private let permissionProbe=NativePermissionProbe()
     // These utilities never live in the synchronized knowledge workspace.
     private static var quickLocalDirectory:URL {
         NativeQuickToolsLocation.directory(environment:ProcessInfo.processInfo.environment,home:FileManager.default.homeDirectoryForCurrentUser,
@@ -1618,7 +1638,9 @@ struct NativeDraftQuitGate {
     private weak var draftQuitWindow:NSWindow?
     private var workspaceWindows:[ObjectIdentifier:NativeDraftQuitWindowDelegate]=[:]
     private func configureQuickEntry(){
-        voiceCommand?.invalidate();voiceCommand=nil;quickEntry.updateVoiceStatus(nil)
+        voiceCommand?.invalidate();voiceCommand=nil
+        dictateInject?.invalidate();dictateInject=nil;dictateHUD.hide();dictateTrigger.setActive(false);dictateInjector.restorePending()
+        quickEntry.updateVoiceStatus(nil)
         speechDictation?.shutdown();speechDictation=nil;speechShortcut.setActive(false)
         quickEntrySubscriptions.removeAll()
         quickExternalNotifications?.shutdown();quickExternalNotifications=nil
@@ -1658,10 +1680,37 @@ struct NativeDraftQuitGate {
                 guard let mode=NativeQuickEntryCoordinator.Mode(rawValue:value),mode != .off else{return ["status":"error","reason":"invalid_request"]}
                 self.quickEntry.mode=mode
             case .open:
-                self.quickEntry.showPanel(section:.settings)
-                guard self.quickEntry.isShowing(.settings) else{return ["status":"error","reason":"unavailable"]}
+                self.quickEntry.openSettings(category:"quick-entry")
             }
             return ["status":"ok","mode":self.quickEntry.mode.rawValue,"isEnabled":self.quickEntry.isEnabled,"preferredEnabledMode":self.quickEntry.preferredEnabledMode.rawValue]
+        }
+        model.desktop?.nativeSettings = {[weak self,weak model] request in
+            guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return ["status":"error","reason":"unavailable"]}
+            self.quickLoginItem.refresh()
+            let defaults=UserDefaults.standard
+            var failure:String?
+            var changedID:String?
+            if case .set(let id,let value)=request {
+                changedID=id
+                if NativeSettingsVoiceBinding.set(id,value,dictate:self.dictateTrigger,speech:self.speechShortcut,preferences:defaults) {}
+                else if NativeSettingsQuickBinding.set(id,value,login:self.quickLoginItem,quickEntry:self.quickEntry,clipboard:self.quickClipboard,defaults:defaults) {}
+                else if NativeSettingsPermissionBinding.set(id,value,login:self.quickLoginItem) {}
+                else if NativeSettingsNotificationBinding.set(id,value,agenda:model.agenda,external:self.quickExternalNotifications,island:self.quickTaskReminders,probeStatus:self.permissionProbe.notifications) {}
+                else {failure="read_only"}
+            }
+            // Every reply is the effective snapshot, never the requested value.
+            var values=NativeSettingsQuickBinding.values(login:self.quickLoginItem,quickEntry:self.quickEntry,clipboard:self.quickClipboard,defaults:defaults)
+            values.merge(NativeSettingsVoiceBinding.values(dictate:self.dictateTrigger,speech:self.speechShortcut,preferences:defaults)){_,new in new}
+            values.merge(NativeSettingsPermissionBinding.values(login:self.quickLoginItem,probe:self.permissionProbe)){_,new in new}
+            values.merge(NativeSettingsNotificationBinding.values(agenda:model.agenda,external:self.quickExternalNotifications,island:self.quickTaskReminders)){_,new in new}
+            var meta=NativeSettingsQuickBinding.meta(login:self.quickLoginItem,quickEntry:self.quickEntry,clipboard:self.quickClipboard)
+            meta.merge(NativeSettingsPermissionBinding.meta()){_,new in new}
+            meta.merge(NativeSettingsNotificationBinding.meta(agenda:model.agenda,external:self.quickExternalNotifications,island:self.quickTaskReminders,entryOff:self.quickEntry.mode == .off)){_,new in new}
+            meta.merge(NativeSettingsVoiceBinding.meta(dictate:self.dictateTrigger,speech:self.speechShortcut)){_,new in new}
+            var reply:[String:Any]=["status":failure == nil ? "ok":"error","values":values,"meta":meta]
+            if let changedID{reply["id"]=changedID}
+            if let failure{reply["reason"]=failure}
+            return reply
         }
         model.desktop?.speechSettings = {[weak self,weak model] request in
             guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return ["status":"error","reason":"unavailable"]}
@@ -1845,7 +1894,6 @@ struct NativeDraftQuitGate {
             return await NativeQuickPanelOpenResult.positioned(section:request.section,recordType:kind,recordID:id).confirmed(verify:verify,isPresented:{canPresent() && isPresented() && targetStillPresented()})
         }
         configureQuickNotifications(model)
-        quickEntry.registerSettingsSection(id:"login-item",content:{[quickLoginItem] in AnyView(NativeQuickLoginItemView(store:quickLoginItem))})
         quickMedia.configure(directory:model.dataDirectory)
         // ASR settings use their own local encrypted record, outside workspace
         // sync. Configuration only reads metadata; recording remains explicit.
@@ -2023,11 +2071,7 @@ struct NativeDraftQuitGate {
     func invokeVoiceCommand(){voiceCommand?.invoke()}
     /// Opens the main window on Settings > Models > Speech recognition.
     func openMainSpeechSettings(_ model:Workspace){
-        model.openWorkspaceSettings()
-        Task{@MainActor in
-            for _ in 0..<40 where model.selection != "settings" {try? await Task.sleep(nanoseconds:100_000_000)}
-            _ = try? await model.web.callAsyncJavaScript("document.dispatchEvent(new CustomEvent('aibro-open-models-tab',{detail:'speech'}));return true;",arguments:[:],in:nil,contentWorld:.page)
-        }
+        model.openWorkspaceSettings(category:"voice")
     }
     private func configureSpeechEntry(_ model:Workspace){
         let dictation=NativeSpeechDictation(settings:quickMedia.recordings.speechSettings,
@@ -2040,10 +2084,11 @@ struct NativeDraftQuitGate {
             realtime:NativeDictationRealtime(connection:{[weak self] in try? self?.quickMedia.recordings.realtimeSettings.connection()}))
         speechDictation=dictation;model.desktop?.speechDictation=dictation
         let owner=model.dataDirectory,origin=model.origin
-        let voice=NativeVoiceCommandCoordinator(dictation:dictation,verify:{[weak self,weak model] in
+        let verify:@MainActor () async -> Bool = {[weak self,weak model] in
             guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return false}
             return model.dataDirectory==owner && (origin == nil || model.origin==origin) && model.voiceWorkspaceAvailable
-        },submit:{[weak self,weak model] id,text in
+        }
+        let voice=NativeVoiceCommandCoordinator(dictation:dictation,verify:verify,submit:{[weak self,weak model] id,text in
             guard let self,let model,self.model === model,self.draftQuit.phase == .idle else{return ["status":"deferred","requestId":id,"reason":"unavailable"]}
             return await model.submitVoiceInstruction(requestID:id,text:text)
         })
@@ -2082,7 +2127,7 @@ struct NativeDraftQuitGate {
             if !active {voice?.cancelHeldCapture()}
         }.store(in:&quickEntrySubscriptions)
         speechShortcut.setActive(true)
-        quickEntry.registerSettingsSection(id:"voice-shortcut",content:{[speechShortcut] in AnyView(NativeSpeechShortcutView(store:speechShortcut))})
+        configureDictateInject(dictation:dictation,verify:verify)
         let openSettings:() async -> Bool = { [weak self,weak model] in
             guard let self,let model,self.model === model,model.voiceWorkspaceAvailable,
                   self.quickMedia.recordings.phase == .idle,!self.quickMedia.recordings.hasEditor,
@@ -2126,11 +2171,124 @@ struct NativeDraftQuitGate {
             if phase != .idle {dictation?.invalidate()}
         }.store(in:&quickEntrySubscriptions)
     }
-    private func updateVoiceIslandStatus(){
-        guard let voice=voiceCommand,voice.phase != .idle || voice.execution != nil else{
-            quickEntry.updateVoiceStatus(nil);return
+    /// Dictate-to-cursor shares the dictation engine with voice commands but
+    /// never presents a panel: the caret must stay in the other app.
+    private func configureDictateInject(dictation:NativeSpeechDictation,verify:@escaping @MainActor () async -> Bool){
+        NativeDictateLog.shared.configure(folder:(model?.dataDirectory ?? FileManager.default.temporaryDirectory))
+        dictateLog("launch bundle=\(Bundle.main.bundleIdentifier ?? "?") dev=\((model?.devIdentity ?? false)) AXIsProcessTrusted=\(AXIsProcessTrusted()) listenEvent=\(CGPreflightListenEventAccess()) mic=\(AVCaptureDevice.authorizationStatus(for:.audio).rawValue) dataDir=\((model?.dataDirectory.path ?? "?")) devImport=\(devPreferencesImported.joined(separator:","))")
+        let inject=NativeDictationInjectCoordinator(dictation:dictation,verify:verify,
+            frontmost:{[dictateInjector] in dictateInjector.frontmost()},
+            inject:{[dictateInjector] text,target in await dictateInjector.inject(text,into:target)})
+        dictateInject=inject
+        dictateTrigger.reserved={[weak self] in
+            guard let self else{return []}
+            return [self.speechShortcut.shortcut,self.quickEntry.shortcutStore.shortcut]
         }
-        quickEntry.updateVoiceStatus(.init(title:voice.presentationTitle,symbol:voice.presentationSymbol,isProcessing:voice.presentationBusy))
+        dictateTrigger.onPress={[weak inject] in inject?.press()}
+        dictateTrigger.onRelease={[weak inject] in inject?.release()}
+        dictateTrigger.onAbort={[weak inject] in inject?.abortPress()}
+        dictateTrigger.$enabled.dropFirst().removeDuplicates().sink{[weak inject] enabled in
+            if !enabled {inject?.invalidate()}
+        }.store(in:&quickEntrySubscriptions)
+        inject.objectWillChange.receive(on:RunLoop.main).sink{[weak self] _ in
+            self?.updateVoiceIslandStatus()
+        }.store(in:&quickEntrySubscriptions)
+        dictateHUD.onStop={[weak inject] in dictateLog("hud stop clicked");inject?.finish()}
+        dictation.$level.receive(on:RunLoop.main).sink{[weak self] level in
+            guard let self,self.dictateHUDDemo==nil,self.dictateInject?.phase == .recording else{return}
+            self.dictateHUD.setLevel(level)
+        }.store(in:&quickEntrySubscriptions)
+        configureDictateHUDDebug()
+        dictateTrigger.onNeedsAccess={[weak self] in self?.presentDictateAccessNotice()}
+        NotificationCenter.default.publisher(for:NSApplication.didBecomeActiveNotification).receive(on:RunLoop.main).sink{[weak self] _ in
+            self?.dictateTrigger.recheckAccess()
+        }.store(in:&quickEntrySubscriptions)
+        dictateTrigger.setActive(true)
+    }
+    /// Without Accessibility the trigger key is never delivered, so say so once
+    /// per launch instead of leaving the key silently dead. The alert is
+    /// raised after launch settles, brings the app forward, and is attached to
+    /// the main window when one is up; it can be silenced for good.
+    private var dictateAccessNoticeShown=false
+    private static let dictateAccessSilencedKey="ai-bro-native-dictate-access-notice-silenced-v1"
+    private func presentDictateAccessNotice(){
+        guard !dictateAccessNoticeShown,!UserDefaults.standard.bool(forKey:Self.dictateAccessSilencedKey) else{return}
+        dictateAccessNoticeShown=true
+        DispatchQueue.main.asyncAfter(deadline:.now()+1.5){[weak self] in
+            guard let self,self.dictateTrigger.needsAccess else{return}
+            let alert=NSAlert()
+            let appName=(Bundle.main.object(forInfoDictionaryKey:"CFBundleDisplayName") as? String) ?? "AI Bro"
+            alert.messageText=nativeUI("听写到光标处需要“辅助功能”权限","Dictate at cursor needs Accessibility access")
+            alert.informativeText=nativeUI("按右 ⌥ 听写前，请在“系统设置 › 隐私与安全性 › 辅助功能”里打开“\(appName)”，授权后回到 \(appName) 即可生效，无需重启。\n\n如果列表里已经有“\(appName)”且是打开的却仍提示，说明那条授权属于另一个签名的副本：请选中它点“−”删除，再点“+”添加当前这个 \(appName)。\n\n也可以在灵动岛设置里关闭“听写到光标处”。","To dictate with the trigger key, turn on \(appName) in System Settings › Privacy & Security › Accessibility, then return to \(appName); no restart is needed.\n\nIf AI Bro is already listed and on but this still appears, that entry belongs to a differently signed copy: select it, press “−” to remove it, then press “+” and add this \(appName).\n\nYou can also switch off Dictate at cursor in the island settings.")
+            alert.addButton(withTitle:nativeUI("打开辅助功能设置","Open Accessibility settings"))
+            alert.addButton(withTitle:nativeUI("稍后","Later"))
+            alert.showsSuppressionButton=true
+            alert.suppressionButton?.title=nativeUI("不再提示","Don't show again")
+            let finish:(NSApplication.ModalResponse)->Void={response in
+                if alert.suppressionButton?.state == .on{UserDefaults.standard.set(true,forKey:Self.dictateAccessSilencedKey)}
+                if response == .alertFirstButtonReturn,
+                   let url=URL(string:"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"){NSWorkspace.shared.open(url)}
+            }
+            NSApp.activate(ignoringOtherApps:true)
+            if let window=NSApp.windows.first(where:{$0.isVisible && !$0.isMiniaturized && $0.canBecomeMain && !($0 is NSPanel) && $0.attachedSheet == nil}){
+                window.makeKeyAndOrderFront(nil)
+                alert.beginSheetModal(for:window,completionHandler:finish)
+            }else{
+                finish(alert.runModal())
+            }
+        }
+    }
+    private func updateVoiceIslandStatus(){
+        if let voice=voiceCommand,voice.phase != .idle || voice.execution != nil {
+            quickEntry.updateVoiceStatus(.init(title:voice.presentationTitle,symbol:voice.presentationSymbol,isProcessing:voice.presentationBusy))
+            if dictateHUDDemo==nil {dictateHUD.hide()}
+        }else if let inject=dictateInject,inject.phase != .idle {
+            quickEntry.updateVoiceStatus(.init(title:inject.presentationTitle,symbol:inject.presentationSymbol,isProcessing:inject.presentationBusy,detail:inject.presentationDetail))
+            if dictateHUDDemo==nil {
+                let listening=inject.phase == .starting || inject.phase == .recording
+                dictateHUD.show(title:inject.presentationTitle,hint:inject.presentationHint,text:inject.presentationDetail,symbol:inject.presentationSymbol,listening:listening)
+            }
+        }else{
+            quickEntry.updateVoiceStatus(nil)
+            if dictateHUDDemo==nil {dictateHUD.hide()}
+        }
+    }
+    /// Debug-only: with AIBRO_DICTATE_HUD_DEBUG=1 the distributed notification
+    /// `app.aibro.debug.dictate` ("listen", "transcribe", "stop") drives the
+    /// dictation pill from canned levels and text. No microphone, no engine.
+    private func configureDictateHUDDebug(){
+        guard ProcessInfo.processInfo.environment["AIBRO_DICTATE_HUD_DEBUG"]=="1" else{return}
+        dictateLog("hud debug entry enabled")
+        DistributedNotificationCenter.default().addObserver(forName:.init("app.aibro.debug.dictate"),object:nil,queue:.main){[weak self] note in
+            let command=note.object as? String ?? ""
+            MainActor.assumeIsolated{self?.runDictateHUDDemo(command)}
+        }
+    }
+    private func runDictateHUDDemo(_ command:String){
+        dictateLog("hud debug \(command)")
+        dictateHUDDemo?.invalidate();dictateHUDDemo=nil
+        switch command {
+        case "listen":
+            let phrase=Array(nativeUI("明天下午三点在图书馆二楼讨论论文第三章的实验设计","Meet at the library at three to go over chapter three"))
+            let start=Date()
+            dictateHUD.show(title:nativeUI("正在听写","Dictating"),hint:nativeUI("松开输入","release to insert"),text:nil,symbol:"mic.fill",listening:true)
+            dictateHUDDemo=Timer.scheduledTimer(withTimeInterval:0.05,repeats:true){[weak self] _ in
+                MainActor.assumeIsolated{
+                    guard let self else{return}
+                    let t=Date().timeIntervalSince(start)
+                    let count=min(phrase.count,max(0,Int((t-0.6)/0.14)))
+                    self.dictateHUD.show(title:nativeUI("正在听写","Dictating"),hint:nativeUI("松开输入","release to insert"),
+                        text:count==0 ? nil : String(String(phrase.prefix(count)).suffix(24)),symbol:"mic.fill",listening:true)
+                    self.dictateHUD.setLevel(0.35+0.3*abs(sin(t*5.3))+0.2*abs(sin(t*11.7)))
+                }
+            }
+        case "transcribe":
+            dictateHUD.hide()
+            dictateHUD.show(title:nativeUI("正在转写","Transcribing"),hint:nil,text:nil,symbol:"text.cursor",listening:false)
+            dictateHUDDemo=Timer.scheduledTimer(withTimeInterval:3600,repeats:false){_ in}
+        default:
+            dictateHUD.hide()
+        }
     }
     private func acceptVoiceExecutionSnapshot(){
         guard let voice=voiceCommand,let receipt=voice.execution,let model,model.voiceWorkspaceAvailable,
@@ -2173,16 +2331,9 @@ struct NativeDraftQuitGate {
             })
         quickExternalNotifications=external
         external.onEventsInvalidated = {[weak self] in self?.quickNotificationPanel?.reconcileHistory()}
-        quickEntry.registerSettingsSection(id:"external-notifications",content:{[weak self,external] in
-            AnyView(NativeQuickExternalNotificationSettingsView(store:external,entryDisabled:self?.quickEntry.mode == .off))
-        })
         let reminders=NativeQuickTaskReminderStore(directory:Delegate.quickLocalDirectory.appendingPathComponent("TaskReminders",isDirectory:true),ownerID:ownerID,sources:sources)
         quickTaskReminders=reminders
         reminders.onEventsInvalidated = {[weak self] in self?.quickNotificationPanel?.reconcileHistory()}
-        quickEntry.registerSettingsSection(id:"task-reminders",content:{[weak self,reminders] in
-            AnyView(NativeQuickTaskReminderSettingsView(store:reminders,unavailableReason:self?.quickEntry.mode == .off
-                ? nativeUI("请先在上方选择常驻入口，提醒才能显示。", "Choose a persistent entry above so reminders can appear.") : nil))
-        })
         sources.onQueueFull = {[weak self,weak model] in
             guard let self,let model,self.model === model,model.snapshot?.privateMode == false else{return}
             // A full visual queue does not erase the run or claim delivery.
@@ -2331,6 +2482,7 @@ struct NativeDraftQuitGate {
         return restoreWorkspaceWindow() != nil
     }
     private func performQuickAction(_ action:NativeQuickAction){
+        let settingsCategory=action == .settings ? quickEntry.takeSettingsCategory():nil
         quickEntry.dismiss(returnFocus:false)
         let window=restoreWorkspaceWindow()
         guard let model,action != .resume else{return}
@@ -2349,7 +2501,7 @@ struct NativeDraftQuitGate {
         case .search: model.command("search")
         case .agenda: model.openWorkspace("agenda")
         case .activity: model.command("activity-center")
-        case .settings: model.openWorkspaceSettings()
+        case .settings: model.openWorkspaceSettings(category:settingsCategory)
         }
     }
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {
@@ -2513,14 +2665,14 @@ struct NativeDraftQuitGate {
             alert.beginSheetModal(for:window,completionHandler:decision)
         }else{decision(alert.runModal())}
     }
-    func applicationWillTerminate(_ notification:Notification){voiceCommand?.invalidate();speechDictation?.shutdown();speechShortcut.setActive(false);quickExternalNotifications?.shutdown();quickTaskReminders?.shutdown();quickNotificationPanel?.stop();quickNotificationSources?.accept(nil);quickUtilities.onCommittedCompletion=nil;quickClipboard.shutdown();quickClipboardPasteBack.shutdown();quickVault.shutdown();quickFileShelf.setAvailable(false);quickMedia.shutdown();quickUtilities.setVisible(false);quickEntry.stop();quickEntrySubscriptions.removeAll();draftQuitTimeout?.cancel();draftQuitTask?.cancel();model?.stop()}
+    func applicationWillTerminate(_ notification:Notification){voiceCommand?.invalidate();dictateInject?.invalidate();dictateTrigger.setActive(false);dictateInjector.restorePending();speechDictation?.shutdown();speechShortcut.setActive(false);quickExternalNotifications?.shutdown();quickTaskReminders?.shutdown();quickNotificationPanel?.stop();quickNotificationSources?.accept(nil);quickUtilities.onCommittedCompletion=nil;quickClipboard.shutdown();quickClipboardPasteBack.shutdown();quickVault.shutdown();quickFileShelf.setAvailable(false);quickMedia.shutdown();quickUtilities.setVisible(false);quickEntry.stop();quickEntrySubscriptions.removeAll();draftQuitTimeout?.cancel();draftQuitTask?.cancel();model?.stop()}
     func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool{!quickEntry.keepRunning}
 }
 @main struct AIBroApp:App {
     @ObservedObject private var nativeLanguage = NativeL10n.shared
     @NSApplicationDelegateAdaptor(Delegate.self) var delegate
     @StateObject private var model=Workspace()
-    var body:some Scene {WindowGroup("AI Bro"){MainView(model:model,quickEntry:delegate.quickEntry).background(NativeDraftQuitWindow(delegate:delegate)).frame(minWidth:950,minHeight:650).onAppear{delegate.model=model}}.defaultSize(width:1280,height:850).windowToolbarStyle(.unified).commands{CommandGroup(replacing:.appTermination){Button(nativeUI("退出 AI Bro", "Quit AI Bro")){delegate.requestQuit()}.keyboardShortcut("q",modifiers:.command)};CommandGroup(replacing:.appSettings){Button(nativeUI("设置…", "Settings…")){model.openWorkspaceSettings()}.keyboardShortcut(",",modifiers:.command).disabled(!model.ready || model.snapshot?.modalOpen == true);Button(nativeUI("打开灵动岛 / 快捷工作台…", "Open island / quick panel…")){delegate.quickEntry.showPanel(screenIntent: .pointerSummon)};Button(nativeUI("灵动岛设置…", "Island settings…")){delegate.quickEntry.showPanel(section:.settings,screenIntent: .pointerSummon)};Button(nativeUI("语音指令…", "Voice command…")){delegate.invokeVoiceCommand()}};CommandGroup(replacing:.newItem){Button(nativeUI("新对话", "New chat")){model.command("new")}.keyboardShortcut("n").disabled(!model.ready)};CommandGroup(after:.textEditing){Button(nativeUI("搜索与命令", "Search and commands")){model.command("search")}.keyboardShortcut("k",modifiers:.command).disabled(!model.ready)}}
+    var body:some Scene {WindowGroup("AI Bro"){MainView(model:model,quickEntry:delegate.quickEntry).background(NativeDraftQuitWindow(delegate:delegate)).frame(minWidth:950,minHeight:650).onAppear{delegate.model=model}}.defaultSize(width:1280,height:850).windowToolbarStyle(.unified).commands{CommandGroup(replacing:.appTermination){Button(nativeUI("退出 AI Bro", "Quit AI Bro")){delegate.requestQuit()}.keyboardShortcut("q",modifiers:.command)};CommandGroup(replacing:.appSettings){Button(nativeUI("设置…", "Settings…")){model.openWorkspaceSettings()}.keyboardShortcut(",",modifiers:.command).disabled(!model.ready || model.snapshot?.modalOpen == true);Button(nativeUI("打开灵动岛 / 快捷工作台…", "Open island / quick panel…")){delegate.quickEntry.showPanel(screenIntent: .pointerSummon)};Button(nativeUI("灵动岛设置…", "Island settings…")){delegate.quickEntry.openSettings(category:"quick-entry")};Button(nativeUI("语音指令…", "Voice command…")){delegate.invokeVoiceCommand()}};CommandGroup(replacing:.newItem){Button(nativeUI("新对话", "New chat")){model.command("new")}.keyboardShortcut("n").disabled(!model.ready)};CommandGroup(after:.textEditing){Button(nativeUI("搜索与命令", "Search and commands")){model.command("search")}.keyboardShortcut("k",modifiers:.command).disabled(!model.ready)}}
     }
 
 }

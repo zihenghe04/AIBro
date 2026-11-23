@@ -22,11 +22,20 @@ import AVFoundation
         return min(1,max(0,pow(10,Double(recorder.averagePower(forChannel:0))/20)))
     }
     static func requestPermission() async -> Bool {
-        guard Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") != nil else { return false }
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        guard Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") != nil else {
+            dictateLog("mic missing NSMicrophoneUsageDescription"); return false
+        }
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        switch status {
         case .authorized: return true
-        case .notDetermined: return await AVCaptureDevice.requestAccess(for: .audio)
-        default: return false
+        case .notDetermined:
+            dictateLog("mic status=notDetermined; requesting access")
+            let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            dictateLog("mic request result granted=\(granted)")
+            return granted
+        default:
+            dictateLog("mic status=\(status == .denied ? "denied" : "restricted"); not recording")
+            return false
         }
     }
     func start(at url: URL) throws {

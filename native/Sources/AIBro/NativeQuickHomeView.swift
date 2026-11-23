@@ -131,7 +131,7 @@ struct NativeQuickHomeView: View {
                             .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button { coordinator.select(.settings) } label: { Image(systemName: "rectangle.3.group") }
+                    Button { coordinator.openSettings(category: "quick-entry") } label: { Image(systemName: "rectangle.3.group") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                         .help(nativeUI("调整首页组件", "Customize home widgets"))
                         .accessibilityLabel(nativeUI("调整首页组件", "Customize home widgets"))
@@ -334,79 +334,4 @@ struct NativeQuickHomeView: View {
             }
         }
     }
-}
-
-struct NativeQuickPanelSettingsView: View {
-    @ObservedObject var coordinator: NativeQuickEntryCoordinator
-    @ObservedObject private var preferences: NativeQuickPanelPreferences
-    init(coordinator: NativeQuickEntryCoordinator) { self.coordinator = coordinator; self.preferences = coordinator.panelPreferences }
-    private var modules: [NativeQuickHomeModule] {
-        preferences.orderedHomeIDs(available: coordinator.homeModules.map(\.id)).compactMap { id in coordinator.homeModules.first { $0.id == id } }
-    }
-    private var visibleHome: [String] { preferences.visibleHomeIDs(available: modules.map(\.id)) }
-    private var automatic: Bool { preferences.usesAutomaticLayout(available: modules.map(\.id)) }
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 11) {
-                    heading(nativeUI("灵动岛与快捷入口", "Dynamic Island & quick entry"))
-                    Toggle(nativeUI("启用常驻入口", "Enable persistent entry"), isOn: Binding(
-                        get: { coordinator.isEnabled }, set: { coordinator.setEnabled($0) }
-                    )).toggleStyle(.switch).controlSize(.small)
-                    Text(nativeUI("随 AI Bro 启动；关闭主窗口后仍可使用，退出 App 后关闭。", "Starts with AI Bro. Stays available when the main window closes; quits with the app."))
-                        .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Picker(nativeUI("入口位置", "Entry location"), selection: Binding(
-                        get: { coordinator.preferredEnabledMode }, set: { coordinator.mode = $0 }
-                    )) {
-                        ForEach(NativeQuickEntryCoordinator.Mode.allCases.filter { $0 != .off }) { Text($0.title).tag($0) }
-                    }.pickerStyle(.menu).disabled(!coordinator.isEnabled)
-                    Picker(nativeUI("默认展开页", "Default page"), selection: Binding(get: {
-                        preferences.defaultSection(available: coordinator.availableSections)
-                    }, set: { preferences.setDefault($0, available: coordinator.availableSections) })) {
-                        ForEach(coordinator.visibleSections) { Text($0.title).tag($0) }
-                    }.pickerStyle(.menu)
-                    NativeQuickShortcutView(store: coordinator.shortcutStore)
-                }
-                ForEach(coordinator.settingsSections) { section in section.content() }
-                VStack(alignment: .leading, spacing: 12) {
-                    heading(nativeUI("显示功能", "Visible features"))
-                    ForEach(NativeQuickPanelSection.allCases.filter { $0.canHide && coordinator.availableSections.contains($0) }) { item in
-                        Toggle(isOn: Binding(get: { !preferences.configuration.hiddenSections.contains(item) }, set: { preferences.setSection(item, visible: $0) })) {
-                            Label(item.title, systemImage: item.symbol).font(.system(size: 12))
-                        }.toggleStyle(.switch).controlSize(.small)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        heading(nativeUI("首页组件", "Home widgets")); Spacer()
-                        Button(nativeUI("重置布局", "Reset layout")) { preferences.resetLayout() }.font(.system(size: 10)).buttonStyle(.plain).foregroundStyle(.secondary)
-                    }
-                    Text(automatic ? nativeUI("自动填充 · 原有大小偏好已保留", "Auto fill · Preferred sizes are retained") : nativeUI("拖动首页组件调整顺序 · 至少保留一个", "Drag home widgets to reorder · Keep at least one"))
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
-                    ForEach(modules) { module in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Toggle(isOn: Binding(get: { visibleHome.contains(module.id) }, set: { coordinator.setHomeModule(module.id, visible: $0) })) {
-                                Label(module.title, systemImage: module.symbol).font(.system(size: 12))
-                            }.toggleStyle(.switch).controlSize(.small)
-                                .disabled(visibleHome.contains(module.id) && (visibleHome.count == 1 || module.canHide?() == false))
-                            if !automatic {
-                                HStack(spacing: 10) {
-                                    Picker(nativeUI("大小", "Size"), selection: Binding(get: { preferences.preferredSize(module.id) }, set: { preferences.setSize($0, for: module.id) })) {
-                                        ForEach(NativeQuickPanelPreferences.Size.allCases) { Text($0.title).tag($0) }
-                                    }.pickerStyle(.menu).labelsHidden().controlSize(.small)
-                                    Spacer()
-                                    Button { preferences.moveHome(module.id, offset: -1, available: modules.map(\.id)) } label: { Image(systemName: "chevron.up") }.disabled(modules.first?.id == module.id)
-                                        .accessibilityLabel(nativeUI("向前移动", "Move earlier") + module.title)
-                                    Button { preferences.moveHome(module.id, offset: 1, available: modules.map(\.id)) } label: { Image(systemName: "chevron.down") }.disabled(modules.last?.id == module.id)
-                                        .accessibilityLabel(nativeUI("向后移动", "Move later") + module.title)
-                                }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary).padding(.leading, 23)
-                            }
-                        }
-                    }
-                }
-                if let issue = preferences.issue { Text(issue).font(.system(size: 11)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
-            }.frame(maxWidth: 760, alignment: .leading).padding(.horizontal, 20).padding(.top, 5).padding(.bottom, 12).frame(maxWidth: .infinity)
-        }.scrollIndicators(.hidden)
-    }
-    private func heading(_ text: String) -> some View { Text(text).font(.system(size: 12, weight: .semibold)) }
 }

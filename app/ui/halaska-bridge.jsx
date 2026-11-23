@@ -39,7 +39,6 @@ import { BenchoAddMenu } from './bencho-add-menu.jsx';
 import { ResearchWikiHeader, ResearchWikiCards, ResearchWikiComposer } from './research-wiki-surfaces.jsx';
 import { APIProfileBar } from './api-profile-surfaces.jsx';
 import { ModelSettingsSurface } from './model-settings-surfaces.jsx';
-import { SettingsNavigation } from './settings-workspace-surfaces.jsx';
 import { ImportSurface } from './import-surfaces.jsx';
 import { RunHistoryToolbar, RunHistoryList, RunHistoryDetail } from './history-surfaces.jsx';
 import { ConversationReadingMode } from './conversation-reading-mode.jsx';
@@ -77,7 +76,7 @@ const components = new Map(Object.entries({
   MessageActionBar, ClaudeAuthSurface,
   CitationPeek, CitationSourceList,
   CanvasEditSurface, ContextWorkbenchSurface, PDFReaderToolbar, ComposerEditor, ComposerAction, ComposerDictationStatus, PdfReadModeControl, ModelPickerSurface, BenchoAddMenu, ResearchWikiHeader, ResearchWikiCards, ResearchWikiComposer,
-  PlanReviewSurface, ActivityCenterSurface, ActivityCenterBadge, ComparisonPicker, SourceComparisonSurface, APIProfileBar, ModelSettingsSurface, SettingsNavigation, ImportSurface,
+  PlanReviewSurface, ActivityCenterSurface, ActivityCenterBadge, ComparisonPicker, SourceComparisonSurface, APIProfileBar, ModelSettingsSurface, ImportSurface,
   ReviewSummary, ReviewHeading, ReviewModeControl, ReviewDiffTools, ReviewActions, ReviewEmptyState, ReviewChangeCard,
   RunHistoryToolbar, RunHistoryList, RunHistoryDetail, ConversationReadingMode, RunCheckpointCard, NoteDraftRecovery, ArtifactProvenanceSurface, DocumentToolbar, DocumentFiles, ProjectOutputs: ProjectOutputsPanel,
 }));

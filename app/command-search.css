@@ -1,6 +1,9 @@
 /* Search uses one combobox, grouped options and an always visible active row. */
 body[data-view] #searchDialog.command-search{width:min(620px,calc(100vw - 32px));max-height:min(660px,calc(100dvh - 48px));padding:0;border:1px solid var(--line-strong);border-radius:var(--radius-14);background:var(--panel);box-shadow:var(--shadow-float)}
-body[data-view] #searchDialog.command-search[open]{animation:command-search-enter var(--duration-160) var(--ease-decelerate)}
+body[data-view] #searchDialog.command-search[open]{animation:command-search-enter var(--motion-enter-long) var(--motion-emphasis)}
+/* Result rows rise in with a short stagger, as in the promo palette; they are rebuilt per query, so the fade starts part-way to avoid flicker while typing */
+#searchDialog.command-search .search-result{animation:command-search-row var(--motion-enter-short) var(--motion-emphasis) backwards}
+#searchDialog.command-search .search-result:nth-of-type(2){animation-delay:15ms}#searchDialog.command-search .search-result:nth-of-type(3){animation-delay:30ms}#searchDialog.command-search .search-result:nth-of-type(4){animation-delay:45ms}#searchDialog.command-search .search-result:nth-of-type(n+5){animation-delay:60ms}
 #searchDialog.command-search #searchForm{max-height:min(658px,calc(100dvh - 50px));overflow:hidden}
 #searchDialog.command-search .search-field-row{min-height:62px;padding-inline:var(--space-18);background:transparent}
 #searchDialog.command-search #globalSearchInput{height:60px;font-size:var(--font-size-15)}
@@ -38,8 +41,9 @@ body[data-view] #searchDialog.command-search[open]{animation:command-search-ente
 .command-search-empty-actions button{min-height:32px;padding:var(--space-6) var(--space-10);border:1px solid var(--line);border-radius:var(--radius-6);background:var(--panel);color:var(--text);font-family:inherit;font-size:var(--font-size-11);line-height:var(--leading-150);box-shadow:none;cursor:pointer}
 .command-search-empty-actions button:hover{background:var(--panel-hover);border-color:var(--line-strong)}
 #searchDialog.command-search :is(.search-close,.search-footer-close,.command-search-empty-actions button):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@keyframes command-search-enter{from{opacity:0;transform:translateY(-5px) scale(.992)}to{opacity:1;transform:none}}
+@keyframes command-search-enter{from{opacity:0;transform:translateY(calc(-1 * var(--motion-shift-md))) scale(.97)}to{opacity:1;transform:none}}
+@keyframes command-search-row{from{opacity:.35;transform:translateY(4px)}}
 @media(max-width:500px){body[data-view] #searchDialog.command-search{width:calc(100vw - 20px);max-height:calc(100dvh - 28px);border-radius:var(--radius-12)}#searchDialog.command-search #searchForm{max-height:calc(100dvh - 30px)}#searchDialog.command-search .search-field-row{padding-inline:var(--space-13);gap:var(--space-9)}#searchDialog.command-search #globalSearchInput{font-size:var(--font-size-13)}#searchDialog.command-search .search-meta{padding-inline:var(--space-14)}#searchDialog.command-search .search-results{max-height:none}#searchDialog.command-search .search-footer{padding-inline:var(--space-13);gap:var(--space-11)}}
-@media(prefers-reduced-motion:reduce){body[data-view] #searchDialog.command-search[open]{animation:none}#searchDialog.command-search .search-result,.command-search-enter{transition:none}}
-body.reduce-motion #searchDialog.command-search[open]{animation:none}body.reduce-motion #searchDialog.command-search :is(.search-result,.command-search-enter){transition:none}
+@media(prefers-reduced-motion:reduce){body[data-view] #searchDialog.command-search[open]{animation:none}#searchDialog.command-search .search-result,.command-search-enter{transition:none}#searchDialog.command-search .search-result{animation:none}}
+body.reduce-motion #searchDialog.command-search[open]{animation:none}body.reduce-motion #searchDialog.command-search :is(.search-result,.command-search-enter){transition:none}body.reduce-motion #searchDialog.command-search .search-result{animation:none}
 @media(forced-colors:active){#searchDialog.command-search .search-result[aria-selected=true]{outline:1px solid Highlight;outline-offset:-2px}.search-result[aria-selected=true] .command-search-enter{color:Highlight}}

@@ -54,6 +54,7 @@ final class Workbench { var hasSelection = false; func endTaskSelection() -> Boo
     var onClipboardPasteSessionEnded: (() -> Void)?; var onClipboardPasteSessionBegan: (() -> Void)?
     init(defaults: UserDefaults) { panelPreferences = NativeQuickPanelPreferences(defaults: defaults) }
     func screenForEntry(intent: NativeQuickScreenSelection.Intent = .anchored) -> FixtureScreen? { .init() }
+    func endIslandPeek() {}
     func screenID(_ screen: FixtureScreen) -> UInt32? { screen.id }
     func ensurePanel() {}; func focusCaptureInput() {}; func updateStatusItem() {}
     func installOutsideClickMonitors() {}; func finishHomeModuleNavigation(_ value: Bool) {}; func removeOutsideClickMonitors() {}

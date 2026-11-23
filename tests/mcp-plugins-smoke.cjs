@@ -92,8 +92,8 @@ async function finish() {
   const result = async () => { await until(() => evaluate(`window.smokeResult!==null`), 'call result', 20000); return evaluate(`window.smokeResult`); };
   await win.loadURL(origin);
   await until(() => evaluate(`typeof storageHydrated!=='undefined'&&storageHydrated&&!!window.AIBroPlugins?.default?.loaded()`), 'production hydration and plugin settings');
-  await evaluate(`(async()=>{WorkstationOnboarding?.close('skipped');await WorkspaceTour?.open();WorkspaceTour?.close('skipped');showView('settings','设置');SettingsWorkspace.init();SettingsWorkspace.reveal('plugins');window.confirm=()=>true;})()`);
-  await until(() => evaluate(`!!document.querySelector('#settings-panel-plugins #pluginSettingsCard')&&!document.querySelector('#settings-panel-plugins').hidden`), 'Settings → Plugins');
+  await evaluate(`(async()=>{WorkstationOnboarding?.close('skipped');await WorkspaceTour?.open();WorkspaceTour?.close('skipped');showView('settings');SettingsShell.open('plugins');window.confirm=()=>true;})()`);
+  await until(() => evaluate(`!!document.querySelector('.st-shell #pluginSettingsCard')`), 'Settings → Plugins');
 
   await check('a package runner command is refused before anything starts', async () => {
     await click('#pluginImportOpen');

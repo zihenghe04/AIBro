@@ -12,7 +12,17 @@
   const Roles = () => root.ModelRoles || (typeof require === 'function' ? require('./model-roles.js') : null);
   const Providers = () => root.Providers || (typeof require === 'function' ? require('./providers.js') : null);
   const english = () => root.WorkstationI18n?.getLanguage?.() === 'en' || /^en(?:-|$)/i.test(root.document?.documentElement?.lang || '');
-  const t = (zh, en) => english() ? en : zh;
+  const pairs = new Map();
+  const t = (zh, en) => { if (zh !== en) { pairs.set(zh, [zh, en]); pairs.set(en, [zh, en]); } return english() ? en : zh; };
+  // Static labels are built once; on a language switch swap the ones whose zh/en pair was registered.
+  function retranslate(rootNode) {
+    if (!rootNode) return;
+    const pick = text => { const pair = pairs.get(String(text || '').trim()); return pair ? pair[english() ? 1 : 0] : null; };
+    const walker = rootNode.ownerDocument.createTreeWalker(rootNode, 4);
+    const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node => { const next = pick(node.nodeValue); if (next != null) node.nodeValue = next; });
+    rootNode.querySelectorAll('[placeholder],[title],[aria-label]').forEach(item => ['placeholder', 'title', 'aria-label'].forEach(attr => { const next = item.hasAttribute(attr) ? pick(item.getAttribute(attr)) : null; if (next != null) item.setAttribute(attr, next); }));
+  }
   const POLL_MS = 700, POLL_MAX = 60;
 
   function create(options = {}) {
@@ -189,6 +199,7 @@
       const pane = state.embedding || buildEmbedding();
       const card = doc().getElementById('embeddingSettings');
       host.replaceChildren(pane.host);
+      retranslate(pane.host);
       if (!card) {
         pane.detailBox.append(el('p', { class: 'pv-note', id: 'rolesEmbeddingMissing', text: t('语义检索组件还没有加载，请稍后再打开这一页。', 'The semantic search component has not loaded yet; reopen this page in a moment.') }));
         paintEmbedding(); return;
@@ -197,6 +208,7 @@
       card.classList.add('mr-embed-card');
       structureCard(card, pane);
       pane.detailBox.append(card);
+      retranslate(card);
       const model = doc().getElementById('embeddingModel'); model?.setAttribute('list', 'embeddingModelList');
       refreshProviderOptions(); paintEmbedding();
     }
@@ -454,7 +466,7 @@
     }
     if (doc() && doc().addEventListener) {
       doc().addEventListener('aibro-embedding-change', () => { syncEmbeddingRole(); if (state.attached === 'embedding') paintEmbedding(); });
-      doc().addEventListener('workstation-language-change', () => { if (state.attached === 'embedding') { refreshProviderOptions(); paintEmbedding(); } else if (state.attached === 'transcription') paintSpeech(); });
+      doc().addEventListener('workstation-language-change', () => { if (state.attached === 'embedding') { retranslate(state.embedding?.host); refreshProviderOptions(); paintEmbedding(); } else if (state.attached === 'transcription') paintSpeech(); });
     }
     if (root.addEventListener) root.addEventListener('focus', () => { if (state.attached === 'transcription') void loadSpeech().then(paintSpeech); });
     return { mount, park, refresh, syncEmbeddingRole, loadSpeech, state: () => state };

@@ -90,7 +90,6 @@ function normalizeStateShape(candidate) {
 try { normalizeStateShape(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')); } catch (_) { normalizeStateShape({}); }
 let settingsHydrated = false;
 let apiSettingsDirty = false;
-let settingsReturnView = 'agent', settingsTouched = false;
 let apiProfiles = null;
 let apiCredentialReady = null;
 let apiCredentialState = null;
@@ -543,7 +542,7 @@ function showView(viewId, label) {
   $$('.view').forEach(view => view.classList.toggle('active-view', view.id === viewId));
   $$('button[data-view]').forEach(item => item.classList.toggle('active', item.dataset.view === viewId));
   if (label) { const contextLabel = $('#currentContext'); contextLabel.textContent = label; if (viewId !== 'project' && window.WorkstationI18n) WorkstationI18n.mark(contextLabel, label); else contextLabel.removeAttribute?.('data-i18n'); }
-  if (viewId === 'settings') { if (state.ui.lastView && state.ui.lastView !== 'settings') settingsReturnView = state.ui.lastView; settingsTouched = false; }
+  if (viewId === 'settings') window.SettingsShell?.show(window.SettingsShell.selected());
   state.ui.lastView = viewId;
   // View changes are cheap metadata updates. Persist them so reopening the
   // desktop app returns to the place the user was working.
@@ -4672,6 +4671,9 @@ async function requestAgentPlan(options, run) {
     } catch (error) {
       modelEvent('model/response', { status: error?.code === 'CANCELLED' ? 'cancelled' : 'failed', ms: Date.now() - t0, usage: lastUsage, code: error?.code || null, kind: error?.protocolKind || null });
       throw error;
+    } finally {
+      // Paced streaming text is presentation only; show all of it before the caller continues.
+      request.onDelta?.flush?.();
     }
   };
   const sentMemory = currentMemory?.();
@@ -4904,7 +4906,7 @@ async function sendMessage(options = {}) {
     // Throttle instead of debounce: a steady stream must still repaint while
     // tokens arrive, without rebuilding the transcript and sidebar each time.
     if (immediate) { clearTimeout(liveRenderTimer); render(); }
-    else if (!liveRenderTimer) liveRenderTimer = setTimeout(render, 80);
+    else if (!liveRenderTimer) liveRenderTimer = setTimeout(render, 32);
   };
   // Transport reception is presentation-only evidence. Keep it out of saved
   // runs, model input and sync snapshots, and reject callbacks from old owners.
@@ -5160,7 +5162,11 @@ async function sendMessage(options = {}) {
     run.timings.fullContextCharacters=JSON.stringify(buildRequestInput()).length;
     liveMessage.text = conversationFlow ? '' : attachmentsBefore.length ? '正在阅读附件并制定整理计划…' : '正在分析需求并制定计划…';
     stage(attachmentsBefore.length ? delivery.stageLabel : '整理对话上下文', 'done'); stage('生成结构化规划');
-    const onDelta = (cumulative, _delta, meta) => { rawOutput = cumulative; const visible = window.RunOutcomePresentation?.preservePartial(liveMessage, run, { rawOutput: cumulative, inspect: window.AgentTransport?.inspectProtocolOutput }) ?? (Core.partialMessage ? Core.partialMessage(cumulative) : cumulative); conversationFlow?.response(meta?.attemptId, visible); liveMessage.text = visible || (conversationFlow ? '' : '正在生成可执行计划…'); liveMessage.planPreview = true; refreshLive(false); };
+    const presentDelta = (visible, meta) => { conversationFlow?.response(meta?.attemptId, visible); liveMessage.text = visible || (conversationFlow ? '' : '正在生成可执行计划…'); liveMessage.planPreview = true; refreshLive(false); };
+    // Bursty deltas are revealed over a few frames; requestAgentPlan flushes it when each request settles.
+    const streamPacer = window.StreamPacer?.create(presentDelta);
+    const onDelta = (cumulative, _delta, meta) => { rawOutput = cumulative; const visible = window.RunOutcomePresentation?.preservePartial(liveMessage, run, { rawOutput: cumulative, inspect: window.AgentTransport?.inspectProtocolOutput }) ?? (Core.partialMessage ? Core.partialMessage(cumulative) : cumulative); if (streamPacer) streamPacer.push(visible, meta); else presentDelta(visible, meta); };
+    onDelta.flush = () => streamPacer?.flush();
     let responseOutput;
     run.timings.modelStartedAt=Date.now();
     try {
@@ -5361,7 +5367,7 @@ function openRunFailureRecovery(runId, destination) {
     if (panel) { panel.tabIndex = -1; panel.focus({ preventScroll: true }); }
   } else {
     showView('settings', '设置');
-    window.SettingsWorkspace?.reveal('models');
+    window.SettingsShell?.open('models');
     const requestedControl = document.getElementById(['openai-auth','claude-auth'].includes(run.modelConfig?.provider) ? 'provider' : 'apiBase');
     // The old address/key form is a hidden data carrier now; land on the visible provider list instead.
     const visible = node => node?.getClientRects().length ? node : null;
@@ -6394,7 +6400,7 @@ function mountConnectionsCard() {
   const hostElement = document.getElementById('connectionsCard');
   if (!hostElement || !window.ProvidersUI) return;
   if (connectionsUI) { connectionsUI.refresh(); return; }
-  connectionsUI = window.ProvidersUI.create({ roles: getModelRolesUI(), getSettings: () => state.settings, onChange: onProvidersChanged, confirm: message => window.confirm(message),
+  connectionsUI = window.ProvidersUI.create({ roles: getModelRolesUI(), hiddenTabs: () => ['embedding', 'transcription'], getSettings: () => state.settings, onChange: onProvidersChanged, confirm: message => window.confirm(message),
     saveKey: saveProviderKey, request: providerRequest, credentials: base => credentialsForBase(base),
     clientApi: { load: () => fetchLocalJSON('/__client/admin'), set: enabled => postLocalJSON('/__client/admin', { enabled }), rotate: () => postLocalJSON('/__client/admin/rotate', {}) },
     legacy: {
@@ -6409,7 +6415,6 @@ function mountConnectionsCard() {
     codexSnapshot, codexCheck: () => window.OpenAIAuth?.refresh?.(), codexTest: () => window.OpenAIAuth?.testAvailability?.(), codexUsage: () => fetchLocalJSON('/__auth/usage?mode=oauth'),
     onLoginChanged: () => window.OpenAIAuth?.modeChanged?.() });
   connectionsUI.mount(hostElement);
-  document.addEventListener('aibro-open-models-tab', event => connectionsUI?.showTab(String(event.detail || '')));
 }
 // 统一连接清单（state.settings.connections / modelRoles）：从旧设置补全，只补空缺，旧键不动。
 function migrateConnections(profiles) {
@@ -6691,7 +6696,6 @@ function renderSettings() {
   window.ModelSettingsUI?.mount();
   installAPIProfiles();
   syncQaFromLegacy(); mountConnectionsCard();
-  window.SettingsWorkspace?.restore();
 }
 function captureUsagePriceSettings() {
   const fields = ['usageCurrency', 'usageInputRate', 'usageOutputRate'].map(id => $('#' + id));
@@ -6699,6 +6703,57 @@ function captureUsagePriceSettings() {
   const values = fields.map(field => field.value);
   return { values, price: window.UsageCost.preferences({ currency: values[0], input: values[1], output: values[2] }) };
 }
+function adoptSettingsCard(id, host) {
+  const card = document.getElementById(id);
+  if (!card || !host) return false;
+  card.dataset.shellAdopted = '1';
+  host.append(card);
+  return true;
+}
+function releaseSettingsCard(id, homeId) {
+  const card = document.getElementById(id);
+  if (!card) return;
+  delete card.dataset.shellAdopted;
+  (document.getElementById(homeId) || document.getElementById('settings')).append(card);
+}
+// Immediate-save access for the unified Settings pages: each call persists on its own, so nothing depends on #saveSettings.
+window.AIBroSettingsAccess = Object.freeze({
+  permissions: () => ({ spaces: { 日常: state.settings.permissions?.日常 || 'auto', 课程: state.settings.permissions?.课程 || 'auto', 科研: state.settings.permissions?.科研 || 'approval' }, headless: headlessPermissionSetting() }),
+  async setPermission(space, value) {
+    if (!['日常', '课程', '科研'].includes(space) || !['auto', 'approval'].includes(value)) throw new Error('invalid');
+    state.settings.permissions[space] = value;
+    $$('[data-permission]').forEach(select => { if (select.dataset.permission === space) select.value = value; });
+    await saveDocumentDurably();
+    return value;
+  },
+  async setHeadless(value) {
+    if (!['follow', 'request', 'readonly'].includes(value)) throw new Error('invalid');
+    state.settings.headlessPermissionMode = headlessPermissionSetting(value);
+    if ($('#headlessPermission')) $('#headlessPermission').value = state.settings.headlessPermissionMode;
+    await saveDocumentDurably();
+    return state.settings.headlessPermissionMode;
+  },
+  usagePrice: () => window.UsageCost?.preferences(state.settings.usagePrice) || { currency: '', input: 0, output: 0 },
+  async setUsagePrice(value) {
+    if (!window.UsageCost?.preferences) throw new Error('unavailable');
+    const price = window.UsageCost.preferences(value);
+    state.settings.usagePrice = price;
+    saveApiSettings.usageDirty = false;
+    window.UsageCost.sync();
+    await saveDocumentDurably();
+    return price;
+  },
+  // The models and embedding panes owned by the connections module are mounted into the new pages through these.
+  mountRoles(host, which) { getModelRolesUI()?.mount(host, which); },
+  parkRoles() { getModelRolesUI()?.park(); },
+  mountConnections: host => adoptSettingsCard('connectionsCard', host),
+  releaseConnections: () => releaseSettingsCard('connectionsCard', 'settings'),
+  mountCloudSync: host => adoptSettingsCard('cloudSyncCard', host),
+  releaseCloudSync: () => releaseSettingsCard('cloudSyncCard', 'settings'),
+  mountConnectionSync: host => adoptSettingsCard('connectionSyncSettings', host),
+  releaseConnectionSync: () => releaseSettingsCard('connectionSyncSettings', 'settings'),
+  refreshConnections() { connectionsUI?.refresh(); },
+});
 function apiSettingsSaveLabel() { return window.WorkstationI18n?.t?.('保存权限与用量') || '保存权限与用量'; }
 async function saveApiSettings() {
   if (saveApiSettings.busy || clearApiCredentials.busy || unlockApiCredentials.busy || apiProfiles?.view().switching) return false;
@@ -7113,20 +7168,6 @@ function escapeStopsRun(event) {
 window.addEventListener('keydown', event => { if (!escapeStopsRun(event)) return; event.preventDefault(); stopCurrentRun(); });
 window.addEventListener('keydown', event => { if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || !(event.metaKey || event.ctrlKey)) return; if (event.key.toLowerCase() === 'k') { event.preventDefault(); openSearchDialog(); } else if (event.key.toLowerCase() === 'n') { event.preventDefault(); void navigateWorkspaceNewConversation(); } else if (event.key.toLowerCase() === 'f') { if (document.querySelector('dialog[open]')) return; event.preventDefault(); openWorkspaceFind(); } });
 $('#saveSettings').onclick = saveApiSettings;
-// 设置页右下角“完成”：把还没保存的改动（嵌入表单、页底的权限与用量）存下来再回到进来之前的页面；没有改动就直接回去。
-$('#settings')?.addEventListener('input', event => { if (!event.target.closest?.('#connectionsCard')) settingsTouched = true; });
-$('#settings')?.addEventListener('change', event => { if (!event.target.closest?.('#connectionsCard')) settingsTouched = true; });
-async function finishSettings() {
-  if (finishSettings.busy) return false;
-  finishSettings.busy = true;
-  try {
-    if (window.VectorKnowledge?.status?.()?.dirty && (await window.VectorKnowledge.save?.()) === false) { toast('嵌入配置还没有保存成功，请检查后再点“完成”。'); return false; }
-    if ((settingsTouched || apiSettingsDirty) && !(await saveApiSettings())) { toast('设置还没有保存成功，请查看页面里的提示。'); return false; }
-    settingsTouched = false;
-    showView(settingsReturnView || 'agent', viewLabels[settingsReturnView || 'agent']);
-    return true;
-  } finally { finishSettings.busy = false; }
-}
 $('#testApi').onclick = testConnection;
 function populateContextProjects() { const workspace = $('#contextWorkspace').value; const projects = state.projects.filter(project => !project.archived && (workspace === 'auto' || workspaceName(project.workspace) === workspace)); $('#contextProject').innerHTML = '<option value="">自动匹配</option>' + projects.map(project => `<option value="${project.id}">${esc(project.name)} · ${esc(workspaceName(project.workspace))}</option>`).join(''); }
 function openContextDialog() { const conversation = currentConversation(); $('#contextWorkspace').value = conversation.workspace || 'auto'; populateContextProjects(); $('#contextProject').value = conversation.projectId || ''; $('#contextDialog').showModal(); }
@@ -7269,13 +7310,13 @@ window.WorkstationTrash?.init({ getState: () => state, isBusy: () => !!purgeTras
 initConnections();
 renderAll(); renderSettings(); settingsHydrated = true; showView('agent', '对话');
 initializingUI = false;
-window.WorkstationOnboarding?.init({ getState: () => state, save, toast, ready: () => storageHydrated && !serverConflict, showView: view => { showView(view, viewLabels[view]); if (view === 'settings') window.SettingsWorkspace?.reveal('models'); }, autoStart: false });
+window.WorkstationOnboarding?.init({ getState: () => state, save, toast, ready: () => storageHydrated && !serverConflict, showView: view => { showView(view, viewLabels[view]); if (view === 'settings') window.SettingsShell?.open('models'); }, autoStart: false });
 hydratePersistentState();
 
 window.OpenAIAuth?.init({ getState: () => state, save, toast, codexMode: () => window.Connections ? window.Connections.codexLogin(state.settings) : 'private', setCodexMode: mode => window.Connections?.setCodexLogin(state.settings, mode), claudeEnabled: () => window.Connections ? window.Connections.claudeCliEnabled(state.settings) : true, onAccount: () => { if (typeof connectionsUI !== 'undefined') connectionsUI?.reloadCodex?.(); }, onChange: () => { OpenAIAuth.render(); if (typeof syncQaFromLegacy === 'function') syncQaFromLegacy(); if (typeof connectionsUI !== 'undefined') connectionsUI?.refresh(); syncComposerModel(); window.ContextWorkbench?.refresh(); } });
 window.ClaudeAuth?.init({ getState: () => state, save: saveDocumentDurably, toast, onChange: () => { syncComposerModel(); window.ContextWorkbench?.refresh(); } });
 window.UIKit?.autoEnhance();
-window.ConversationModels?.init({ getState: () => state, getConversation: currentConversation, getDefaults: defaultModelConfiguration, getResolvedConfig: resolveRunModel, getApiModels: () => runtimeApiModels(), getActiveBase: () => captureApiConnection().base, canSave: () => !sendMessage.preflight && !sendMessage.preparingWiki && !window.ProjectAutomation?.isStarting?.() && !window.ResearchQueue?.isStarting?.(), save: async () => { await saveDocumentDurably(); window.ContextWorkbench?.refresh(); }, toast, openSettings: () => { showView('settings', '设置'); window.SettingsWorkspace?.reveal('models'); } });
+window.ConversationModels?.init({ getState: () => state, getConversation: currentConversation, getDefaults: defaultModelConfiguration, getResolvedConfig: resolveRunModel, getApiModels: () => runtimeApiModels(), getActiveBase: () => captureApiConnection().base, canSave: () => !sendMessage.preflight && !sendMessage.preparingWiki && !window.ProjectAutomation?.isStarting?.() && !window.ResearchQueue?.isStarting?.(), save: async () => { await saveDocumentDurably(); window.ContextWorkbench?.refresh(); }, toast, openSettings: () => { showView('settings', '设置'); window.SettingsShell?.open('models'); } });
 let documentChatController = null, documentChatNavigating = false, documentChatRoute = null, documentChatQuiet = false;
 window.ReadingPane?.init({
   getItem: previewItem,
@@ -8026,7 +8067,6 @@ window.PdfTextIndex?.init({getState:()=>state,persist:saveDocumentDurably,
   onChanged:()=>{window.VectorKnowledge?.refresh();}});
 window.addEventListener('pagehide',()=>window.PdfTextIndex?.stop(),{once:true});
 // Group the existing owned cards only after their controllers have created them.
-window.SettingsWorkspace?.init({ getState: () => state, toast, finish: () => finishSettings(), save: () => { if (storageHydrated && !serverConflict) save(); } });
 window.ConnectionSyncSettings?.init({ getProtocol: () => localStorage.getItem('workstation-api-protocol') || '' });
 window.ImportWorkspace?.init({ getState: () => state, openSource: openImport, retrySave: () => importMaterials.retryPersistence?.(), pending: () => importMaterials.pending?.(), isBusy: () => importMaterials.busy, toast });
 

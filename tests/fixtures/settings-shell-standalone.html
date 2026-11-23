@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>settings shell fixture</title>
+<link rel="stylesheet" href="../../app/tokens.css"><link rel="stylesheet" href="../../app/settings-shell.css">
+<style>html,body{margin:0}body{background:var(--bg);color:var(--text);font:13px/1.45 var(--font-sans)}main{padding:24px}
+#settings{display:block}#settings>.page-heading{display:flex;justify-content:space-between;align-items:center}
+button.secondary{font:inherit;color:var(--text);background:var(--panel-raised);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}</style>
+</head><body>
+<main><section class="view settings-view" id="settings">
+<div class="page-heading"><div><h1>设置</h1></div></div>
+<article class="card" id="legacyCard">classic settings content</article>
+</section></main>
+<script src="../../app/icons.js"></script><script src="../../app/settings-shell.js"></script>
+<script>
+// Demo-only content for the general category; the real app keeps it empty in batch 2.
+const S = window.SettingsShell;
+S.MIGRATED.add('general');
+S.pages.general = (ui) => [
+  ui.group('外观', [
+    ui.row({ title: '主题', description: '跟随系统，或固定为浅色、深色。', control: ui.segmented({ label: '主题', value: 'auto', options: [['auto','自动'],['light','浅色'],['dark','深色']] }) }),
+    ui.row({ title: '界面语言', description: '只切换界面语言，项目名称、笔记和对话原文保持不变。', control: ui.segmented({ label: '语言', value: 'zh', options: [['zh','中文'],['en','English']] }) }),
+  ]),
+  ui.group('启动', [
+    ui.row({ title: '登录时自动启动', description: '开机后在后台运行，随时可以唤起灵动岛。', control: ui.toggle({ label: '登录时自动启动', checked: true }) }),
+    ui.row({ title: '在菜单栏显示图标', description: '关闭后仍可从 Dock 打开。', control: ui.toggle({ label: '在菜单栏显示图标', checked: false }) }),
+  ]),
+  ui.group('快捷键与状态', [
+    ui.row({ title: '听写快捷键', description: '按住说话，松开后写入当前输入框。', control: ui.shortcut({ label: '听写快捷键', keys: ['⌃', 'Space'] }) }),
+    ui.row({ title: '录制中的快捷键', control: ui.shortcut({ label: '录制', state: 'recording' }) }),
+    ui.row({ title: '冲突的快捷键', control: ui.shortcut({ label: '冲突', state: 'error', errorText: '与系统快捷键冲突' }) }),
+    ui.row({ title: '辅助功能', description: '用于把文字写入其他应用。', control: ui.badge('已授权', 'ok') }),
+    ui.row({ title: '麦克风', control: ui.badge('未授权', 'bad') }),
+    ui.row({ title: '通知', control: [ui.badge('待确认', 'pending'), ui.badge('未知')] }),
+  ], '权限状态仅供查看，授权请在系统设置中完成。'),
+];
+</script></body></html>

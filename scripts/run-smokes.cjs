@@ -6,7 +6,7 @@ const fs = require('node:fs'), path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 // Core flows: chat run/progress, conversation window, settings (models/providers/profiles), composer, schedule, plugins, tours, import, reading.
 const CORE = [
-  'agent-progress', 'conversation-window', 'settings-workspace', 'model-settings', 'api-profiles',
+  'agent-progress', 'conversation-window', 'model-settings', 'api-profiles',
   'composer-kit', 'scheduler', 'project-tasks-schedule', 'mcp-plugins', 'workspace-tour', 'import-workspace', 'reading-pane',
 ].map(name => `tests/${name}-smoke.cjs`);
 const mode = process.argv[2] || 'core';

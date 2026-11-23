@@ -55,6 +55,10 @@
   --radius-chip:var(--radius-6); --radius-control:var(--radius-8); --radius-card:var(--radius-12); --radius-panel:var(--radius-16);
   /* motion roles (hover/press 140ms, popovers 180ms, panels 240ms are the three most used durations) */
   --motion-hover:var(--duration-140); --motion-popover:var(--duration-180); --motion-panel:var(--duration-240);
+  /* entrance motion, matched to the promo site: emphasis curve for fades/slides, overshoot for small floating bars */
+  --motion-emphasis:var(--ease-out-quint); --motion-overshoot:cubic-bezier(.2,1.45,.35,1);
+  --motion-enter-short:var(--duration-240); --motion-enter-long:var(--duration-380);
+  --motion-shift-sm:6px; --motion-shift-md:10px;
 }
 
 /* =====================================================================

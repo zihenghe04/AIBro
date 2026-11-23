@@ -35,7 +35,7 @@ struct NativeQuickIslandStatus: Equatable {
 }
 
 struct NativeQuickIslandInputs: Equatable {
-    struct Voice: Equatable { var title: String; var symbol: String; var isProcessing: Bool }
+    struct Voice: Equatable { var title: String; var symbol: String; var isProcessing: Bool; var detail: String? = nil }
     struct Run: Equatable {
         var id: String
         var title: String
@@ -80,7 +80,7 @@ extension NativeQuickIslandStatus {
 
     static func derive(_ input: NativeQuickIslandInputs) -> Self {
         if let voice = input.voice {
-            return .init(kind: .voice, symbol: voice.symbol, title: clipped(voice.title, 18),
+            return .init(kind: .voice, symbol: voice.symbol, title: clipped(voice.title, 18), detail: voice.detail.map { clipped($0, 24) },
                          tint: .accent, busy: voice.isProcessing)
         }
         let awaiting = input.runs.filter { awaitingStatuses.contains($0.status) }

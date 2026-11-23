@@ -53,7 +53,8 @@
   input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-haspopup','listbox');input.setAttribute('aria-expanded',String(dialog.open));input.setAttribute('aria-controls',box.id);box.setAttribute('role','listbox');box.setAttribute('aria-label',text('命令与搜索结果','Commands and search results'));dialog.classList.add('command-search');meta.setAttribute('role','status');meta.setAttribute('aria-live','polite');
   const footer=dialog.querySelector('.search-footer');if(footer){const close=footer.querySelector('button');const hint=(key,label)=>{const n=make('span'),kbd=make('kbd','',key);n.append(kbd,doc.createTextNode(label));return n;};footer.replaceChildren(hint('↑ ↓',text('选择','Navigate')),hint('↵',text('打开所选','Open selected')),hint('Esc',text('关闭','Close')));if(close)footer.append(close);}
   const hiddenSubmit=dialog.querySelector('button.sr-only[type=submit]');if(hiddenSubmit)hiddenSubmit.textContent=text('打开所选结果','Open selected result');
-  function ensureVisible(node){if(!node)return;const a=node.getBoundingClientRect(),b=box.getBoundingClientRect();if(a.top<b.top+4)box.scrollTop-=b.top+4-a.top;else if(a.bottom>b.bottom-4)box.scrollTop+=a.bottom-b.bottom+4;}
+  // Measured in layout pixels, so the dialog's opening scale does not shorten the scroll.
+  function ensureVisible(node){if(!node)return;const a=node.getBoundingClientRect(),b=box.getBoundingClientRect(),height=box.offsetHeight||b.height,k=height&&b.height?b.height/height:1,top=(a.top-b.top)/k,bottom=(a.bottom-b.top)/k;if(top<4)box.scrollTop-=4-top;else if(bottom>height-4)box.scrollTop+=bottom-height+4;}
   function select(index,{scroll=true}={}){
    if(active>=0&&options[active]){options[active].node.setAttribute('aria-selected','false');options[active].node.classList.remove('is-active');}
    active=index>=0&&index<options.length?index:-1;const current=options[active];

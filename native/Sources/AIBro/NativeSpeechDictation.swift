@@ -29,10 +29,15 @@ enum NativeDictationPreferences {
     static let speechLevel = 0.02
 }
 
-/// Both modes share audio/configuration, but only the host of quickConversation
-/// may submit its result. This controller never creates or sends a message.
+/// All modes share audio/configuration, but only the host of quickConversation
+/// may submit its result; inject hands text to the caret of another app.
+/// This controller never creates or sends a message.
 @MainActor final class NativeSpeechDictation: ObservableObject {
-    enum Mode: String, Codable, Sendable { case composer, quickConversation }
+    enum Mode: String, Codable, Sendable {
+        case composer, quickConversation, inject
+        /// Global (non-composer) modes never belong to an existing conversation.
+        var global: Bool { self != .composer }
+    }
     enum Phase: String { case idle, authorizing, recording, recorded, transcribing, error }
     struct Lease: Equatable, Sendable {
         let nonce: String
@@ -41,7 +46,7 @@ enum NativeDictationPreferences {
         let mode: Mode
         var valid: Bool {
             UUID(uuidString:nonce) != nil && revision>=0 && revision<=9_007_199_254_740_991 &&
-            (mode == .quickConversation ? conversationId == nil : conversationId.map{!$0.isEmpty && $0.utf8.count<=512 && !$0.unicodeScalars.contains(where:CharacterSet.controlCharacters.contains)} == true)
+            (mode.global ? conversationId == nil : conversationId.map{!$0.isEmpty && $0.utf8.count<=512 && !$0.unicodeScalars.contains(where:CharacterSet.controlCharacters.contains)} == true)
         }
         init(nonce:String,conversationId:String?,revision:Int,mode:Mode = .composer) {
             self.nonce=nonce;self.conversationId=conversationId;self.revision=revision;self.mode=mode
@@ -59,7 +64,7 @@ enum NativeDictationPreferences {
         var payload:[String:Any] {
             var result:[String:Any]=["nonce":nonce,"revision":revision]
             if let conversationId {result["conversationId"]=conversationId}
-            if mode == .quickConversation {result["mode"]=mode.rawValue}
+            if mode.global {result["mode"]=mode.rawValue}
             return result
         }
     }
@@ -126,7 +131,7 @@ enum NativeDictationPreferences {
         return result
     }
     var composerStatus:[String:Any] {
-        guard lease?.mode == .quickConversation else{return status}
+        guard lease?.mode.global == true else{return status}
         return ["status":"busy","phase":"busy","available":false,"configured":settings.configured,"retryAvailable":false]
     }
     var canOpenComposerSettings:Bool {lease == nil}

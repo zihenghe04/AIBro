@@ -61,6 +61,7 @@
     const button = (label, className, handler) => { const result = node('button', className, label); result.type = 'button'; result.addEventListener('click', handler); return result; };
     const hostBusy = () => !!hooks.isBusy?.();
     const report = (value, kind = 'error') => { if (message) message.textContent = value; feedbackKind = value ? kind : ''; };
+    const tr = (text) => environment.WorkstationI18n?.t ? environment.WorkstationI18n.t(text) : text;
     function paint() {
       if (!card) return;
       const view = describe(status), blocked = busy || sshRequestBusy || sshMaintenancePending || hostBusy();
@@ -85,10 +86,10 @@
         if (overviewIsland) overviewIsland.update(props); else overviewIsland = environment.HalaskaUI.mount(overview, 'CloudSyncOverview', props);
       }
       if (formIntro) formIntro.textContent = view.needsSignIn
-        ? '保留了原服务器与账号的绑定，但当前没有可用的登录会话。请输入原云账号的用户名、密码和本机设备名称来恢复同步。'
-        : view.bound ? '当前工作区沿用原服务器与账号。重新验证用户名和密码后可更新此连接的设备名称。' : '首次连接：填写同步服务器提供的账号。另一台设备使用相同服务器和账号即可连接。';
-      connectButton.textContent = view.needsSignIn ? '登录并恢复同步' : view.bound ? '验证并更新连接' : '连接并合并';
-      if (mergeText) mergeText.textContent = view.bound ? '我确认使用原云账号继续同步本机与云端内容；发生冲突时由我选择保留的版本。' : '我确认将当前本地知识与云端合并。资料会上传到上述服务器；发生冲突时由我选择保留的版本。';
+        ? tr('保留了原服务器与账号的绑定，但当前没有可用的登录会话。请输入原云账号的用户名、密码和本机设备名称来恢复同步。')
+        : view.bound ? tr('当前工作区沿用原服务器与账号。重新验证用户名和密码后可更新此连接的设备名称。') : tr('首次连接：填写同步服务器提供的账号。另一台设备使用相同服务器和账号即可连接。');
+      connectButton.textContent = view.needsSignIn ? tr('登录并恢复同步') : view.bound ? tr('验证并更新连接') : tr('连接并合并');
+      if (mergeText) mergeText.textContent = view.bound ? tr('我确认使用原云账号继续同步本机与云端内容；发生冲突时由我选择保留的版本。') : tr('我确认将当前本地知识与云端合并。资料会上传到上述服务器；发生冲突时由我选择保留的版本。');
       if (serverHint) {
         let loopback = false, matchingSSH = false;
         try { const url = new URL(status.target?.serverUrl || ''); loopback = ['localhost','127.0.0.1','[::1]'].includes(url.hostname); matchingSSH = loopback && sshConfig && Number(url.port) === Number(sshConfig.localPort); } catch (_) {}
@@ -374,7 +375,7 @@
     }
     async function openSSHConnection(target, opener) {
       if (busy || sshRequestBusy || sshMaintenancePending || hostBusy()) return;
-      environment.SettingsWorkspace?.reveal('sync');
+      environment.SettingsShell?.open('sync');
       mountDialog('连接 SSH 服务器', 'ssh-connect', opener);
       const epoch = dialogEpoch, current = () => !destroyed && dialog?.open && dialogKind === 'ssh-connect' && dialogEpoch === epoch;
       let draft, islandHost;
@@ -656,7 +657,9 @@
       }
       return api;
     }
-    function destroy() { destroyed = true; generation++; dialogEpoch++; conflictIsland?.unmount(); conflictIsland = null; sshIsland?.unmount(); sshIsland = null; clearTimeout(timer); clearTimeout(sshTimer); observer?.disconnect(); overviewIsland?.unmount(); accountIsland?.unmount(); accountIsland = null; if (password) password.value = ''; dialog?.close(); }
+    const onLanguage = () => { if (!destroyed) { try { paint(); } catch (_) {} } };
+    environment.document?.addEventListener?.('workstation-language-change', onLanguage);
+    function destroy() { environment.document?.removeEventListener?.('workstation-language-change', onLanguage); destroyed = true; generation++; dialogEpoch++; conflictIsland?.unmount(); conflictIsland = null; sshIsland?.unmount(); sshIsland = null; clearTimeout(timer); clearTimeout(sshTimer); observer?.disconnect(); overviewIsland?.unmount(); accountIsland?.unmount(); accountIsland = null; if (password) password.value = ''; dialog?.close(); }
     const api = { init, refresh, reconcileAppliedRevision, connect, sync, devices, conflicts, openSSHConnection, destroy, getStatus: () => ({ ...status }) };
     return api;
   }

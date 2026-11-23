@@ -214,7 +214,7 @@
       if(node!==cursor)previous.insertBefore(node,cursor);
       cursor=node.nextSibling;
     }
-    for(const node of entering)if(node.isConnected&&previous.contains(node))root.ActivityMotion?.animate(node,[{opacity:0,transform:'translateY(4px)'},{opacity:1,transform:'none'}],{duration:280,easing:'cubic-bezier(.2,.1,.15,1)'});
+    for(const node of entering)if(node.isConnected&&previous.contains(node))root.ActivityMotion?.animate(node,[{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'none'}],{duration:340,easing:'cubic-bezier(.22,1,.36,1)'});
     freshen(appended);
     if(heldView){root.ConversationProcess?.select?.(previous,heldView);root.HalaskaConversation?.setProcessView?.(previous,heldView);}
     root.ConversationProcess?.filterTools?.(previous, { readingNodes: [focused, ...(selectedText ? [selected.anchor, selected.focus] : [])] });

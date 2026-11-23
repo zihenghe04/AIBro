@@ -14,6 +14,7 @@ import Combine
     var openSpeechSettings:(() async -> Bool)?
     enum QuickEntrySettingsRequest { case state, enabled(Bool), mode(String), open }
     var quickEntrySettings:((QuickEntrySettingsRequest)->[String:Any])?
+    var nativeSettings:((NativeSettingsRegistry.Request)->[String:Any])?
     /// Settings → Models → Speech: public state of the native transcription schemes plus a few actions. Keys never cross this bridge.
     /// A cloud scheme typed in Settings. `key` is write-only: it goes straight into the encrypted native store and is never read back to the web.
     struct SpeechCloudInput { var id:String?; var name:String; var configuration:NativeSpeechConfiguration; var key:String }
@@ -57,13 +58,17 @@ import Combine
     let prefsFile:URL
     var preferences:[String:String]
     static let preferenceKeys=Set(["workstation-api-base","workstation-api-model","workstation-api-protocol","workstation-api-protocol-learned","workstation-openai-model","workstation-provider","aibro-embedding-settings-v1","ai-bro-language","workstation-ui"])
-    init(data:URL,production:Bool) {
+    init(data:URL,production:Bool,dev:Bool=false) {
         connectionSession=NativeConnectionSession(dataDirectory:data)
         vectors=NativeVectorStore(folder:data)
         prefsFile=data.appendingPathComponent("native-preferences.json")
         preferences=(try? Data(contentsOf:prefsFile)).flatMap{try? JSONDecoder().decode([String:String].self,from:$0)} ?? [:]
-        let old=production ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ai-workstation-studio"):nil
-        credentials=NativeCredentials(folder:data.appendingPathComponent("native-credentials"),legacy:old,service:production ? "app.ai-workstation.studio.native-credentials":"app.aibro.preview-credentials")
+        if dev,preferences["ai-bro-language"]==nil,
+           let language=NativeDevPreferenceImport.language(releasePreferences:FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ai-workstation/native-preferences.json")) {
+            preferences["ai-bro-language"]=language
+        }
+        let old=production && !dev ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ai-workstation-studio"):nil
+        credentials=NativeCredentials(folder:data.appendingPathComponent("native-credentials"),legacy:old,service:production ? (dev ? "app.ai-workstation.studio.dev.native-credentials":"app.ai-workstation.studio.native-credentials"):"app.aibro.preview-credentials")
         super.init()
         NativeL10n.shared.setLanguage(preferences["ai-bro-language"] ?? "zh-CN")
     }
@@ -204,6 +209,16 @@ import Combine
                 }
                 guard action == "state" || (workspace.ready && workspace.selection == "settings") else {replyHandler(["status":"error","reason":"settings_not_visible"],nil);return}
                 replyHandler(quickEntrySettings?(request) ?? ["status":"error","reason":"unavailable"],nil);return
+            }
+            if command == "native-settings" {
+                guard let workspace, message.webView === workspace.web else { replyHandler(NativeSettingsRegistry.reply(.invalidRequest),nil);return }
+                switch NativeSettingsRegistry.parse(body) {
+                case .failure(let rejection): replyHandler(NativeSettingsRegistry.reply(rejection),nil)
+                case .success(let request):
+                    if let rejection=NativeSettingsRegistry.visibility(for:request,ready:workspace.ready,selection:workspace.selection) {replyHandler(NativeSettingsRegistry.reply(rejection),nil);return}
+                    replyHandler(nativeSettings?(request) ?? ["status":"error","reason":"unavailable"],nil)
+                }
+                return
             }
             if ["agenda-query", "agenda-read", "agenda-mutation", "agenda-mutation-status"].contains(command) {
                 guard let workspace, message.webView === workspace.web,
