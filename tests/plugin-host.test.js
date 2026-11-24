@@ -115,3 +115,34 @@ test('the scheduler refuses a plugin tool outside the run toolset before approva
   await Scheduler.create({run:run2,execute:async request=>{seen.push(request.type);return {};}}).batch([{type:'browser_snapshot'}]);
   assert.deepEqual(seen,['browser_snapshot']);
 });
+
+test('triggers: built-in only, handlers required, switched per device',async()=>{
+  const trigger={id:'daily-brief',name:{zh:'每日简报'},schedule:'daily',at:'07:30',handler:'brief'};
+  assert.deepEqual(Plugins.validate(manifest({triggers:[trigger]})).triggers,[{...trigger,enabledByDefault:true}]);
+  assert.deepEqual(Plugins.validate(manifest()).triggers,[]);
+  for(const [extra,pattern] of [
+    [{triggers:[{...trigger,id:'X'}]},/trigger id/],[{triggers:[{...trigger,schedule:'hourly'}]},/schedule/],
+    [{triggers:[{...trigger,at:'7:30'}]},/HH:MM/],[{triggers:[{...trigger,schedule:'weekly'}]},/weekday/],
+    [{triggers:[trigger,trigger]},/duplicate trigger/],[{kind:'mcp',tools:['demo__x'],triggers:[trigger]},/only built-in/],
+    [{triggers:[{...trigger,handler:'a.b'}]},/handler/],
+  ])assert.throws(()=>Plugins.validate(manifest(extra)),pattern,JSON.stringify(extra));
+  const registry=Tools.build(),saved=[],h=Plugins.create({registry,transport:{load:async()=>({builtin:{},mcp:[]}),setTrigger:async(id,tid,change)=>{saved.push([id,tid,change]);return {builtin:{[id]:{enabled:true,triggers:{[tid]:{enabled:true,...change}}}},mcp:[]};}}});
+  assert.throws(()=>h.install({manifest:manifest({triggers:[trigger]}),specs:[demoSpec]}),/does not provide: brief/);
+  assert.equal(registry.has('demo_ping'),false);
+  const seen=[];
+  h.install({manifest:manifest({triggers:[trigger]}),specs:[demoSpec],handlers:{brief:async ctx=>{seen.push(ctx);return {ok:true,at:ctx.dueAt};}}});
+  assert.deepEqual(h.triggers(),[{plugin:'demo',id:'daily-brief',key:'demo.daily-brief',name:{zh:'每日简报'},schedule:'daily',at:'07:30',enabled:true}]);
+  assert.deepEqual(await h.runTrigger('demo.daily-brief',{dueAt:1}),{ok:true,at:1});
+  assert.equal(seen[0].plugin,'demo');assert.equal(seen[0].trigger,'daily-brief');
+  await assert.rejects(h.runTrigger('demo.nope'),/Unknown trigger/);
+  assert.equal(await h.setTrigger('demo.daily-brief',false),false);
+  assert.deepEqual(saved,[['demo','daily-brief',{enabled:false}]]);
+  await assert.rejects(h.runTrigger('demo.daily-brief'),/is off/);
+  await h.setTrigger('demo.daily-brief',true);
+  assert.equal(await h.setTriggerTime('demo.daily-brief','08:30'),'08:30');
+  assert.equal(h.triggers()[0].at,'08:30');
+  await assert.rejects(h.setTriggerTime('demo.daily-brief','8:3'),/HH:MM/);
+  // A disabled plugin's triggers are listed as off.
+  await h.setEnabled('demo',false);
+  assert.equal(h.triggers()[0].enabled,false);
+});

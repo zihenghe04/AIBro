@@ -41,6 +41,7 @@ enum NativeSettingsRegistry {
         Item(id: "agenda.briefingMinute", kind: .number(0...59), writable: true),
         Item(id: "agenda.showTitles", kind: .bool, writable: true),
         Item(id: "agenda.test", kind: .action, writable: true),
+        Item(id: "notify.sounds", kind: .bool, writable: true),
         Item(id: "notify.external", kind: .bool, writable: true),
         Item(id: "notify.island", kind: .bool, writable: true),
         Item(id: "notify.history.clear", kind: .action, writable: true),

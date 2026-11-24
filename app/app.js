@@ -8101,6 +8101,7 @@ window.LocalFileEdits?.tray(currentConversation());
 window.TerminalTools?.init({getState:()=>state,save,render:renderConversation,toast});
 window.BrowserTools?.init({getState:()=>state,getCurrentConversation:currentConversation,save,render:renderAll,toast});
 window.AIBroBrowserPlugin?.init({render:renderAll,toast});
+window.AIBroTodayPlugin?.init({getState:()=>state,ready:()=>storageHydrated&&!serverConflict});
 window.AIBroMcpPlugins?.init({render:renderAll,toast});
 // Device-local plugin settings (enable/disable, external MCP plugins); defaults until loaded.
 window.AIBroPlugins?.default?.onChange(() => { try { window.AgentWorkspace?.sync?.(); } catch (_) {} });

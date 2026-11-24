@@ -329,7 +329,7 @@ import Combine
                 };return
             }
             if command=="navigate-workspace",let destination=body["destination"] as? [String:Any],let view=destination["view"] as? String,let workspace {
-                guard ["overview","conversations","agenda","daily","courses","research","wiki","captures","dashboard","trash","agent"].contains(view),(destination["section"] == nil || destination["section"] is String),(destination["requestId"] == nil || destination["requestId"] is String) else {replyHandler(nil,"不支持此工作区位置");return}
+                guard ["today","overview","conversations","agenda","daily","courses","research","wiki","captures","dashboard","trash","agent"].contains(view),(destination["section"] == nil || destination["section"] is String),(destination["requestId"] == nil || destination["requestId"] is String) else {replyHandler(nil,"不支持此工作区位置");return}
                 Task { @MainActor in replyHandler(await workspace.navigateWorkspace(view,section:destination["section"] as? String,requestId:destination["requestId"] as? String),nil) };return
             }
             if command=="browser",let request=body["request"] as? [String:Any],let workspace {

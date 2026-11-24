@@ -206,4 +206,54 @@ class Reminders(Base):
   self.store.directory.joinpath('kernel').mkdir(exist_ok=True)
   runs=KernelRuns(self.tmp.name,clock=self.clock);runs.extra_pending=lambda:{'reminders':self.sch.notifications()};self.assertEqual(runs.pending()['reminders'],[])
 
+class Triggers(Base):
+ """Plugin triggers: the window reports them, the scheduler keeps time, the window claims and finishes."""
+ def setUp(self):
+  super().setUp()
+  # Friday 2026-10-30 10:00 Asia/Shanghai.
+  self.clock.t=datetime(2026,10,30,2,0,tzinfo=timezone.utc).timestamp()
+  self.sch=Scheduler(self.store,'inst-a',clock=self.clock)
+ def sync(self,enabled=True,**kw):
+  entry={'key':'today.daily-brief','name':{'zh':'每日简报'},'schedule':'daily','at':'07:30','enabled':enabled,**kw}
+  return self.sch.sync_triggers([entry],'Asia/Shanghai')
+ def test_sync_plans_next_wall_time_and_stays_out_of_the_task_list(self):
+  [t]=self.sync()
+  self.assertEqual(t['id'],'trg_today.daily-brief');self.assertEqual(t['name'],'每日简报')
+  self.assertEqual(t['dueAt'],datetime(2026,10,30,23,30,tzinfo=timezone.utc).timestamp())  # Saturday 07:30 local
+  self.assertEqual(self.sch.list()['tasks'],[]);self.assertEqual(len(self.sch.list()['triggers']),1)
+  # Same plan again changes nothing; a new time plans afresh.
+  v=self.task(t['id'])['version'];self.sync();self.assertEqual(self.task(t['id'])['version'],v)
+  [w]=self.sync(schedule='weekly',weekday=2,at='08:00')
+  self.assertEqual(w['dueAt'],datetime(2026,11,2,0,0,tzinfo=timezone.utc).timestamp())  # Monday 08:00 local
+  with self.assertRaises(ValueError):self.sch.upsert({'id':t['id'],'version':w['version'],'kind':'trigger','name':'x','dueAt':iso(self.clock.t)})
+  with self.assertRaises(ValueError):self.sch.change(t['id'],'delete')
+  for bad in [{'key':'Today.x'},{'at':'7:30'},{'schedule':'hourly'},{'schedule':'weekly'}]:
+   with self.assertRaises(ValueError):self.sync(**bad)
+ def test_due_trigger_leaves_one_pending_row_claimed_once_and_finished_with_token(self):
+  [t]=self.sync();self.clock.t=t['dueAt']+30;self.sch.tick()
+  [row]=self.rows(t['id']);self.assertEqual((row['status'],row['trigger'],row['catchUp']),('pending','today.daily-brief',False))
+  self.assertEqual(self.task(t['id'])['dueAt'],t['dueAt']+86400)
+  claim=self.sch.claim_trigger();self.assertEqual(claim['execution']['id'],row['id']);self.assertEqual(self.sch.claim_trigger(),{'execution':None})
+  self.assertNotIn('claimToken',self.sch.list()['executions'][0])
+  with self.assertRaises(ValueError):self.sch.finish_trigger(row['id'],'wrong','completed')
+  done=self.sch.finish_trigger(row['id'],claim['token'],'completed',summary='brief saved')
+  self.assertEqual((done['status'],done['summary']),('completed','brief saved'))
+  with self.assertRaises(ValueError):self.sch.finish_trigger(row['id'],claim['token'],'completed')
+ def test_closed_app_catches_up_today_only_and_old_claims_time_out(self):
+  [t]=self.sync();self.clock.t=t['dueAt']+3*86400+3600;self.sch.tick()
+  [row]=self.rows(t['id']);self.assertEqual(row['status'],'pending');self.assertTrue(row['catchUp'])
+  self.assertEqual(row['scheduledFor'],t['dueAt']+3*86400)  # latest missed time only
+  claim=self.sch.claim_trigger();self.clock.t+=11*60;self.sch.tick()
+  self.assertEqual(self.rows(t['id'])[0]['status'],'interrupted')
+  with self.assertRaises(ValueError):self.sch.finish_trigger(row['id'],claim['token'],'completed')
+  # Missed by more than 18 hours: recorded, not run.
+  self.clock.t=self.task(t['id'])['dueAt']+19*3600;self.sch.tick()
+  self.assertEqual(self.rows(t['id'])[-1]['status'],'expired');self.assertEqual(self.sch.claim_trigger(),{'execution':None})
+ def test_switched_off_or_gone_trigger_does_not_run(self):
+  [t]=self.sync();self.clock.t=t['dueAt']+30;self.sch.tick();self.sync(enabled=False)
+  self.assertEqual(self.task(t['id'])['status'],'paused');self.assertEqual(self.sch.claim_trigger(),{'execution':None})
+  self.assertEqual(self.rows(t['id'])[0]['status'],'expired')
+  self.clock.t+=86400;self.sch.tick();self.assertEqual(len(self.rows(t['id'])),1)
+  self.assertEqual(self.sch.sync_triggers([],'Asia/Shanghai'),[]);self.assertEqual(self.task(t['id'])['status'],'deleted')
+
 if __name__=='__main__':unittest.main()

@@ -17,6 +17,14 @@ Task kinds:
 - ``auto``: an unattended agent run. It becomes a kernel run (source
   ``scheduler``) the headless host executes under the task's declared scope;
   the run counts as completed only when the model called ``mark_task_done``.
+- ``trigger``: a built-in plugin's timed action (manifest ``triggers``). The
+  main window reports the triggers its plugin host knows (``sync_triggers``);
+  the scheduler keeps the timetable, and at the time leaves one ``pending``
+  row. The window claims it, runs the plugin's handler and finishes it. Not a
+  kernel run: no tools, no approvals. A pending row nobody claimed in 18 hours
+  is ``expired`` (the app was closed); a claim not finished in 10 minutes is
+  ``interrupted``. Created and switched only by the plugin settings, never by
+  ``upsert``.
 
 Timing: a missed time runs once, however many occurrences were missed (the
 latest one; later than the five-minute grace it is labelled a catch-up), and
@@ -47,10 +55,15 @@ REMINDER_HORIZON = 30 * 86400
 NOTIFY_MAX = 60
 KEEP_PER_TASK, KEEP_TOTAL = 30, 400
 # paused: the kernel run hit its model's usage limit (P9b) and waits for a person to resume it; the task is not over.
-OPEN = ('starting', 'queued', 'running', 'awaiting-approval', 'paused')
+OPEN = ('starting', 'queued', 'running', 'awaiting-approval', 'paused', 'pending', 'claimed')
 TOOL_NAME = re.compile(r'^[A-Za-z0-9_.:-]{1,128}$')
 TASK_ID = re.compile(r'^sch_[a-f0-9]{8,40}$')
 BACKUP_NAME = 'project-jobs.v1-backup.json'
+TRIGGER = 'trigger'
+TRIGGER_KEY = re.compile(r'^[a-z][a-z0-9]{1,23}\.[a-z][a-z0-9-]{1,31}$')
+TRIGGER_AT = re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$')
+TRIGGER_PENDING = 18 * 3600
+TRIGGER_CLAIM = 10 * 60
 
 
 def minimal_scope(declared=True):
@@ -155,6 +168,43 @@ def latest_due(task, now):
     return task['dueAt']
 
 
+def first_trigger_time(trigger, zone, now):
+    """First wall-clock time of a daily/weekly trigger strictly after ``now``."""
+    hour, minute = map(int, trigger['at'].split(':'))
+    day = datetime.fromtimestamp(now, zone).date()
+    if trigger['schedule'] == 'weekly':
+        # Sunday = 1 (as in the agenda); Python's Monday = 0.
+        day += timedelta(days=((trigger['weekday'] - 2) % 7 - day.weekday()) % 7)
+    step = 7 if trigger['schedule'] == 'weekly' else 1
+    while True:
+        stamp = datetime(day.year, day.month, day.day, hour, minute, tzinfo=zone, fold=0).timestamp()
+        if stamp > now: return stamp
+        day += timedelta(days=step)
+
+
+def parse_trigger(entry):
+    if not isinstance(entry, dict): raise ValueError('定时动作格式无效')
+    key = entry.get('key')
+    if not isinstance(key, str) or not TRIGGER_KEY.match(key): raise ValueError('定时动作标识无效')
+    schedule = entry.get('schedule')
+    if schedule not in ('daily', 'weekly'): raise ValueError('定时动作周期应为每天或每周')
+    at = entry.get('at')
+    if not isinstance(at, str) or not TRIGGER_AT.match(at): raise ValueError('定时动作时间应为 HH:MM')
+    weekday = entry.get('weekday')
+    if schedule == 'weekly' and (type(weekday) is not int or not 1 <= weekday <= 7): raise ValueError('每周定时动作需要星期（周日为 1）')
+    name = entry.get('name')
+    if isinstance(name, dict): name = name.get('zh')
+    name = str(name or key).strip()[:40]
+    if type(entry.get('enabled', True)) is not bool: raise ValueError('定时动作开关无效')
+    trigger = {'key': key, 'schedule': schedule, 'at': at, **({'weekday': weekday} if schedule == 'weekly' else {})}
+    return trigger, name, entry.get('enabled', True)
+
+
+def _public_row(row):
+    """A trigger claim's token stays with the claimer."""
+    return {k: v for k, v in row.items() if k != 'claimToken'} if 'claimToken' in row else row
+
+
 def _pid_alive(pid):
     if not isinstance(pid, int) or pid <= 0: return False
     try: os.kill(pid, 0)
@@ -200,19 +250,21 @@ class Scheduler:
     def list(self):
         with self.store.lock():
             data = self.read(); now = self.clock()
-            rows = sorted(data['executions'], key=lambda e: e.get('startedAt') or 0, reverse=True)
+            rows = sorted((_public_row(e) for e in data['executions']), key=lambda e: e.get('startedAt') or 0, reverse=True)
             jobs = [{'id': j['id'], 'name': j.get('name'), 'projectId': j.get('projectId'), 'status': j.get('status'), 'dueAt': j.get('dueAt'),
                      'intervalMinutes': j.get('intervalMinutes'), 'permissionMode': j.get('permissionMode'), 'executor': 'window',
                      'scopeDeclared': bool(j.get('scope'))} for j in data['jobs'] if j.get('status') != 'deleted']
-            return {'tasks': [self.public_task(data, t, now) for t in data['tasks'] if t['status'] != 'deleted'],
-                    'archived': [self.public_task(data, t, now) for t in data['tasks'] if t['status'] == 'deleted'],
+            own = [t for t in data['tasks'] if t['kind'] != TRIGGER]
+            return {'tasks': [self.public_task(data, t, now) for t in own if t['status'] != 'deleted'],
+                    'archived': [self.public_task(data, t, now) for t in own if t['status'] == 'deleted'],
+                    'triggers': [self.public_task(data, t, now) for t in data['tasks'] if t['kind'] == TRIGGER and t['status'] != 'deleted'],
                     'jobs': jobs, 'executions': rows[:100],
                     'attention': [e for e in rows if e.get('status') == 'awaiting-approval'],
                     'reminders': [e for e in rows if e.get('kind') == 'reminder' and e.get('status') == 'reminded']}
 
     def executions(self, task_id=None, limit=50):
         with self.store.lock():
-            rows = [e for e in self.read()['executions'] if task_id is None or e.get('taskId') == task_id]
+            rows = [_public_row(e) for e in self.read()['executions'] if task_id is None or e.get('taskId') == task_id]
             rows.sort(key=lambda e: e.get('startedAt') or 0, reverse=True)
             return rows[:max(1, min(200, int(limit)))]
 
@@ -335,6 +387,7 @@ class Scheduler:
         with self.store.lock():
             data = self.read(); now = self.clock(); task = self._task(data, identifier)
             if action not in ('pause', 'resume', 'now', 'delete', 'done'): raise ValueError('未知操作')
+            if task['kind'] == TRIGGER and action != 'now': raise ValueError('插件的定时动作请在插件设置里开关')
             open_row = self._open(data, task['id'])
             if action in ('resume', 'now') and open_row: raise ValueError('上次执行尚未结束')
             if action == 'done':
@@ -372,7 +425,8 @@ class Scheduler:
         with self.store.lock():
             data = self.read(); now = self.clock(); changed = False
             for row in data['executions']:
-                if row.get('status') not in OPEN or row.get('kind') == 'window': continue
+                # Window rows belong to ProjectJobs; trigger claims time out on their own.
+                if row.get('status') not in OPEN or row.get('kind') in ('window', TRIGGER): continue
                 if row.get('instanceId') == self.instance: continue
                 # Another live service still owns it (not this process under a new instance id).
                 if row.get('ownerPid') != self.pid and _pid_alive(row.get('ownerPid')): continue
@@ -402,7 +456,9 @@ class Scheduler:
             for task in data['tasks']:
                 if task['status'] not in ('active',) or task['dueAt'] > now: continue
                 if task['kind'] == 'reminder': changed |= self._remind(data, task, now, done)
+                elif task['kind'] == TRIGGER: changed |= self._trigger_due(data, task, now, done)
             changed |= self._expire(data, now, done)
+            changed |= self._expire_triggers(data, now, done)
             starting = []
             if now >= self.started + STARTUP_DELAY and self.runs is not None:
                 for task in data['tasks']:
@@ -502,6 +558,100 @@ class Scheduler:
                 else: task['status'] = 'paused'
             done.append((final, row['taskId'], row['id']))
         return changed
+
+    # -- plugin triggers ---------------------------------------------------
+    def sync_triggers(self, entries, zone_name):
+        """The plugin host's triggers, as the main window sees them: one task each.
+        A changed time or zone plans afresh from now; one switched off pauses;
+        one no longer reported is archived."""
+        if not isinstance(entries, list) or len(entries) > 40: raise ValueError('定时动作列表无效')
+        try: zone = ZoneInfo(zone_name)
+        except (ZoneInfoNotFoundError, ValueError, TypeError): raise ValueError('无效时区，请使用 IANA 时区名称')
+        parsed = [parse_trigger(entry) for entry in entries]
+        if len({t['key'] for t, _, _ in parsed}) != len(parsed): raise ValueError('定时动作标识重复')
+        with self.store.lock():
+            data = self.read(); now = self.clock(); changed = False; seen = set()
+            for trigger, name, enabled in parsed:
+                identifier = 'trg_' + trigger['key']; seen.add(identifier)
+                prior = next((t for t in data['tasks'] if t['id'] == identifier), None)
+                status = 'active' if enabled else 'paused'
+                if prior and prior['trigger'] == trigger and prior.get('timeZone') == zone_name:
+                    if (prior['status'], prior['name']) != (status, name):
+                        prior.update(status=status, name=name, version=prior['version'] + 1, updatedAt=now); changed = True
+                    continue
+                due = first_trigger_time(trigger, zone, now)
+                task = {'id': identifier, 'kind': TRIGGER, 'name': name, 'prompt': '', 'trigger': trigger, 'dueAt': due,
+                        'intervalMinutes': 10080 if trigger['schedule'] == 'weekly' else 1440, 'timeZone': zone_name,
+                        'wallAnchor': datetime.fromtimestamp(due, zone).replace(tzinfo=None).isoformat(), 'status': status,
+                        'dependsOn': [], 'projectId': None, 'workspace': None, 'version': (prior or {}).get('version', 0) + 1,
+                        'createdAt': (prior or {}).get('createdAt', now), 'updatedAt': now}
+                if prior: data['tasks'][data['tasks'].index(prior)] = task
+                else: data['tasks'].append(task)
+                changed = True
+            for task in data['tasks']:
+                if task['kind'] == TRIGGER and task['id'] not in seen and task['status'] != 'deleted':
+                    task.update(status='deleted', version=task['version'] + 1, updatedAt=now); changed = True
+            if changed: self.write(data)
+            return [self.public_task(data, t, now) for t in data['tasks'] if t['kind'] == TRIGGER and t['status'] != 'deleted']
+
+    def _trigger_due(self, data, task, now, done):
+        """One pending row for the latest missed time; an unclaimed older one gives way."""
+        scheduled = latest_due(task, now)
+        task['dueAt'] = next_due(task, now)
+        open_row = self._open(data, task['id'])
+        if open_row and open_row['status'] == 'claimed':
+            _log(open_row, '下一次时间已到，本次仍在执行，跳过下一次', now); return True
+        if open_row:
+            open_row.update(status='expired', finishedAt=now, error='没有被领取，已由更新的一次取代'); _log(open_row, open_row['error'], now)
+        late = now - scheduled > TRIGGER_PENDING
+        row = self._row(task, 'expired' if late else 'pending', scheduled, now, catch_up=now - scheduled > GRACE_SECONDS)
+        row['trigger'] = task['trigger']['key']
+        if late: row.update(finishedAt=now, error='错过时间太久，不再补跑'); _log(row, row['error'], now)
+        data['executions'].append(row)
+        done.append(('expired' if late else 'pending', task['id'], row['id']))
+        return True
+
+    def _expire_triggers(self, data, now, done):
+        changed = False
+        for row in data['executions']:
+            if row.get('kind') != TRIGGER: continue
+            if row.get('status') == 'pending' and now - (row.get('scheduledFor') or now) > TRIGGER_PENDING:
+                row.update(status='expired', finishedAt=now, error='主窗口一直没有打开，未执行')
+            elif row.get('status') == 'claimed' and now - (row.get('claimedAt') or now) > TRIGGER_CLAIM:
+                row.update(status='interrupted', finishedAt=now, error='领取后没有完成（窗口关闭或处理超时）')
+            else: continue
+            _log(row, row['error'], now); changed = True
+            done.append((row['status'], row['taskId'], row['id']))
+        return changed
+
+    def claim_trigger(self):
+        """The main window takes the oldest pending trigger row. Rows of a trigger since switched off are dropped."""
+        with self.store.lock():
+            data = self.read(); now = self.clock(); changed = False; found = None
+            for row in sorted((e for e in data['executions'] if e.get('kind') == TRIGGER and e.get('status') == 'pending'), key=lambda e: e.get('scheduledFor') or 0):
+                task = next((t for t in data['tasks'] if t['id'] == row['taskId']), None)
+                if not task or task['status'] != 'active':
+                    row.update(status='expired', finishedAt=now, error='定时动作已关闭'); _log(row, row['error'], now); changed = True; continue
+                row.update(status='claimed', claimedAt=now, claimToken=secrets.token_hex(12), ownerPid=self.pid, instanceId=self.instance)
+                _log(row, '主窗口领取执行', now); found = row; changed = True
+                break
+            if changed: self.write(data)
+            if not found: return {'execution': None}
+            return {'execution': {k: found[k] for k in ('id', 'taskId', 'trigger', 'scheduledFor', 'catchUp')}, 'token': found['claimToken']}
+
+    def finish_trigger(self, identifier, token, status, summary=None, error=None):
+        if status not in ('completed', 'failed'): raise ValueError('结束状态应为 completed 或 failed')
+        with self.store.lock():
+            data = self.read(); now = self.clock()
+            row = next((e for e in data['executions'] if e.get('id') == identifier and e.get('kind') == TRIGGER), None)
+            if not row: raise ValueError('执行记录不存在')
+            if row.get('status') != 'claimed' or not isinstance(token, str) or not secrets.compare_digest(token, row.get('claimToken') or ''):
+                raise ValueError('这次执行已不归你处理（超时或已结束）')
+            row.update(status=status, finishedAt=now, summary=str(summary)[:300] if summary else None, error=str(error)[:300] if error else None)
+            row.pop('claimToken', None)
+            _log(row, '结束：' + status, now)
+            self.write(data)
+            return {k: v for k, v in row.items() if k != 'log'}
 
     # -- native reminders --------------------------------------------------
     def notifications(self, now=None):

@@ -29,10 +29,10 @@ struct NativeQuickLinksView: View {
             let rows=byID[id] ?? [], metadata=store.groupBySite ? nil : store.groups.first{$0.id==id}
             guard let first=rows.first else {
                 guard let metadata else { return nil }
-                return Group(id:id,title:metadata.folder,detail:[metadata.workspace,metadata.projectTitle].filter{!$0.isEmpty}.joined(separator:" · "),rows:[],metadata:metadata)
+                return Group(id:id,title:metadata.folder,detail:[NativeL10n.space(metadata.workspace),metadata.projectTitle].filter{!$0.isEmpty}.joined(separator:" · "),rows:[],metadata:metadata)
             }
             return Group(id:id,title:store.groupBySite ? id : first.folder,
-                detail:store.groupBySite ? "" : [first.workspace,first.projectTitle].filter{!$0.isEmpty}.joined(separator:" · "),rows:rows,metadata:metadata)
+                detail:store.groupBySite ? "" : [NativeL10n.space(first.workspace),first.projectTitle].filter{!$0.isEmpty}.joined(separator:" · "),rows:rows,metadata:metadata)
         }
     }
     var body: some View {

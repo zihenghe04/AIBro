@@ -162,7 +162,7 @@ struct NativeWorkspaceLocation:Codable,Equatable {
     /// sidebar must name the page the person sees, not the hidden native one.
     /// Returns the web view to adopt, or nil when nothing changes.
     static func tourDestination(selection:String?,reportedView:String,tourOpen:Bool)->String? {
-        guard tourOpen,["overview","agenda","conversations"].contains(selection ?? "") else{return nil}
+        guard tourOpen,["today","overview","agenda","conversations"].contains(selection ?? "") else{return nil}
         let view=reportedView == "dashboard" ? "overview":reportedView
         return view == selection ? nil:view
     }
@@ -173,7 +173,7 @@ struct NativeWorkspaceLocation:Codable,Equatable {
         if view == "project" {return projectID.map{!$0.isEmpty && projects.contains($0)} == true && (section == nil || ["conversations","knowledge","outputs","tasks","schedule","overview"].contains(section!))}
         if view == "agent" {return conversationID.map{$0.isEmpty || conversations.contains($0)} ?? true}
         if ["daily","courses","research"].contains(view) {return section == nil || Self.validSpaceSection(section!,view:view)}
-        return ["overview","conversations","agenda","captures","wiki","trash","settings"].contains(view) && section == nil
+        return ["today","overview","conversations","agenda","captures","wiki","trash","settings"].contains(view) && section == nil
     }
 }
 

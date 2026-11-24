@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 func nativeUI(_ zh:String,_ en:String)->String{en}
+enum NativeL10n { static func space(_ key: String) -> String { key } }
 @MainActor final class DragGate {
     var next:CheckedContinuation<Void,Never>?
     func wait() async{await withCheckedContinuation{next=$0}}

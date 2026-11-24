@@ -44,6 +44,7 @@ import bookmark_metadata
 from external_notifications import ExternalNotifications, handle_request as handle_external_notifications
 from event_log import EventLog, EventLogError
 from plugin_store import PluginStore, PluginStoreError
+from today_store import TodayStore
 from mcp_plugins import McpPlugins
 
 ASSET_DIR = Path(os.environ.get('AI_WORKSTATION_ASSET_DIR', Path(__file__).resolve().parent)).resolve()
@@ -1144,6 +1145,7 @@ def claude_error(error):
 LOCAL_PROJECTS = LocalProjects(DATA_DIR)
 EVENT_LOG = EventLog(DATA_DIR)
 PLUGIN_STORE = PluginStore(DATA_DIR)
+TODAY_STORE = TodayStore(DATA_DIR)
 MCP_PLUGINS = McpPlugins(PLUGIN_STORE)
 def plugin_snapshot():
     value = PLUGIN_STORE.read()
@@ -1223,6 +1225,8 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(payload, dict): raise PluginStoreError('插件请求格式无效。')
             if path == '/__plugins/builtin':
                 PLUGIN_STORE.set_builtin(payload.get('id'), payload.get('enabled')); self.send_json(plugin_snapshot())
+            elif path == '/__plugins/trigger':
+                PLUGIN_STORE.set_trigger(payload.get('id'), payload.get('trigger'), payload.get('enabled'), payload.get('at')); self.send_json(plugin_snapshot())
             elif path == '/__plugins/browser/sites':
                 PLUGIN_STORE.browser_site(payload.get('origin'), payload.get('decision')); self.send_json(plugin_snapshot())
             elif path == '/__plugins/browser/settings':
@@ -1244,6 +1248,18 @@ class Handler(SimpleHTTPRequestHandler):
             else: self.send_json({'error': '找不到插件接口。', 'code': 'plugin_not_found'}, 404)
         except PluginStoreError as error: self.send_json(error.payload, error.status)
         except ValueError: self.send_json({'error': '插件请求格式无效。', 'code': 'plugin_invalid'}, 400)
+    def do_today(self):
+        # Today briefs: the main window saves the day's brief, the today page reads it. Same-origin only.
+        if not self.valid_origin(): self.send_json({'error': '不允许来自其他网站的请求'}, 403); return
+        try:
+            if self.command == 'GET':
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                self.send_json({'brief': TODAY_STORE.read((query.get('date') or [''])[0])})
+            else:
+                payload = json.loads(self.read_body(131072) or b'{}')
+                if not isinstance(payload, dict): raise ValueError('请求必须是 JSON 对象')
+                self.send_json({'brief': TODAY_STORE.write(payload.get('date'), payload.get('brief'))})
+        except ValueError as exc: self.send_json({'error': str(exc)}, 400)
     def do_events(self, path):
         # Run event log (written alongside the snapshot). Same-origin only.
         if not self.valid_origin(): self.send_json({'error': '不允许来自其他网站的请求'}, 403); return
@@ -2200,6 +2216,7 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as exc:self.send_json({'error':str(exc)},400)
         elif path == '/__events': self.do_events(path)
         elif path == '/__plugins': self.do_plugins(path)
+        elif path == '/__today/brief': self.do_today()
         elif path == '/__project/jobs':
             try: self.send_json({'jobs':PROJECT_JOBS.list()})
             except Exception as exc:self.send_json({'error':str(exc)},400)
@@ -2264,12 +2281,16 @@ class Handler(SimpleHTTPRequestHandler):
         path = urllib.parse.urlsplit(self.path).path
         if path == '/__state': self.do_state_post()
         elif path == '/__events/append': self.do_events(path)
+        elif path == '/__today/brief': self.do_today()
         elif path.startswith('/__scheduler/'):
             try:
                 body=json.loads(self.read_body() or b'{}');action=path.rsplit('/',1)[-1]
                 if not isinstance(body,dict): raise ValueError('请求必须是 JSON 对象')
                 if action=='upsert': result=SCHEDULER.upsert(body)
                 elif action=='tick': result={'done':SCHEDULER.tick()}
+                elif action=='triggers': result={'triggers':SCHEDULER.sync_triggers(body.get('triggers'),body.get('timeZone'))}
+                elif action=='claim-trigger': result=SCHEDULER.claim_trigger()
+                elif action=='finish-trigger': result=SCHEDULER.finish_trigger(body.get('id'),body.get('token'),body.get('status'),body.get('summary'),body.get('error'))
                 else: result=SCHEDULER.change(body.get('id'),action)
                 self.send_json(result)
             except ScopeConfirmation as exc:self.send_json({'error':str(exc),'code':exc.code},409)

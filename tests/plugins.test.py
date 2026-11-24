@@ -25,6 +25,23 @@ class PluginStoreTests(unittest.TestCase):
         with self.assertRaises(PluginStoreError): self.store.set_builtin('browser', 'no')
         self.assertEqual(self.store.read()['builtin'], {})
 
+    def test_trigger_switches_are_kept_per_plugin(self):
+        self.store.set_trigger('browser', 'daily-check', False)
+        self.assertEqual(PluginStore(self.tmp.name).read()['builtin']['browser'], {'enabled': True, 'triggers': {'daily-check': {'enabled': False}}})
+        self.store.set_builtin('browser', False)
+        self.assertEqual(self.store.read()['builtin']['browser']['triggers'], {'daily-check': {'enabled': False}})
+        for args in (('shell', 'x1', True), ('browser', 'Bad Id', True), ('browser', 'daily-check', 'no')):
+            with self.assertRaises(PluginStoreError): self.store.set_trigger(*args)
+
+    def test_trigger_time_override_is_validated_and_kept(self):
+        self.store.set_trigger('browser', 'daily-check', None, '08:30')
+        self.assertEqual(self.store.read()['builtin']['browser']['triggers']['daily-check'], {'enabled': True, 'at': '08:30'})
+        self.store.set_trigger('browser', 'daily-check', False)
+        self.assertEqual(self.store.read()['builtin']['browser']['triggers']['daily-check'], {'enabled': False, 'at': '08:30'})
+        for at in ('8:30', '24:00', '08:60', 830):
+            with self.assertRaises(PluginStoreError): self.store.set_trigger('browser', 'daily-check', None, at)
+        with self.assertRaises(PluginStoreError): self.store.set_trigger('browser', 'daily-check')
+
     def test_browser_site_lists_and_unknown_site_setting(self):
         self.store.browser_site('https://a.org', 'allow')
         self.store.browser_site('https://b.org:8443', 'deny')

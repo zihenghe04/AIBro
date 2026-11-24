@@ -34,7 +34,7 @@ test('all native global surfaces yield visual, pointer and accessibility ownersh
  assert.match(agenda,/\.opacity\(model\.spaceContent \|\| workspaceOverlay \? 0:1\)/);
  assert.match(agenda,/\.allowsHitTesting\(!model\.spaceContent && !workspaceOverlay\)/);
  assert.match(agenda,/\.accessibilityHidden\(model\.spaceContent \|\| workspaceOverlay\)/);
- assert.match(predicate,/\["overview","agenda","conversations"\]\.contains\(model\.selection \?\? ""\) && model\.spaceContent \{return false\}/);
+ assert.match(predicate,/\["today","overview","agenda","conversations"\]\.contains\(model\.selection \?\? ""\) && model\.spaceContent \{return false\}/);
  assert.match(source,/WebContent\(model:model,surfaceVisible:workspaceVisible && !nativeContent\)\.opacity\(nativeContent \? 0 : 1\)\.allowsHitTesting\(!nativeContent\)\.accessibilityHidden\(nativeContent\)/);
 });
 

@@ -109,7 +109,7 @@ import UserNotifications
             let content = UNMutableNotificationContent()
             content.title = nativeUI("提醒：", "Reminder: ") + item.title
             content.body = item.body.isEmpty ? nativeUI("打开 AI Bro 标记完成；2 小时未处理会标为过期。", "Open AI Bro to mark it done; it expires after two hours.") : item.body
-            content.sound = .default
+            content.sound = NotificationSounds.reminder
             content.userInfo = ["schedulerReminder": item.id]
             if item.fire > now {
                 var parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: item.fire); parts.timeZone = Calendar.current.timeZone
@@ -157,6 +157,9 @@ import UserNotifications
         case "paused":
             announcePause(runId: body["runId"] as? String ?? "", title: body["title"] as? String ?? "", message: body["message"] as? String ?? "")
             replyHandler(true, nil)
+        case "finished":
+            announceFinished(runId: body["runId"] as? String ?? "", title: body["title"] as? String ?? "")
+            replyHandler(true, nil)
         default:
             replyHandler(true, nil)
         }
@@ -177,7 +180,7 @@ import UserNotifications
         content.body = destructive
             ? nativeUI("\(title)：\(tools[tool] ?? tool)（风险步骤）。请在 AI Bro 主窗口查看后批准。", "\(title): \(tools[tool] ?? tool) (risky step). Review and approve it in the AI Bro main window.")
             : nativeUI("\(title)：\(tools[tool] ?? tool)。打开 AI Bro 查看详情。", "\(title): \(tools[tool] ?? tool). Open AI Bro for details.")
-        content.sound = .default
+        content.sound = NotificationSounds.approval
         content.categoryIdentifier = destructive ? Self.reviewCategory : Self.category
         content.userInfo = ["kernelRun": runId, "kernelApproval": approvalId]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "kernel-approval-" + approvalId, content: content, trigger: nil))
@@ -191,10 +194,21 @@ import UserNotifications
         let name = title.isEmpty ? nativeUI("后台运行", "Background run") : String(title.prefix(80))
         let reason = message.isEmpty ? nativeUI("模型额度已用尽。", "The model's usage limit was reached.") : String(message.prefix(200))
         content.body = "\(name)：\(reason)"
-        content.sound = .default
+        content.sound = NotificationSounds.approval
         // No approval id: a click only opens the run (respond() shows it).
         content.userInfo = ["kernelRun": runId, "kernelApproval": ""]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "kernel-paused-" + runId + "-" + String(Int(Date().timeIntervalSince1970)), content: content, trigger: nil))
+    }
+
+    /// A background run that completed: once per run, with the "done" sound; a click opens the run.
+    private func announceFinished(runId: String, title: String) {
+        guard notificationsEnabled, !runId.isEmpty, notified.insert("finished-" + runId).inserted else { return }
+        let content = UNMutableNotificationContent()
+        content.title = nativeUI("后台运行已完成", "A background run finished")
+        content.body = title.isEmpty ? nativeUI("打开 AI Bro 查看结果。", "Open AI Bro to see the result.") : String(title.prefix(120))
+        content.sound = NotificationSounds.done
+        content.userInfo = ["kernelRun": runId, "kernelApproval": ""]
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "kernel-finished-" + runId, content: content, trigger: nil))
     }
 
     /// A notification action: 批准 / 拒绝 answer as the native shell; 查看 or a plain click opens the run.

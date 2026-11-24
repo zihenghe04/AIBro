@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 func nativeUI(_ zh:String,_ en:String)->String {en}
+enum NativeL10n { static func space(_ key: String) -> String { key } }
 @MainActor final class Fixture {
     let directory: URL
     let store: NativeQuickLinksStore

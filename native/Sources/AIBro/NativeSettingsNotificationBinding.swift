@@ -18,6 +18,7 @@ import Foundation
             "agenda.briefingHour": Double(p.briefingHour),
             "agenda.briefingMinute": Double(p.briefingMinute),
             "agenda.showTitles": p.showTitles,
+            "notify.sounds": NotificationSounds.enabled,
         ]
         out["notify.external"] = external?.enabled ?? false
         out["notify.island"] = island?.enabled ?? false
@@ -58,6 +59,7 @@ import Foundation
         case ("agenda.briefingHour", .number(let n)): next.briefingHour = Int(n); save()
         case ("agenda.briefingMinute", .number(let n)): next.briefingMinute = Int(n); save()
         case ("agenda.showTitles", .bool(let on)): next.showTitles = on; save()
+        case ("notify.sounds", .bool(let on)): NotificationSounds.enabled = on
         case ("agenda.test", .string("run")): Task { @MainActor in await agenda.testNotification() }
         case ("notify.external", .bool(let on)): external?.setEnabled(on)
         case ("notify.island", .bool(let on)): if let island { Task { @MainActor in await island.setEnabled(on) } }

@@ -144,3 +144,19 @@ test('numeric placeholders inside patterns survive JavaScript string parsing', (
     assert.match(chinese.replace(new RegExp(rule.source), rule.replacement), expected);
   }
 });
+
+test('connection status line and tooltip translate outside the settings page', () => {
+  for (const text of ['● 离线本地模式', '● 待处理同步冲突', '● 等待保存结果', '● 本地已就绪', '● Agent 执行中', '● 等待审批', '● 等待输入', '● 等待确认归属', '暂无项目', '随记',
+    '本地服务未连接；对话仍可保存，文件解析和远程模型需要启动桌面服务。']) {
+    const english = translate(text);
+    assert.notEqual(english, text, text);
+    assert.doesNotMatch(english, /[一-鿿]/, text);
+  }
+});
+
+test('every connection status string assigned by app.js has an English entry', () => {
+  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  const found = new Set([...source.matchAll(/'(● [^'$]+)'/g)].map(m => m[1]));
+  assert.ok(found.size >= 6);
+  for (const text of found) assert.notEqual(translate(text), text, text);
+});

@@ -31,7 +31,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
 @MainActor final class Workspace: NSObject, ObservableObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     @Published var conversationProjectFilter=""
     @Published var snapshot: Snapshot?
-    @Published var selection: String? = "overview"
+    @Published var selection: String? = "today"
     @Published var error: String?
     @Published var trashUndo: TrashUndo?
     @Published var ready = false
@@ -173,6 +173,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/conversation-library.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/agenda-sync.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/agenda-ai.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
+        if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/today-ai.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/quick-capture.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/quick-recording-title.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
         if let js=try? String(contentsOf:root.appendingPathComponent("native/Resources/quick-links.js"),encoding:.utf8){config.userContentController.addUserScript(WKUserScript(source:js,injectionTime:.atDocumentEnd,forMainFrameOnly:true))}
@@ -201,7 +202,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             let saved=current == "research-projects" ? "projects":spaceSections[view] ?? "projects"
             return ["view":view,"section":NativeWorkspaceLocation.validSpaceSection(saved,view:view) ? saved:"projects"]
         }
-        guard ["overview","conversations","agenda","wiki","captures","history"].contains(view) else{return nil}
+        guard ["today","overview","conversations","agenda","wiki","captures","history"].contains(view) else{return nil}
         return ["view":view]
     }
     func reveal(_ type:String,_ id:String="") {
@@ -318,7 +319,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         if ["note","import","task"].contains(type) {spaceContent=true}
         if isRoute || ["view","note","import","reader"].contains(type) {compactWorkspacePreferred=true}
         if type=="view",id != "history" {pendingNavigation=(id,nil)}
-        else if type=="workspace-view" {pendingNavigation=(["overview","conversations","agenda"].contains(id) ? "native-pending":id,nil)}
+        else if type=="workspace-view" {pendingNavigation=(["today","overview","conversations","agenda"].contains(id) ? "native-pending":id,nil)}
         else if type=="project" {pendingNavigation=("project",id);pendingProjectSection=section}
         else if type=="conversation" {pendingNavigation=("agent",id)}
         else if ["new","new-space-conversation","new-project-conversation","new-research-conversation"].contains(type) {pendingNavigation=("agent",nil)}
@@ -602,7 +603,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
             let id=route["conversationId"] as? String ?? ""
             destination=id.isEmpty ? "agent":"chat:"+id
         } else {
-            guard ["captures","wiki","dashboard","overview","conversations","agenda","daily","courses","research","trash","settings"].contains(view) else{return false}
+            guard ["captures","wiki","dashboard","today","overview","conversations","agenda","daily","courses","research","trash","settings"].contains(view) else{return false}
             destination=view == "dashboard" ? "overview":view
         }
         commandSearchSelection=selection == destination ? nil:destination
@@ -659,8 +660,10 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         let key="AIBro.committedLocation."+dataDirectory.standardizedFileURL.path
         let stored=UserDefaults.standard.data(forKey:key).flatMap{try? JSONDecoder().decode(NativeWorkspaceLocation.self,from:$0)}
         let projects=Set(value.projects.map(\.id)),chats=Set((value.conversationLibrary ?? []).filter{!$0.archived}.map(\.id))
-        var location=stored ?? NativeWorkspaceLocation(view:value.view,projectID:value.projectId,conversationID:value.conversationId,section:value.view == "project" ? value.projectSection:value.spaceSection)
-        if value.privateMode == true || !location.available(projects:projects,conversations:chats) {location=NativeWorkspaceLocation(view:"overview")}
+        // A first launch opens on Today; a committed location still wins.
+        let reported=["overview","dashboard"].contains(value.view) ? NativeWorkspaceLocation(view:"today"):NativeWorkspaceLocation(view:value.view,projectID:value.projectId,conversationID:value.conversationId,section:value.view == "project" ? value.projectSection:value.spaceSection)
+        var location=stored ?? reported
+        if value.privateMode == true || !location.available(projects:projects,conversations:chats) {location=NativeWorkspaceLocation(view:"today")}
         restoringWorkspaceLocation=true
         let generation=webFocusGeneration
         Task { @MainActor in
@@ -801,7 +804,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         agenda.updateTasks(value.tasks ?? [])
         if selection == "history" {
             if value.modalOpen == true {historyWasOpen=true}
-            else if historyWasOpen {historyWasOpen=false;selection=historyReturnSelection ?? "overview";historyReturnSelection=nil;pendingNavigation=nil}
+            else if historyWasOpen {historyWasOpen=false;selection=historyReturnSelection ?? "today";historyReturnSelection=nil;pendingNavigation=nil}
         }
         reconcileTaskSurface(taskOpen:value.taskOpen == true,modalOpen:value.modalOpen == true,readingOpen:value.readingOpen == true,entry:projectNavigationRequest == nil ? value.taskEntry:nil)
         if first {
@@ -815,7 +818,7 @@ struct Snapshot: Decodable { let comparisonOpen:Bool?; let activityCenterOpen:Bo
         // Only an acknowledged command or a committed page route changes
         // native ownership. Initial hydration must not overwrite restoration.
         if !first,!restoringWorkspaceLocation,projectNavigationRequest == nil,
-           !["overview","history","agenda","conversations"].contains(selection ?? "") {
+           !["today","overview","history","agenda","conversations"].contains(selection ?? "") {
             if !(value.readingOpen == true && value.view == selection && ["daily","courses","research"].contains(value.view)) {
                 _ = adoptReportedWorkspaceDestination(snapshotDestination(value))
             }
@@ -1078,6 +1081,7 @@ struct MainView: View {
                                 .allowsHitTesting(false)
                         }
                     VStack(alignment:.leading,spacing:2) {
+                        nav(nativeUI("今天", "Today"),"sun.max","today")
                         nav(nativeUI("总览", "Overview"),"square.grid.2x2","overview")
                         nav(nativeUI("全部对话", "All chats"),"bubble.left.and.bubble.right","conversations")
                         nav(nativeUI("日程", "Agenda"),"calendar.badge.clock","agenda")
@@ -1126,6 +1130,7 @@ struct MainView: View {
                 // Keep the entry view mounted while its task or source is open:
                 // calendar mode, filters and scroll remain exactly where left.
                 if model.selection == "overview" { Overview(model:model,surfaceVisible:workspaceVisible && !model.spaceContent && !workspaceOverlay).opacity(model.spaceContent || workspaceOverlay ? 0:1).allowsHitTesting(!model.spaceContent && !workspaceOverlay).disabled(model.spaceContent || workspaceOverlay).accessibilityHidden(model.spaceContent || workspaceOverlay) }
+                if model.selection == "today" { TodayView(model:model,store:model.agenda,workbench:quickEntry.workbench).opacity(model.spaceContent || workspaceOverlay ? 0:1).allowsHitTesting(!model.spaceContent && !workspaceOverlay).disabled(model.spaceContent || workspaceOverlay).accessibilityHidden(model.spaceContent || workspaceOverlay) }
                 if model.selection == "agenda" { AgendaView(model:model,store:model.agenda).opacity(model.spaceContent || workspaceOverlay ? 0:1).allowsHitTesting(!model.spaceContent && !workspaceOverlay).disabled(model.spaceContent || workspaceOverlay).accessibilityHidden(model.spaceContent || workspaceOverlay) }
                 if !workspaceOverlay {
                 if model.selection == "conversations",!model.spaceContent {ConversationHub(model:model)}
@@ -1201,7 +1206,7 @@ struct MainView: View {
     var spaceName:String? { ["daily":"日常","courses":"课程","research":"科研"][spaceView ?? ""] }
     var currentSpaceSection:String {model.selection == "wiki" ? "wiki":model.spaceSections[spaceView ?? ""] ?? "projects"}
     var workspaceOverlay:Bool {model.settingsNavigationPending || model.snapshot?.modalOpen == true || model.snapshot?.tourOpen == true || model.snapshot?.commandSearchOpen == true || model.snapshot?.activityCenterOpen == true || model.snapshot?.comparisonOpen == true || model.commandSearchFollowup}
-    var nativeContent:Bool {if workspaceOverlay {return false};if ["overview","agenda","conversations"].contains(model.selection ?? "") && model.spaceContent {return false};return ["overview","agenda","conversations"].contains(model.selection ?? "") || (spaceName != nil && ["projects","overview"].contains(currentSpaceSection) && !model.spaceContent)}
+    var nativeContent:Bool {if workspaceOverlay {return false};if ["today","overview","agenda","conversations"].contains(model.selection ?? "") && model.spaceContent {return false};return ["today","overview","agenda","conversations"].contains(model.selection ?? "") || (spaceName != nil && ["projects","overview"].contains(currentSpaceSection) && !model.spaceContent)}
     var selectionTint:Color {if let space=spaceName{return StudioPalette.space(space)};if let id=activeProjectID,let project=model.snapshot?.projects.first(where:{$0.id==id}){return StudioPalette.space(project.workspace)};return StudioPalette.jade}
     func sidebarHeading(_ title:String)->some View {Text(title).font(.system(size:11,weight:.semibold)).foregroundStyle(.tertiary).padding(.horizontal,10).padding(.top,16).padding(.bottom,4).accessibilityAddTraits(.isHeader)}
     func sidebarButton(_ name:String,_ icon:String,_ tag:String,_ tint:Color)->some View {
@@ -1210,7 +1215,7 @@ struct MainView: View {
             .background(GeometryReader{geometry in Color.clear.preference(key:SidebarBounds.self,value:[tag:geometry.frame(in:.named("native-sidebar"))])})
     }
     func nav(_ name:String,_ icon:String,_ tag:String)->some View {sidebarButton(name,icon,tag,StudioPalette.space(name))}
-    var title: String { if let value=model.selection,value.hasPrefix("project:") {return model.snapshot?.projects.first{$0.id==String(value.dropFirst(8))}?.title ?? nativeUI("项目", "Projects")};return ["wiki":nativeUI("科研 · 知识库", "Research · Knowledge base"),"research-projects":nativeUI("科研 · 研究项目", "Research · Projects"),"conversations":nativeUI("全部对话", "All chats"),"captures":nativeUI("随记", "Quick notes"),"agenda":nativeUI("日程中心", "Agenda"),"overview":nativeUI("总览", "Overview"),"dashboard":nativeUI("详细仪表板", "Detailed dashboard"),"agent":nativeUI("对话", "Chats"),"daily":nativeUI("日常", "Daily"),"courses":nativeUI("课程", "Courses"),"research":nativeUI("科研", "Research"),"history":nativeUI("执行历史", "Run history"),"trash":nativeUI("回收站", "Trash"),"settings":nativeUI("设置", "Settings")][model.selection ?? ""] ?? nativeUI("对话", "Chats") }
+    var title: String { if let value=model.selection,value.hasPrefix("project:") {return model.snapshot?.projects.first{$0.id==String(value.dropFirst(8))}?.title ?? nativeUI("项目", "Projects")};return ["wiki":nativeUI("科研 · 知识库", "Research · Knowledge base"),"research-projects":nativeUI("科研 · 研究项目", "Research · Projects"),"conversations":nativeUI("全部对话", "All chats"),"captures":nativeUI("随记", "Quick notes"),"agenda":nativeUI("日程中心", "Agenda"),"today":nativeUI("今天", "Today"),"overview":nativeUI("总览", "Overview"),"dashboard":nativeUI("详细仪表板", "Detailed dashboard"),"agent":nativeUI("对话", "Chats"),"daily":nativeUI("日常", "Daily"),"courses":nativeUI("课程", "Courses"),"research":nativeUI("科研", "Research"),"history":nativeUI("执行历史", "Run history"),"trash":nativeUI("回收站", "Trash"),"settings":nativeUI("设置", "Settings")][model.selection ?? ""] ?? nativeUI("对话", "Chats") }
 }
 struct Overview: View {
     @ObservedObject private var nativeLanguage = NativeL10n.shared

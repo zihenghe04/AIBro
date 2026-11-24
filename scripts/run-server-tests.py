@@ -38,6 +38,7 @@ SERVER_TESTS = (
     'tests/local-commands.test.py',
     'tests/project-jobs.test.py',
     'tests/scheduler.test.py',
+    'tests/today-store.test.py',
     'tests/scheduler-p9b.test.py',
     'tests/recovery.test.py',
     'tests/local-projects.test.py',

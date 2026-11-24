@@ -16,7 +16,7 @@ test('link ordering uses the native grip after ACK instead of the unconfirmed Sw
  assert.match(arrange,/orderFocus\.restore\(token,id:row\.id\).*drag\.focus\(row\.id\)/);
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'aibro-link-menu-focus-'));
  try{
-  const stub=path.join(temp,'NativeL10n.swift');fs.writeFileSync(stub,'func nativeUI(_ zh:String,_ en:String)->String { en }\n');
+  const stub=path.join(temp,'NativeL10n.swift');fs.writeFileSync(stub,'func nativeUI(_ zh:String,_ en:String)->String { en }\nenum NativeL10n { static func space(_ key: String) -> String { key } }\n');
   const names=['NativeQuickRecordFocus','NativeQuickLinkIcon','NativeQuickLinkSitePolicy','NativeQuickLinksStore','NativeQuickLinkDrag','NativeQuickLinksView'];
   const result=spawnSync('xcrun',['swiftc','-typecheck','-parse-as-library','-swift-version','5',...names.map(name=>path.join(root,'native/Sources/AIBro',name+'.swift')),stub],{encoding:'utf8',timeout:110000});
   assert.equal(result.status,0,result.stdout+result.stderr);

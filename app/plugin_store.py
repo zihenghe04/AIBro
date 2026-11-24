@@ -8,15 +8,35 @@ devices. Changes apply to the next agent run (each run freezes its toolset).
 import json, os, re, tempfile, threading, time
 from pathlib import Path
 
-BUILTIN_PLUGINS = ('browser',)
+BUILTIN_PLUGINS = ('browser', 'today')
 VERSION = 1
 # A site permission is per origin: scheme, host and an optional port, nothing else.
 ORIGIN = re.compile(r'^https?://(?:[a-z0-9-]+\.)*[a-z0-9-]+(?::[0-9]{1,5})?$|^https?://\[[0-9a-f:]+\](?::[0-9]{1,5})?$')
 MAX_SITES = 500
+TRIGGER_ID = re.compile(r'^[a-z][a-z0-9-]{1,31}$')
+TRIGGER_AT = re.compile(r'^([01]\d|2[0-3]):[0-5]\d$')
+
+
+def _triggers(value):
+    """Per-trigger switches of a built-in plugin: {trigger id: {enabled}}."""
+    saved = value.get('triggers') if isinstance(value.get('triggers'), dict) else {}
+    out = {}
+    for k, v in saved.items():
+        if not (isinstance(k, str) and TRIGGER_ID.match(k) and isinstance(v, dict)): continue
+        out[k] = {'enabled': v.get('enabled') is not False}
+        if isinstance(v.get('at'), str) and TRIGGER_AT.match(v['at']): out[k]['at'] = v['at']  # the user's own time of day
+    return out
+
+
+def _builtin_entry(value):
+    entry = {'enabled': value.get('enabled') is not False}
+    triggers = _triggers(value)
+    if triggers: entry['triggers'] = triggers
+    return entry
 
 
 def _browser_entry(value):
-    entry = {'enabled': value.get('enabled') is not False}
+    entry = _builtin_entry(value)
     sites = value.get('sites') if isinstance(value.get('sites'), dict) else {}
     lists = {key: [o for o in sites.get(key, []) if isinstance(o, str) and ORIGIN.match(o)][:MAX_SITES] for key in ('allow', 'deny')}
     if lists['allow'] or lists['deny']: entry['sites'] = lists
@@ -60,7 +80,7 @@ class PluginStore:
             builtin = value.get('builtin') if isinstance(value.get('builtin'), dict) else {}
             mcp = value.get('mcp') if isinstance(value.get('mcp'), list) else []
             return {'version': VERSION,
-                    'builtin': {k: _browser_entry(v) if k == 'browser' else {'enabled': v.get('enabled') is not False} for k, v in builtin.items() if k in BUILTIN_PLUGINS and isinstance(v, dict)},
+                    'builtin': {k: _browser_entry(v) if k == 'browser' else _builtin_entry(v) for k, v in builtin.items() if k in BUILTIN_PLUGINS and isinstance(v, dict)},
                     'mcp': [entry for entry in mcp if isinstance(entry, dict) and isinstance(entry.get('id'), str)]}
 
     def write(self, value):
@@ -81,6 +101,21 @@ class PluginStore:
         if not isinstance(enabled, bool): raise PluginStoreError('enabled 必须是 true 或 false。')
         with self._lock:
             value = self.read(); value['builtin'][plugin_id] = {**value['builtin'].get(plugin_id, {}), 'enabled': enabled}; self.write(value)
+            return value
+
+    def set_trigger(self, plugin_id, trigger_id, enabled=None, at=None):
+        """Switch one timed action of a built-in plugin and/or move it to another time of day; the scheduler follows on the next sync."""
+        if plugin_id not in BUILTIN_PLUGINS: raise PluginStoreError('没有这个内置插件。', 404, 'plugin_unknown')
+        if not isinstance(trigger_id, str) or not TRIGGER_ID.match(trigger_id): raise PluginStoreError('定时动作的标识无效。')
+        if enabled is None and at is None: raise PluginStoreError('需要 enabled 或 at。')
+        if enabled is not None and not isinstance(enabled, bool): raise PluginStoreError('enabled 必须是 true 或 false。')
+        if at is not None and not (isinstance(at, str) and TRIGGER_AT.match(at)): raise PluginStoreError('时间必须是 HH:MM。')
+        with self._lock:
+            value = self.read(); entry = value['builtin'].setdefault(plugin_id, {'enabled': True})
+            slot = entry.setdefault('triggers', {}).setdefault(trigger_id, {'enabled': True})
+            if enabled is not None: slot['enabled'] = enabled
+            if at is not None: slot['at'] = at
+            self.write(value)
             return value
 
     def browser_site(self, origin, decision):

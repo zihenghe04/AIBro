@@ -189,7 +189,7 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
     }
     func testNotification() async {
         guard !qa else {return}
-        do {let content=UNMutableNotificationContent();content.title="AI Bro 提醒已连接";content.body="这是一条本机测试通知。";content.sound = .default
+        do {let content=UNMutableNotificationContent();content.title="AI Bro 提醒已连接";content.body="这是一条本机测试通知。";content.sound=NotificationSounds.reminder
             try await center.add(UNNotificationRequest(identifier:"agenda-test",content:content,trigger:UNTimeIntervalNotificationTrigger(timeInterval:5,repeats:false)))
         }catch{self.error=error.localizedDescription}
     }
@@ -238,14 +238,14 @@ struct AgendaArchive: Codable {var version=1;var events:[AgendaEvent]=[];var pre
         center.removePendingNotificationRequests(withIdentifiers:existing.filter{$0.identifier.hasPrefix("agenda-") && !$0.identifier.hasPrefix("agenda-snooze-") && $0.identifier != "agenda-test" && !ids.contains($0.identifier)}.map(\.identifier))
         var accepted=0
         if preferences.briefing {
-            let content=UNMutableNotificationContent();content.title="今日安排";content.body="新的一天，打开 AI Bro 查看课程、会议与待办。";content.sound = .default;content.categoryIdentifier="AIBRO_AGENDA"
+            let content=UNMutableNotificationContent();content.title="今日安排";content.body="新的一天，打开 AI Bro 查看课程、会议与待办。";content.sound=NotificationSounds.reminder;content.categoryIdentifier="AIBRO_AGENDA"
             var parts=DateComponents();parts.hour=preferences.briefingHour;parts.minute=preferences.briefingMinute
             do{try await center.add(UNNotificationRequest(identifier:"agenda-brief-daily",content:content,trigger:UNCalendarNotificationTrigger(dateMatching:parts,repeats:true)));accepted+=1}catch{self.error=error.localizedDescription}
         }
         for (id,date,title,start) in desired {
             guard expected==revision,!Task.isCancelled else{return}
             let content=UNMutableNotificationContent();content.title=id.hasPrefix("agenda-brief") ? "今日安排":"日程提醒"
-            content.body=preferences.showTitles ? title:"打开 AI Bro 查看安排。";content.sound = .default;content.categoryIdentifier="AIBRO_AGENDA";content.userInfo=["date":start.timeIntervalSince1970,"occurrenceID":String(id.dropFirst("agenda-event-".count))]
+            content.body=preferences.showTitles ? title:"打开 AI Bro 查看安排。";content.sound=NotificationSounds.reminder;content.categoryIdentifier="AIBRO_AGENDA";content.userInfo=["date":start.timeIntervalSince1970,"occurrenceID":String(id.dropFirst("agenda-event-".count))]
             var components=cal.dateComponents([.year,.month,.day,.hour,.minute,.second],from:date);components.timeZone=cal.timeZone
             do {try await center.add(UNNotificationRequest(identifier:id,content:content,trigger:UNCalendarNotificationTrigger(dateMatching:components,repeats:false)));accepted+=1}
             catch {self.error="通知排程失败：\(error.localizedDescription)"}

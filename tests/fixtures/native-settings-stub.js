@@ -12,7 +12,7 @@
     'speech.shortcut': '4096:49', 'speech.mode': 'hold', 'speech.autoSubmit': false, 'speech.silence': 1.5,
   };
   Object.assign(v, { 'perm.accessibility': 'granted', 'perm.inputMonitoring': 'denied', 'perm.microphone': 'notDetermined', 'perm.camera': 'unknown', 'perm.notifications': 'granted', 'perm.loginItem': 'notRegistered' });
-  Object.assign(v, { 'agenda.notifications': true, 'agenda.taskReminder': '15', 'agenda.briefing': false, 'agenda.briefingHour': 8, 'agenda.briefingMinute': 30, 'agenda.showTitles': true, 'notify.external': false, 'notify.island': true });
+  Object.assign(v, { 'agenda.notifications': true, 'agenda.taskReminder': '15', 'agenda.briefing': false, 'agenda.briefingHour': 8, 'agenda.briefingMinute': 30, 'agenda.showTitles': true, 'notify.external': false, 'notify.island': true, 'notify.sounds': true });
   let history = 2;
   for (const s of sections) if (s !== 'home' && s !== 'settings') v['quickPanel.section.' + s] = true;
   for (const [id] of modules) { v['quickPanel.home.' + id] = true; v['quickPanel.size.' + id] = 'small'; }

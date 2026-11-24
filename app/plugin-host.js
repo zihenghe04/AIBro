@@ -6,6 +6,10 @@
    toolset when it starts, and the scheduler refuses a plugin tool outside it.
    The catalog is progressive: the model first sees a name and one sentence per
    plugin; the instructions (and tool schemas) come with capabilities{name}.
+   Triggers: a built-in plugin may declare timed actions (daily/weekly at a
+   local wall-clock time). The scheduler keeps the timetable; when one is due
+   it leaves a pending row, and this host runs the plugin's handler for it
+   (see plugin-triggers.js). A handler gets no tools and no approval channel.
    No DOM. */
 (function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;else root.AIBroPlugins=api;})(globalThis,root=>{
   'use strict';
@@ -16,6 +20,7 @@
   // manifest cannot claim a capability this host does not know how to bound.
   const PERMISSIONS=['browser.control','network.http','process.spawn','network.loopback'];
   const NATIVE=['browser'];
+  const SCHEDULES=['daily','weekly'];
   // Plugin tools never come from these families.
   const CORE_PLUGINS=new Set(['core','kernel']);
   const clone=x=>x===undefined?undefined:JSON.parse(JSON.stringify(x));
@@ -50,6 +55,18 @@
     if(!Array.isArray(m.requires.native)||m.requires.native.some(n=>!NATIVE.includes(n)))fail('unknown native requirement');
     m.enabledByDefault=m.enabledByDefault!==false;
     m.builtin=m.kind==='builtin';
+    m.triggers=m.triggers??[];
+    if(!Array.isArray(m.triggers)||m.triggers.length>4)fail('triggers must be a list of at most 4');
+    if(m.triggers.length&&!m.builtin)fail('only built-in plugins may declare triggers');
+    m.triggers=m.triggers.map(t=>{
+      if(!t||typeof t!=='object'||!/^[a-z][a-z0-9-]{1,31}$/.test(t.id||''))fail('trigger id must match /^[a-z][a-z0-9-]{1,31}$/');
+      if(!SCHEDULES.includes(t.schedule))fail('trigger schedule must be one of '+SCHEDULES.join('/'));
+      if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(t.at||''))fail('trigger at must be HH:MM');
+      if(t.schedule==='weekly'&&!(Number.isInteger(t.weekday)&&t.weekday>=1&&t.weekday<=7))fail('weekly trigger needs weekday 1-7 (Sunday = 1)');
+      if(typeof t.handler!=='string'||!/^[a-zA-Z][a-zA-Z0-9]{0,31}$/.test(t.handler))fail('trigger handler must be a name');
+      return {id:t.id,name:label(t.name,40,'trigger name'),schedule:t.schedule,at:t.at,...(t.schedule==='weekly'?{weekday:t.weekday}:{}),handler:t.handler,enabledByDefault:t.enabledByDefault!==false};
+    });
+    if(new Set(m.triggers.map(t=>t.id)).size!==m.triggers.length)fail('duplicate trigger ids');
     return deepFreeze(m);
   }
   // Pure: may this run call this spec? Core tools always; a plugin tool only if
@@ -82,10 +99,16 @@
         if(plugin.specs)registry.unregisterPlugin?.(manifest.id);
         throw Error('Plugin '+manifest.id+' lists tools '+listed.join(',')+' but registers '+registered.join(','));
       }
+      const handlers=plugin.handlers||{};
+      const missing=manifest.triggers.filter(t=>typeof handlers[t.handler]!=='function').map(t=>t.handler);
+      if(missing.length){
+        if(plugin.specs)registry.unregisterPlugin?.(manifest.id);
+        throw Error('Plugin '+manifest.id+' declares trigger handlers it does not provide: '+missing.join(','));
+      }
       // A plugin that brings its own declarations also brings its family defaults.
       if(plugin.specs)registry.plugin?.(manifest.id,{prefix:manifest.prefix,defaults:plugin.defaults||{}});
       installed.set(manifest.id,{manifest,instructions:plugin.instructions||null,nextStep:plugin.nextStep||null,
-        available:typeof plugin.available==='function'?plugin.available:()=>true,views:plugin.views||{},external:manifest.kind==='mcp'});
+        available:typeof plugin.available==='function'?plugin.available:()=>true,views:plugin.views||{},handlers,external:manifest.kind==='mcp'});
       notify();return manifest;
     }
     // External plugins are replaced as a whole (add, re-test, remove).
@@ -134,6 +157,29 @@
       return {plugin:plugin.manifest.id,instructions,nextStep:plugin.nextStep};
     }
     const view=(id,slot)=>installed.get(id)?.views?.[slot]||null;
+    // Timed actions of active plugins, as the scheduler registers them. A
+    // trigger switched off in the device settings (builtin[id].triggers[tid])
+    // is listed with enabled:false so the scheduler can pause its row.
+    function triggers(){
+      const out=[];
+      for(const {manifest} of installed.values())for(const t of manifest.triggers){
+        const saved=config.builtin?.[manifest.id]?.triggers?.[t.id]?.enabled;
+        const savedAt=config.builtin?.[manifest.id]?.triggers?.[t.id]?.at;
+        out.push({plugin:manifest.id,id:t.id,key:manifest.id+'.'+t.id,name:t.name,schedule:t.schedule,at:/^([01]\d|2[0-3]):[0-5]\d$/.test(savedAt||'')?savedAt:t.at,...(t.weekday?{weekday:t.weekday}:{}),
+          enabled:active(manifest.id)&&(typeof saved==='boolean'?saved:t.enabledByDefault)});
+      }
+      return out;
+    }
+    // Run one due trigger. The context carries the due time and an abort signal;
+    // the result must be JSON (it is stored on the scheduler row).
+    async function runTrigger(key,context={}){
+      const [id,tid]=String(key).split('.');
+      const plugin=installed.get(id),trigger=plugin?.manifest.triggers.find(t=>t.id===tid);
+      if(!trigger)throw Error('Unknown trigger: '+key);
+      if(!triggers().find(t=>t.key===key)?.enabled)throw Error('Trigger is off: '+key);
+      const result=await plugin.handlers[trigger.handler]({...context,plugin:id,trigger:tid});
+      return result===undefined?null:clone(result);
+    }
     async function load(){
       if(!transport?.load)return config;
       const next=await transport.load();
@@ -148,13 +194,30 @@
       if(!plugin.manifest.builtin)plugin.enabledFlag=on;
       notify();return enabled(id);
     }
+    async function setTrigger(key,on){
+      const [id,tid]=String(key).split('.'),plugin=installed.get(id);
+      if(!plugin?.manifest.triggers.some(t=>t.id===tid))throw Error('Unknown trigger: '+key);
+      if(typeof on!=='boolean')throw TypeError('enabled must be true or false');
+      if(transport?.setTrigger){const next=await transport.setTrigger(id,tid,{enabled:on});if(next&&typeof next==='object')config={builtin:{...(next.builtin||{})},mcp:Array.isArray(next.mcp)?next.mcp:[]};}
+      else{const entry=config.builtin?.[id]||{},slot=entry.triggers?.[tid]||{};config={...config,builtin:{...config.builtin,[id]:{...entry,triggers:{...(entry.triggers||{}),[tid]:{...slot,enabled:on}}}}};}
+      notify();return triggers().find(t=>t.key===key).enabled;
+    }
+    // Move a timed action to the user's own time of day (HH:MM, device-local).
+    async function setTriggerTime(key,at){
+      const [id,tid]=String(key).split('.'),plugin=installed.get(id);
+      if(!plugin?.manifest.triggers.some(t=>t.id===tid))throw Error('Unknown trigger: '+key);
+      if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(at||''))throw TypeError('time must be HH:MM');
+      if(transport?.setTrigger){const next=await transport.setTrigger(id,tid,{at});if(next&&typeof next==='object')config={builtin:{...(next.builtin||{})},mcp:Array.isArray(next.mcp)?next.mcp:[]};}
+      else{const entry=config.builtin?.[id]||{},slot=entry.triggers?.[tid]||{};config={...config,builtin:{...config.builtin,[id]:{...entry,triggers:{...(entry.triggers||{}),[tid]:{enabled:true,...slot,at}}}}};}
+      notify();return triggers().find(t=>t.key===key).at;
+    }
     // Internal hooks for the external-plugin adapter (plugin-mcp.js).
     function configure(id,{enabled:on,toolFilter}={}){
       const plugin=installed.get(id);if(!plugin)return;
       if(typeof on==='boolean')plugin.enabledFlag=on;
       if(toolFilter!==undefined)plugin.toolFilter=toolFilter;
     }
-    return {install,uninstall,configure,list,enabled,available,active,freeze,catalog,capability,view,load,setEnabled,
+    return {install,uninstall,configure,list,enabled,available,active,freeze,catalog,capability,view,triggers,runTrigger,setTrigger,setTriggerTime,load,setEnabled,
       allows,hasPlugin,config:()=>clone(config),loaded:()=>loaded,
       plugin:id=>installed.get(id)?.manifest||null,
       onChange(listener){listeners.add(listener);return ()=>listeners.delete(listener);}};
@@ -167,7 +230,8 @@
       if(!response.ok)throw Object.assign(Error(value.error||'插件设置请求失败'),{code:value.code,status:response.status});
       return value;
     };
-    return {load:()=>call('/__plugins'),setEnabled:(id,enabled,kind)=>call(kind==='mcp'?'/__plugins/mcp/enable':'/__plugins/builtin',{id,enabled})};
+    return {load:()=>call('/__plugins'),setEnabled:(id,enabled,kind)=>call(kind==='mcp'?'/__plugins/mcp/enable':'/__plugins/builtin',{id,enabled}),
+      setTrigger:(id,trigger,change)=>call('/__plugins/trigger',{id,trigger,...change})};
   }
   const api={API_VERSION,PERMISSIONS,validate,allows,hasPlugin,create,httpTransport};
   // The window's host, over the window's registry. Plugin files loaded after

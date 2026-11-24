@@ -39,6 +39,8 @@
   register('browser_*',(request,ctx,{approval})=>{const plugin=ctx.lookup('AIBroBrowserPlugin');return plugin?.execute?plugin.execute(request,ctx,{approval}):ctx.lookup('BrowserTools').execute(request,ctx.getState(),ctx.run,{signal:ctx.signal,save:ctx.save,refresh:ctx.refresh,approval});},{available:has('BrowserTools')});
   // External MCP plugin tools are named <pluginId>__<tool> (plugin-mcp.js); core names never contain '__'.
   register(type=>type.includes('__'),(request,ctx,{approval})=>need(ctx,'AIBroMcpPlugins').execute(request,ctx,{approval}));
+  // The today plugin (plugin-today.js) only reads and returns drafts for the ordinary review.
+  register('today_*',(request,ctx)=>need(ctx,'AIBroTodayPlugin').execute(request,ctx),{available:has('AIBroTodayPlugin')});
   // Hybrid retrieval answers only when semantic search is enabled; otherwise
   // the ordinary keyword reader below serves the same request.
   register('search',(request,ctx)=>ctx.lookup('VectorKnowledge').searchRequest(ctx.getState(),ctx.scope,request,ctx.signal),{available:has('VectorKnowledge'),optional:true});

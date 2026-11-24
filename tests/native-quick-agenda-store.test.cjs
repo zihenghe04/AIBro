@@ -5,7 +5,7 @@ const root=path.resolve(__dirname,'..');
 test('quick agenda existing store regression compiles with production focus and view dependencies',{skip:process.platform!=='darwin',timeout:120000},()=>{
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'aibro-quick-agenda-store-'));
  try{
-  const names=['NativeL10n','NativeQuickRecordFocus','AgendaCore','AgendaSync','AgendaEditing','AgendaStore','NativeQuickAgendaStore','NativeQuickAgendaView'];
+  const names=['NativeL10n','NativeQuickRecordFocus','AgendaCore','AgendaSync','AgendaEditing','AgendaStore','NotificationSounds','NativeQuickAgendaStore','NativeQuickAgendaView'];
   const fixture=path.join(temp,'existing-agenda-checks.swift');
   // The old standalone fixture supplied only nativeUI. Use real NativeL10n
   // now that the actual View also participates in this compile target.

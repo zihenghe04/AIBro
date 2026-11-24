@@ -7,7 +7,7 @@ function nativeAgendaFixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aibro-agenda-agent-test-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const binary = path.join(directory, 'checks'), payload = path.join(directory, 'native-roundtrip.json');
-  const names = ['AgendaCore', 'AgendaSync', 'AgendaEditing', 'AgendaStore', 'AgendaAgentAccess', 'AgendaAgentReview'];
+  const names = ['AgendaCore', 'AgendaSync', 'AgendaEditing', 'AgendaStore', 'NotificationSounds', 'AgendaAgentAccess', 'AgendaAgentReview'];
   const build = spawnSync('xcrun', ['swiftc', '-parse-as-library', '-swift-version', '5',
     ...names.map(name => path.join(ROOT, 'native/Sources/AIBro', name + '.swift')),
     path.join(ROOT, 'tests/agenda-agent-native.swift'), '-o', binary], { encoding: 'utf8', timeout: 100000 });

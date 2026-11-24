@@ -2,6 +2,7 @@ import Foundation
 import Combine
 
 func nativeUI(_ zh: String, _ en: String) -> String { en }
+enum NativeL10n { static func space(_ key: String) -> String { key } }
 enum Failure: Error { case failed(String) }
 func check(_ condition: @autoclosure () throws -> Bool, _ message: String) throws { if try !condition() { throw Failure.failed(message) } }
 func row(_ id:String="source-1",title:String="Original") -> [String:Any] {

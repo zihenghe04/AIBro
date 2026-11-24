@@ -275,6 +275,7 @@
       await finish(outcome,{final:result.final,stop:result.stop,steps:result.steps,compactions:result.compactions,...(markedDone?{markedDone}:{})},
         overBudget?'超过运行时间上限（'+(schedule.budgetMinutes||15)+' 分钟）':outcome==='failed'?'运行未完成：'+result.stop:null);
       status[outcome==='failed'?'failed':'completed']++;
+      if(outcome==='completed')notifyNative({type:'finished',runId:run.id,title:run.request.title});
     }catch(error){
       status.failed++;status.lastError=String(error?.message||error).slice(0,200);
       if(overBudget)status.lastError='超过运行时间上限（'+(run.request.schedule?.budgetMinutes||15)+' 分钟）';

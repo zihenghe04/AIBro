@@ -128,6 +128,36 @@
       c.toggleRow({ id: 'agenda.showTitles', title: t('通知显示标题', 'Show titles in notifications'), description: t('关闭后通知只显示“你有一项安排”。', 'When off, notifications do not reveal titles.') }),
       ui.row({ title: t('测试', 'Test'), control: [testStamp.node, testBtn] }),
     ]);
+    // Today page brief: a timed plugin action (switch + time of day) and the notification sounds.
+    const plugins = () => window.AIBroPlugins?.default;
+    const briefKey = 'today.daily-brief', briefInfo = () => plugins()?.triggers?.().find(x => x.key === briefKey);
+    const briefStamp = c.stamp(), briefTimeStamp = c.stamp();
+    const briefSwitch = ui.toggle({
+      label: t('今日简报', 'Today brief'),
+      onChange: async next => {
+        try { await plugins().setTrigger(briefKey, next); briefStamp.ok(); } catch (err) { briefStamp.bad(String(err?.message || err)); }
+        refreshBrief();
+      },
+    });
+    const briefTime = el('input', { type: 'time', class: 'st-input', step: '60', 'aria-label': t('今日简报时间', 'Today brief time') });
+    briefTime.addEventListener('change', async () => {
+      if (!/^\d{2}:\d{2}$/.test(briefTime.value)) return;
+      try { await plugins().setTriggerTime(briefKey, briefTime.value); briefTimeStamp.ok(); } catch (err) { briefTimeStamp.bad(String(err?.message || err)); }
+    });
+    function refreshBrief() {
+      const info = briefInfo();
+      briefSwitch.setAttribute('aria-checked', String(info?.enabled === true));
+      if (!info) briefSwitch.setAttribute('aria-disabled', 'true'); else briefSwitch.removeAttribute('aria-disabled');
+      if (document.activeElement !== briefTime) briefTime.value = info?.at || '08:30';
+      briefTime.disabled = !info || info.enabled !== true;
+    }
+    refreshBrief();
+    plugins()?.load?.().then(refreshBrief, () => {});
+    const todayGroup = ui.group(t('今日页', 'Today page'), [
+      ui.row({ title: t('每日简报', 'Daily brief'), description: t('每天固定时间为今日页准备一段简报。', 'Prepare the Today page brief at a fixed time each day.'), control: [briefStamp.node, briefSwitch] }),
+      ui.row({ title: t('简报时间', 'Brief time'), description: t('默认 08:30。', 'Defaults to 08:30.'), control: [briefTimeStamp.node, briefTime] }),
+      c.toggleRow({ id: 'notify.sounds', title: t('提醒声音', 'Reminder sounds'), description: t('提醒、审批和完成通知使用 AI Bro 的提示音。', 'Use AI Bro sounds for reminders, approvals and completions.') }),
+    ]);
     const entryNote = el('div', { class: 'st-sub', hidden: true, text: t('快捷入口已关闭，灵动岛通知暂不可用。', 'Quick entry is off, so island notifications are unavailable.') });
     c.syncs.push(s => { entryNote.hidden = !s.meta?.entryOff; });
     const extIssue = el('div', { class: 'st-sub', hidden: true });
@@ -154,7 +184,7 @@
       copyRow('codex', 'Codex hook'),
       copyRow('claude', 'Claude hook'),
     ]);
-    return c.mountQuiet(agenda, agendaStatus, agendaError, island, entryNote, extIssue, islIssue);
+    return c.mountQuiet(agenda, agendaStatus, agendaError, todayGroup, island, entryNote, extIssue, islIssue);
   }
 
   // Borrow a classic card (kept alive by its owning module) into a group; ui.onLeave gives it back.

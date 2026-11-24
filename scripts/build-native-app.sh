@@ -11,6 +11,7 @@ cp "$ROOT/../.aibro-native-preview.noindex/build/AIBroNative" "$OUT/Contents/Mac
 node "$ROOT/scripts/copy-native-assets.js" "$OUT/Contents/Resources/app"
 ditto "$PYTHON_SOURCE" "$OUT/Contents/Resources/python"
 cp "$ROOT"/native/Resources/*.js "$ROOT"/native/Resources/*.css "$OUT/Contents/Resources/native/Resources/"
+cp "$ROOT"/native/Resources/Sounds/*.caf "$OUT/Contents/Resources/"
 cp "$ROOT/app/ai-bro-icon.icns" "$OUT/Contents/Resources/ai-bro-icon.icns"
 cp "$ROOT/LICENSE" "$OUT/Contents/Resources/LICENSE"
 python3 - "$OUT" "$ROOT/package.json" <<'PY'

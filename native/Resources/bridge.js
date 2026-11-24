@@ -300,11 +300,11 @@ window.NativeShell={quickRunConversation:nativeQuickRunConversation,getNavigatio
  if(typeof privacyCollection==='string'&&nativePrivacy(state)(privacyCollection,id))return rejectQuickNavigation(command,'record_private');
  switch(type){case'view':if(id==='history'){WorkstationRunHistory.open();break;}if(!['captures','wiki','agent','dashboard','overview','daily','courses','research','history','trash','settings'].includes(id))return false;showView(id,id);break;
  case'workspace-view':{
-  if(!['overview','conversations','agenda','daily','courses','research','captures','wiki','dashboard','trash','agent','settings'].includes(id))return false;
+  if(!['today','overview','conversations','agenda','daily','courses','research','captures','wiki','dashboard','trash','agent','settings'].includes(id))return false;
   const section=command.section;
   if(section!==undefined&&(!['daily','courses','research'].includes(id)||!['projects','knowledge','tasks','overview',...(id==='research'?['papers']:[])].includes(section)))return false;
   const isCurrent=()=>version===nativeNavigationVersion&&(!command.requestId||(typeof taskDocumentReturnCurrent==='function'&&taskDocumentReturnCurrent(command.requestId)));
-  const nativeOnly=['overview','conversations','agenda'].includes(id);
+  const nativeOnly=['today','overview','conversations','agenda'].includes(id);
   const opened=nativeOnly?prepareWorkspaceRoute({isCurrent}).then(current=>!!current?.()):navigateWorkspaceView(id,{section,isCurrent});
   const startedAt=nativeRendererIntent();
   return Promise.resolve(opened).then(result=>{
